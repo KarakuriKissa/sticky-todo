@@ -1,0 +1,104 @@
+name: 🚀 StickyTodo をビルド
+
+on:
+  workflow_dispatch: # GitHub上のボタンから手動実行
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. ソースコードを取得 ──────────────────────────────────────────
+      - name: コードを取得
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js セットアップ ────────────────────────────────────────
+      - name: Node.js セットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 3. Rust セットアップ ───────────────────────────────────────────
+      - name: Rust セットアップ
+        uses: dtolnay/rust-toolchain@stable
+
+      # ── 4. Rust ビルドキャッシュ（2回目以降を高速化）──────────────────
+      - name: Rust キャッシュ
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # ── 5. アイコン生成（PowerShell で PNG を作成）────────────────────
+      - name: アプリアイコンを生成
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "src-tauri/icons" | Out-Null
+          Add-Type -AssemblyName System.Drawing
+
+          $size = 1240
+          $bmp  = New-Object System.Drawing.Bitmap $size, $size
+          $g    = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+          # 背景：付箋イエロー
+          $g.Clear([System.Drawing.Color]::FromArgb(254, 240, 138))
+
+          # 白い付箋本体
+          $white = New-Object System.Drawing.SolidBrush(
+            [System.Drawing.Color]::FromArgb(220, 255, 255, 255))
+          $g.FillRectangle($white, 155, 200, 930, 840)
+
+          # タスク行（3本）
+          $linePen = New-Object System.Drawing.Pen(
+            [System.Drawing.Color]::FromArgb(30, 30, 46), 52)
+          $linePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+          $linePen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
+          $g.DrawLine($linePen, 300, 420, 980, 420)
+          $g.DrawLine($linePen, 300, 570, 900, 570)
+          $g.DrawLine($linePen, 300, 720, 760, 720)
+
+          # チェックボックス（1つ塗りつぶし）
+          $cbPen = New-Object System.Drawing.Pen(
+            [System.Drawing.Color]::FromArgb(99, 102, 241), 38)
+          $g.DrawRectangle($cbPen, 230, 394, 52, 52)
+          $filled = New-Object System.Drawing.SolidBrush(
+            [System.Drawing.Color]::FromArgb(99, 102, 241))
+          $g.FillRectangle($filled, 234, 544, 44, 44)
+          $g.DrawRectangle($cbPen, 230, 694, 52, 52)
+
+          $g.Dispose()
+          $bmp.Save("src-tauri/icons/icon-source.png",
+            [System.Drawing.Imaging.ImageFormat]::Png)
+          $bmp.Dispose()
+          Write-Host "✅ アイコン元画像を生成しました"
+
+      # ── 6. npm 依存パッケージをインストール ───────────────────────────
+      - name: npm パッケージをインストール
+        run: npm ci
+
+      # ── 7. Tauri 用アイコンを全サイズ生成 ─────────────────────────────
+      - name: Tauri アイコンを生成
+        run: npm run tauri icon src-tauri/icons/icon-source.png
+
+      # ── 8. アプリをビルド ──────────────────────────────────────────────
+      - name: アプリをビルド
+        run: npm run tauri build
+
+      # ── 9. インストーラーをアップロード ───────────────────────────────
+      - name: 📦 インストーラーをアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: StickyTodo-インストーラー
+          retention-days: 90
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+
+      # ── 10. 単体 EXE もアップロード ───────────────────────────────────
+      - name: 📦 単体EXEをアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: StickyTodo-EXE単体
+          retention-days: 90
+          path: src-tauri/target/release/sticky-todo.exe
