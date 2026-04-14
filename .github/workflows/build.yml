@@ -17,7 +17,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       # ── 3. Rust セットアップ ───────────────────────────────────────────
       - name: Rust セットアップ
@@ -75,7 +74,7 @@ jobs:
 
       # ── 6. npm 依存パッケージをインストール ───────────────────────────
       - name: npm パッケージをインストール
-        run: npm ci
+        run: npm install
 
       # ── 7. Tauri 用アイコンを全サイズ生成 ─────────────────────────────
       - name: Tauri アイコンを生成
