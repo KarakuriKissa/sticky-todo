@@ -16,8 +16,8 @@ const NOTE_COLORS = [
 ];
 
 export function NoteWindow({ noteId }: Props) {
-  const { load, items, note, setNote, addItem, updateItem, flush, undo, redo } = useNoteStore();
-  const { notes, updateNote, settings, statuses } = useAppStore();
+  const { load, items, note, setNote, addItem, flush, undo, redo } = useNoteStore();
+  const { notes, updateNote } = useAppStore();
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);

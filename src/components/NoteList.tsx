@@ -1,18 +1,11 @@
 import { useAppStore } from '../store/appStore';
-import type { Note } from '../types';
-
 interface Props {
   onNew: () => void;
 }
 
 export function NoteList({ onNew }: Props) {
-  const { filteredNotes, openNote, deleteNote, categories, statuses, settings } = useAppStore();
+  const { filteredNotes, openNote, deleteNote, categories } = useAppStore();
   const notes = filteredNotes();
-
-  const progress = (note: Note) => {
-    // Minimal: show note color as indicator
-    return null;
-  };
 
   const catName = (id: string | null) => {
     if (!id) return '';

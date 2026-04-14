@@ -71,8 +71,6 @@ function makeItem(noteId: string, partial: Partial<TodoItem> = {}): TodoItem {
 }
 
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-let storeInstance: NoteStore | null = null;
-
 export const useNoteStore = create<NoteStore>((set, get) => {
   const pushHistory = (items: TodoItem[]) => {
     const { history, historyIdx } = get();
@@ -261,6 +259,5 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
   };
 
-  storeInstance = store;
   return store;
 });
