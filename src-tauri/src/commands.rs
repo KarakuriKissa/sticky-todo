@@ -5,26 +5,28 @@ use uuid::Uuid;
 use crate::db::Database;
 use crate::models::*;
 
-type Db<'a> = State<'a, Database>;
-
 fn now() -> String {
     Utc::now().to_rfc3339()
 }
 
-// ── Note commands ─────────────────────────────────────────────────────────────
+// ── Notes ──────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_all_notes(db: Db) -> Result<Vec<Note>, String> {
+pub fn get_all_notes(db: State<'_, Database>) -> Result<Vec<Note>, String> {
     db.get_all_notes().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn get_note_items(note_id: String, db: Db) -> Result<Vec<TodoItem>, String> {
+pub fn get_note_items(note_id: String, db: State<'_, Database>) -> Result<Vec<TodoItem>, String> {
     db.get_items(&note_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn create_note(title: String, category_id: Option<String>, db: Db) -> Result<Note, String> {
+pub fn create_note(
+    title: String,
+    category_id: Option<String>,
+    db: State<'_, Database>,
+) -> Result<Note, String> {
     let note = Note {
         id: Uuid::new_v4().to_string(),
         title,
@@ -44,24 +46,24 @@ pub fn create_note(title: String, category_id: Option<String>, db: Db) -> Result
 }
 
 #[tauri::command]
-pub fn save_note(note: Note, db: Db) -> Result<(), String> {
+pub fn save_note(note: Note, db: State<'_, Database>) -> Result<(), String> {
     db.upsert_note(&note).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn delete_note(id: String, db: Db) -> Result<(), String> {
+pub fn delete_note(id: String, db: State<'_, Database>) -> Result<(), String> {
     db.delete_note(&id).map_err(|e| e.to_string())
 }
 
-// ── Item commands ─────────────────────────────────────────────────────────────
+// ── Items ───────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn save_item(item: TodoItem, db: Db) -> Result<(), String> {
+pub fn save_item(item: TodoItem, db: State<'_, Database>) -> Result<(), String> {
     db.upsert_item(&item).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn save_items(items: Vec<TodoItem>, db: Db) -> Result<(), String> {
+pub fn save_items(items: Vec<TodoItem>, db: State<'_, Database>) -> Result<(), String> {
     for item in &items {
         db.upsert_item(item).map_err(|e| e.to_string())?;
     }
@@ -69,48 +71,48 @@ pub fn save_items(items: Vec<TodoItem>, db: Db) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn delete_item(id: String, db: Db) -> Result<(), String> {
+pub fn delete_item(id: String, db: State<'_, Database>) -> Result<(), String> {
     db.delete_item(&id).map_err(|e| e.to_string())
 }
 
-// ── Category commands ─────────────────────────────────────────────────────────
+// ── Categories ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_categories(db: Db) -> Result<Vec<Category>, String> {
+pub fn get_categories(db: State<'_, Database>) -> Result<Vec<Category>, String> {
     db.get_categories().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn save_category(category: Category, db: Db) -> Result<(), String> {
+pub fn save_category(category: Category, db: State<'_, Database>) -> Result<(), String> {
     db.upsert_category(&category).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn delete_category(id: String, db: Db) -> Result<(), String> {
+pub fn delete_category(id: String, db: State<'_, Database>) -> Result<(), String> {
     db.delete_category(&id).map_err(|e| e.to_string())
 }
 
-// ── Status commands ───────────────────────────────────────────────────────────
+// ── Statuses ───────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_statuses(db: Db) -> Result<Vec<Status>, String> {
+pub fn get_statuses(db: State<'_, Database>) -> Result<Vec<Status>, String> {
     db.get_statuses().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn save_status(status: Status, db: Db) -> Result<(), String> {
+pub fn save_status(status: Status, db: State<'_, Database>) -> Result<(), String> {
     db.upsert_status(&status).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn delete_status(id: String, db: Db) -> Result<(), String> {
+pub fn delete_status(id: String, db: State<'_, Database>) -> Result<(), String> {
     db.delete_status(&id).map_err(|e| e.to_string())
 }
 
-// ── Settings commands ─────────────────────────────────────────────────────────
+// ── Settings ───────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_settings(db: Db) -> Result<AppSettings, String> {
+pub fn get_settings(db: State<'_, Database>) -> Result<AppSettings, String> {
     let json = db
         .get_setting("app_settings")
         .map_err(|e| e.to_string())?
@@ -119,12 +121,12 @@ pub fn get_settings(db: Db) -> Result<AppSettings, String> {
 }
 
 #[tauri::command]
-pub fn save_settings(settings: AppSettings, db: Db) -> Result<(), String> {
+pub fn save_settings(settings: AppSettings, db: State<'_, Database>) -> Result<(), String> {
     let json = serde_json::to_string(&settings).map_err(|e| e.to_string())?;
     db.set_setting("app_settings", &json).map_err(|e| e.to_string())
 }
 
-// ── Window commands ───────────────────────────────────────────────────────────
+// ── Windows ────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn open_note_window(
@@ -142,7 +144,7 @@ pub async fn open_note_window(
     }
     WebviewWindowBuilder::new(
         &app,
-        &label,
+        label,
         WebviewUrl::App(format!("/?window=note&id={}", note_id).into()),
     )
     .title("Note")
@@ -188,21 +190,23 @@ pub async fn start_dragging(app: AppHandle, note_id: String) -> Result<(), Strin
     Ok(())
 }
 
-// ── Sync commands ─────────────────────────────────────────────────────────────
+// ── Sync ───────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_dirty_data(db: Db) -> Result<(Vec<Note>, Vec<TodoItem>), String> {
+pub fn get_dirty_data(
+    db: State<'_, Database>,
+) -> Result<(Vec<Note>, Vec<TodoItem>), String> {
     let notes = db.get_dirty_notes().map_err(|e| e.to_string())?;
     let items = db.get_dirty_items().map_err(|e| e.to_string())?;
     Ok((notes, items))
 }
 
 #[tauri::command]
-pub fn mark_synced(db: Db) -> Result<(), String> {
+pub fn mark_synced(db: State<'_, Database>) -> Result<(), String> {
     db.mark_all_clean().map_err(|e| e.to_string())
 }
 
-// ── Utility ───────────────────────────────────────────────────────────────────
+// ── Utility ────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn generate_id() -> String {

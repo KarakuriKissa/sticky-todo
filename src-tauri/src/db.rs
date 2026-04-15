@@ -11,74 +11,68 @@ pub struct Database {
 impl Database {
     pub fn new(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
-        let db = Database {
-            conn: Mutex::new(conn),
-        };
+        let db = Database { conn: Mutex::new(conn) };
         db.init()?;
         Ok(db)
     }
 
     fn init(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute_batch("
-            PRAGMA journal_mode=WAL;
-            PRAGMA foreign_keys=ON;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA foreign_keys=ON;
 
-            CREATE TABLE IF NOT EXISTS notes (
-                id            TEXT PRIMARY KEY,
-                title         TEXT NOT NULL DEFAULT '',
-                category_id   TEXT,
-                window_x      REAL DEFAULT 100,
-                window_y      REAL DEFAULT 100,
-                window_width  REAL DEFAULT 420,
-                window_height REAL DEFAULT 520,
-                always_on_top INTEGER DEFAULT 0,
-                color         TEXT DEFAULT '#fef08a',
-                sort_order    INTEGER DEFAULT 0,
-                updated_at    TEXT NOT NULL,
-                dirty         INTEGER DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS todo_items (
-                id          TEXT PRIMARY KEY,
-                note_id     TEXT NOT NULL,
-                parent_id   TEXT,
-                text        TEXT NOT NULL DEFAULT '',
-                checked     INTEGER DEFAULT 0,
-                indent      INTEGER DEFAULT 0,
-                collapsed   INTEGER DEFAULT 0,
-                status      TEXT,
-                assignees   TEXT DEFAULT '[]',
-                start_date  TEXT,
-                end_date    TEXT,
-                limit_date  TEXT,
-                item_type   TEXT DEFAULT 'normal',
-                sort_order  INTEGER DEFAULT 0,
-                archived    INTEGER DEFAULT 0,
-                updated_at  TEXT NOT NULL,
-                dirty       INTEGER DEFAULT 1,
-                FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS categories (
-                id         TEXT PRIMARY KEY,
-                name       TEXT NOT NULL,
-                color      TEXT DEFAULT '#6366f1',
-                sort_order INTEGER DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS statuses (
-                id         TEXT PRIMARY KEY,
-                name       TEXT NOT NULL,
-                color      TEXT DEFAULT '#94a3b8',
-                sort_order INTEGER DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS settings (
-                key   TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-        ")?;
+             CREATE TABLE IF NOT EXISTS notes (
+                 id            TEXT PRIMARY KEY,
+                 title         TEXT NOT NULL DEFAULT '',
+                 category_id   TEXT,
+                 window_x      REAL DEFAULT 100,
+                 window_y      REAL DEFAULT 100,
+                 window_width  REAL DEFAULT 420,
+                 window_height REAL DEFAULT 520,
+                 always_on_top INTEGER DEFAULT 0,
+                 color         TEXT DEFAULT '#fef08a',
+                 sort_order    INTEGER DEFAULT 0,
+                 updated_at    TEXT NOT NULL,
+                 dirty         INTEGER DEFAULT 0
+             );
+             CREATE TABLE IF NOT EXISTS todo_items (
+                 id          TEXT PRIMARY KEY,
+                 note_id     TEXT NOT NULL,
+                 parent_id   TEXT,
+                 text        TEXT NOT NULL DEFAULT '',
+                 checked     INTEGER DEFAULT 0,
+                 indent      INTEGER DEFAULT 0,
+                 collapsed   INTEGER DEFAULT 0,
+                 status      TEXT,
+                 assignees   TEXT DEFAULT '[]',
+                 start_date  TEXT,
+                 end_date    TEXT,
+                 limit_date  TEXT,
+                 item_type   TEXT DEFAULT 'normal',
+                 sort_order  INTEGER DEFAULT 0,
+                 archived    INTEGER DEFAULT 0,
+                 updated_at  TEXT NOT NULL,
+                 dirty       INTEGER DEFAULT 1,
+                 FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+             );
+             CREATE TABLE IF NOT EXISTS categories (
+                 id         TEXT PRIMARY KEY,
+                 name       TEXT NOT NULL,
+                 color      TEXT DEFAULT '#6366f1',
+                 sort_order INTEGER DEFAULT 0
+             );
+             CREATE TABLE IF NOT EXISTS statuses (
+                 id         TEXT PRIMARY KEY,
+                 name       TEXT NOT NULL,
+                 color      TEXT DEFAULT '#94a3b8',
+                 sort_order INTEGER DEFAULT 0
+             );
+             CREATE TABLE IF NOT EXISTS settings (
+                 key   TEXT PRIMARY KEY,
+                 value TEXT NOT NULL
+             );",
+        )?;
 
         let count: i64 =
             conn.query_row("SELECT COUNT(*) FROM statuses", [], |r| r.get(0))?;
@@ -113,8 +107,25 @@ impl Database {
                     always_on_top,color,sort_order,updated_at,dirty
              FROM notes ORDER BY sort_order, updated_at DESC",
         )?;
-        stmt.query_map([], |r| note_from_row(r))?
-            .collect::<Result<Vec<_>>>()
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(Note {
+                id:            r.get(0)?,
+                title:         r.get(1)?,
+                category_id:   r.get(2)?,
+                window_x:      r.get(3)?,
+                window_y:      r.get(4)?,
+                window_width:  r.get(5)?,
+                window_height: r.get(6)?,
+                always_on_top: r.get::<_, i32>(7)? != 0,
+                color:         r.get(8)?,
+                sort_order:    r.get(9)?,
+                updated_at:    r.get(10)?,
+                dirty:         r.get::<_, i32>(11)? != 0,
+            });
+        }
+        Ok(out)
     }
 
     pub fn upsert_note(&self, n: &Note) -> Result<()> {
@@ -128,7 +139,7 @@ impl Database {
                 n.id, n.title, n.category_id,
                 n.window_x, n.window_y, n.window_width, n.window_height,
                 n.always_on_top as i32, n.color,
-                n.sort_order, n.updated_at, n.dirty as i32
+                n.sort_order, n.updated_at, n.dirty as i32,
             ],
         )?;
         Ok(())
@@ -148,11 +159,32 @@ impl Database {
             "SELECT id,note_id,parent_id,text,checked,indent,collapsed,status,
                     assignees,start_date,end_date,limit_date,item_type,
                     sort_order,archived,updated_at,dirty
-             FROM todo_items WHERE note_id=?1 AND archived=0
-             ORDER BY sort_order",
+             FROM todo_items WHERE note_id=?1 AND archived=0 ORDER BY sort_order",
         )?;
-        stmt.query_map([note_id], |r| item_from_row(r))?
-            .collect::<Result<Vec<_>>>()
+        let mut rows = stmt.query([note_id])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(TodoItem {
+                id:         r.get(0)?,
+                note_id:    r.get(1)?,
+                parent_id:  r.get(2)?,
+                text:       r.get(3)?,
+                checked:    r.get::<_, i32>(4)? != 0,
+                indent:     r.get(5)?,
+                collapsed:  r.get::<_, i32>(6)? != 0,
+                status:     r.get(7)?,
+                assignees:  r.get::<_, Option<String>>(8)?.unwrap_or_else(|| "[]".into()),
+                start_date: r.get(9)?,
+                end_date:   r.get(10)?,
+                limit_date: r.get(11)?,
+                item_type:  r.get(12)?,
+                sort_order: r.get(13)?,
+                archived:   r.get::<_, i32>(14)? != 0,
+                updated_at: r.get(15)?,
+                dirty:      r.get::<_, i32>(16)? != 0,
+            });
+        }
+        Ok(out)
     }
 
     pub fn upsert_item(&self, it: &TodoItem) -> Result<()> {
@@ -169,7 +201,7 @@ impl Database {
                 it.status, it.assignees,
                 it.start_date, it.end_date, it.limit_date,
                 it.item_type, it.sort_order, it.archived as i32,
-                it.updated_at, it.dirty as i32
+                it.updated_at, it.dirty as i32,
             ],
         )?;
         Ok(())
@@ -188,15 +220,17 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id,name,color,sort_order FROM categories ORDER BY sort_order",
         )?;
-        stmt.query_map([], |r| {
-            Ok(Category {
-                id: r.get(0)?,
-                name: r.get(1)?,
-                color: r.get(2)?,
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(Category {
+                id:         r.get(0)?,
+                name:       r.get(1)?,
+                color:      r.get(2)?,
                 sort_order: r.get(3)?,
-            })
-        })?
-        .collect::<Result<Vec<_>>>()
+            });
+        }
+        Ok(out)
     }
 
     pub fn upsert_category(&self, c: &Category) -> Result<()> {
@@ -221,15 +255,17 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id,name,color,sort_order FROM statuses ORDER BY sort_order",
         )?;
-        stmt.query_map([], |r| {
-            Ok(Status {
-                id: r.get(0)?,
-                name: r.get(1)?,
-                color: r.get(2)?,
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(Status {
+                id:         r.get(0)?,
+                name:       r.get(1)?,
+                color:      r.get(2)?,
                 sort_order: r.get(3)?,
-            })
-        })?
-        .collect::<Result<Vec<_>>>()
+            });
+        }
+        Ok(out)
     }
 
     pub fn upsert_status(&self, s: &Status) -> Result<()> {
@@ -265,7 +301,7 @@ impl Database {
         Ok(())
     }
 
-    // ── Sync helpers ───────────────────────────────────────────────────────────
+    // ── Sync ───────────────────────────────────────────────────────────────────
 
     pub fn get_dirty_notes(&self) -> Result<Vec<Note>> {
         let conn = self.conn.lock().unwrap();
@@ -274,8 +310,25 @@ impl Database {
                     always_on_top,color,sort_order,updated_at,dirty
              FROM notes WHERE dirty=1",
         )?;
-        stmt.query_map([], |r| note_from_row(r))?
-            .collect::<Result<Vec<_>>>()
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(Note {
+                id:            r.get(0)?,
+                title:         r.get(1)?,
+                category_id:   r.get(2)?,
+                window_x:      r.get(3)?,
+                window_y:      r.get(4)?,
+                window_width:  r.get(5)?,
+                window_height: r.get(6)?,
+                always_on_top: r.get::<_, i32>(7)? != 0,
+                color:         r.get(8)?,
+                sort_order:    r.get(9)?,
+                updated_at:    r.get(10)?,
+                dirty:         r.get::<_, i32>(11)? != 0,
+            });
+        }
+        Ok(out)
     }
 
     pub fn get_dirty_items(&self) -> Result<Vec<TodoItem>> {
@@ -286,8 +339,30 @@ impl Database {
                     sort_order,archived,updated_at,dirty
              FROM todo_items WHERE dirty=1",
         )?;
-        stmt.query_map([], |r| item_from_row(r))?
-            .collect::<Result<Vec<_>>>()
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(TodoItem {
+                id:         r.get(0)?,
+                note_id:    r.get(1)?,
+                parent_id:  r.get(2)?,
+                text:       r.get(3)?,
+                checked:    r.get::<_, i32>(4)? != 0,
+                indent:     r.get(5)?,
+                collapsed:  r.get::<_, i32>(6)? != 0,
+                status:     r.get(7)?,
+                assignees:  r.get::<_, Option<String>>(8)?.unwrap_or_else(|| "[]".into()),
+                start_date: r.get(9)?,
+                end_date:   r.get(10)?,
+                limit_date: r.get(11)?,
+                item_type:  r.get(12)?,
+                sort_order: r.get(13)?,
+                archived:   r.get::<_, i32>(14)? != 0,
+                updated_at: r.get(15)?,
+                dirty:      r.get::<_, i32>(16)? != 0,
+            });
+        }
+        Ok(out)
     }
 
     pub fn mark_all_clean(&self) -> Result<()> {
@@ -296,45 +371,4 @@ impl Database {
         conn.execute("UPDATE todo_items SET dirty=0", [])?;
         Ok(())
     }
-}
-
-// ── Row mappers ────────────────────────────────────────────────────────────────
-
-fn note_from_row(r: &rusqlite::Row) -> rusqlite::Result<Note> {
-    Ok(Note {
-        id:            r.get(0)?,
-        title:         r.get(1)?,
-        category_id:   r.get(2)?,
-        window_x:      r.get(3)?,
-        window_y:      r.get(4)?,
-        window_width:  r.get(5)?,
-        window_height: r.get(6)?,
-        always_on_top: r.get::<_, i32>(7)? != 0,
-        color:         r.get(8)?,
-        sort_order:    r.get(9)?,
-        updated_at:    r.get(10)?,
-        dirty:         r.get::<_, i32>(11)? != 0,
-    })
-}
-
-fn item_from_row(r: &rusqlite::Row) -> rusqlite::Result<TodoItem> {
-    Ok(TodoItem {
-        id:         r.get(0)?,
-        note_id:    r.get(1)?,
-        parent_id:  r.get(2)?,
-        text:       r.get(3)?,
-        checked:    r.get::<_, i32>(4)? != 0,
-        indent:     r.get(5)?,
-        collapsed:  r.get::<_, i32>(6)? != 0,
-        status:     r.get(7)?,
-        assignees:  r.get::<_, Option<String>>(8)?.unwrap_or_else(|| "[]".into()),
-        start_date: r.get(9)?,
-        end_date:   r.get(10)?,
-        limit_date: r.get(11)?,
-        item_type:  r.get(12)?,
-        sort_order: r.get(13)?,
-        archived:   r.get::<_, i32>(14)? != 0,
-        updated_at: r.get(15)?,
-        dirty:      r.get::<_, i32>(16)? != 0,
-    })
 }
