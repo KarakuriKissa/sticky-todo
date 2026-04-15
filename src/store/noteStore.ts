@@ -25,15 +25,20 @@ interface NoteStore {
   updateItem: (id: string, patch: Partial<TodoItem>) => void;
   deleteItem: (id: string) => void;
   toggleCheck: (id: string) => void;
+  toggleBold: (id: string) => void;
   toggleCollapse: (id: string) => void;
   indent: (id: string) => void;
   dedent: (id: string) => void;
   moveItem: (fromId: string, toId: string, position: 'before' | 'after') => void;
+  checkSelected: (checked: boolean) => void;
   checkAll: (checked: boolean) => void;
+  duplicateItem: (id: string) => void;
 
   // Selection
   setSelected: (ids: Set<string>) => void;
   toggleSelected: (id: string) => void;
+  selectAll: () => void;
+  clearSelection: () => void;
 
   // History
   undo: () => void;
@@ -58,6 +63,10 @@ function makeItem(noteId: string, partial: Partial<TodoItem> = {}): TodoItem {
     collapsed: false,
     status: null,
     assignees: '[]',
+    assignee_person_id: null,
+    memo: null,
+    bold: false,
+    priority: null,
     start_date: null,
     end_date: null,
     limit_date: null,
@@ -71,19 +80,18 @@ function makeItem(noteId: string, partial: Partial<TodoItem> = {}): TodoItem {
 }
 
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export const useNoteStore = create<NoteStore>((set, get) => {
   const pushHistory = (items: TodoItem[]) => {
     const { history, historyIdx } = get();
     const newHistory = history.slice(0, historyIdx + 1);
     newHistory.push({ items: items.map((i) => ({ ...i })) });
-    // Keep last 50 snapshots
     if (newHistory.length > 50) newHistory.shift();
     set({ history: newHistory, historyIdx: newHistory.length - 1 });
   };
 
   const mutate = (updater: (items: TodoItem[]) => TodoItem[]) => {
     const next = updater(get().items);
-    // Assign sort_order by current array position
     const ordered = next.map((item, i) => ({ ...item, sort_order: i }));
     pushHistory(ordered);
     set({ items: ordered });
@@ -108,7 +116,7 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     });
   };
 
-  const store: NoteStore = {
+  return {
     note: null,
     items: [],
     selectedIds: new Set(),
@@ -147,7 +155,6 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
 
     deleteItem: (id: string) => {
-      // Also delete all children
       mutate((items) => {
         const idsToRemove = new Set<string>();
         const collectChildren = (parentId: string) => {
@@ -160,16 +167,37 @@ export const useNoteStore = create<NoteStore>((set, get) => {
         };
         idsToRemove.add(id);
         collectChildren(id);
-        // Fire backend deletes
         idsToRemove.forEach((rmId) => invoke('delete_item', { id: rmId }).catch(console.error));
         return items.filter((i) => !idsToRemove.has(i.id));
       });
     },
 
     toggleCheck: (id: string) => {
+      const { selectedIds } = get();
+      // If item is selected, toggle all selected; otherwise toggle just this one
+      if (selectedIds.has(id) && selectedIds.size > 1) {
+        const item = get().items.find((i) => i.id === id);
+        const newChecked = item ? !item.checked : true;
+        mutate((items) =>
+          items.map((i) =>
+            selectedIds.has(i.id) ? { ...i, checked: newChecked, updated_at: now(), dirty: true } : i,
+          ),
+        );
+      } else {
+        mutate((items) =>
+          items.map((i) =>
+            i.id === id ? { ...i, checked: !i.checked, updated_at: now(), dirty: true } : i,
+          ),
+        );
+      }
+    },
+
+    toggleBold: (id: string) => {
+      const { selectedIds } = get();
+      const ids = selectedIds.has(id) ? selectedIds : new Set([id]);
       mutate((items) =>
         items.map((i) =>
-          i.id === id ? { ...i, checked: !i.checked, updated_at: now(), dirty: true } : i,
+          ids.has(i.id) ? { ...i, bold: !i.bold, updated_at: now(), dirty: true } : i,
         ),
       );
     },
@@ -218,10 +246,30 @@ export const useNoteStore = create<NoteStore>((set, get) => {
       });
     },
 
+    checkSelected: (checked: boolean) => {
+      const { selectedIds } = get();
+      if (selectedIds.size === 0) return;
+      mutate((items) =>
+        items.map((i) =>
+          selectedIds.has(i.id) ? { ...i, checked, updated_at: now(), dirty: true } : i,
+        ),
+      );
+    },
+
     checkAll: (checked: boolean) => {
       mutate((items) =>
         items.map((i) => ({ ...i, checked, updated_at: now(), dirty: true })),
       );
+    },
+
+    duplicateItem: (id: string) => {
+      mutate((items) => {
+        const idx = items.findIndex((i) => i.id === id);
+        if (idx === -1) return items;
+        const orig = items[idx];
+        const copy = { ...orig, id: crypto.randomUUID(), dirty: true, updated_at: now() };
+        return [...items.slice(0, idx + 1), copy, ...items.slice(idx + 1)];
+      });
     },
 
     setSelected: (ids: Set<string>) => set({ selectedIds: ids }),
@@ -233,6 +281,12 @@ export const useNoteStore = create<NoteStore>((set, get) => {
         return { selectedIds: next };
       });
     },
+
+    selectAll: () => {
+      set((s) => ({ selectedIds: new Set(s.items.map((i) => i.id)) }));
+    },
+
+    clearSelection: () => set({ selectedIds: new Set() }),
 
     undo: () => {
       const { history, historyIdx } = get();
@@ -258,6 +312,4 @@ export const useNoteStore = create<NoteStore>((set, get) => {
       }
     },
   };
-
-  return store;
 });

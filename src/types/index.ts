@@ -9,11 +9,12 @@ export interface Note {
   always_on_top: boolean;
   color: string;
   sort_order: number;
+  locked: boolean;
   updated_at: string;
   dirty: boolean;
 }
 
-export type ItemType = 'normal' | 'heading' | 'separator' | 'group';
+export type ItemType = 'normal' | 'heading' | 'separator';
 
 export interface TodoItem {
   id: string;
@@ -24,7 +25,11 @@ export interface TodoItem {
   indent: number;
   collapsed: boolean;
   status: string | null;
-  assignees: string; // JSON string: '["Alice"]'
+  assignees: string; // legacy JSON array string
+  assignee_person_id: string | null;
+  memo: string | null;
+  bold: boolean;
+  priority: string | null; // 'high' | 'medium' | 'low' | null
   start_date: string | null;
   end_date: string | null;
   limit_date: string | null;
@@ -49,14 +54,28 @@ export interface Status {
   sort_order: number;
 }
 
-export type SortMode = 'manual' | 'deadline' | 'start_date' | 'status' | 'name';
+export interface AssigneeGroup {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
+export interface AssigneePerson {
+  id: string;
+  group_id: string;
+  name: string;
+  color: string;
+  sort_order: number;
+}
+
+export type SortMode = 'manual' | 'deadline' | 'start_date' | 'status' | 'name' | 'priority';
 
 export interface AppSettings {
-  sync_enabled: boolean;
-  sync_token: string | null;
   sort_mode: SortMode;
-  feature_sync: boolean;
   feature_status: boolean;
   feature_assignee: boolean;
   feature_date: boolean;
+  feature_memo: boolean;
+  feature_priority: boolean;
+  active_group_id: string | null;
 }

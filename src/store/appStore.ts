@@ -1,18 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
 import { create } from 'zustand';
-import type { AppSettings, Category, Note, SortMode, Status } from '../types';
+import type { AppSettings, AssigneeGroup, AssigneePerson, Category, Note, SortMode, Status } from '../types';
 
 interface AppStore {
   notes: Note[];
   categories: Category[];
   statuses: Status[];
+  assigneeGroups: AssigneeGroup[];
+  assigneePersons: AssigneePerson[];
   settings: AppSettings;
   selectedCategoryId: string | null;
   searchQuery: string;
-
-  // Undo/redo
-  _history: Note[][];
-  _historyIdx: number;
 
   load: () => Promise<void>;
 
@@ -20,6 +18,7 @@ interface AppStore {
   createNote: (title?: string) => Promise<Note>;
   updateNote: (note: Note) => void;
   deleteNote: (id: string) => Promise<void>;
+  duplicateNote: (id: string) => Promise<Note>;
   openNote: (note: Note) => Promise<void>;
   reorderNotes: (ids: string[]) => void;
 
@@ -31,6 +30,12 @@ interface AppStore {
   saveStatus: (s: Status) => Promise<void>;
   deleteStatus: (id: string) => Promise<void>;
 
+  // Assignee groups
+  saveAssigneeGroup: (g: AssigneeGroup) => Promise<void>;
+  deleteAssigneeGroup: (id: string) => Promise<void>;
+  saveAssigneePerson: (p: AssigneePerson) => Promise<void>;
+  deleteAssigneePerson: (id: string) => Promise<void>;
+
   // Settings
   saveSettings: (s: AppSettings) => Promise<void>;
 
@@ -40,19 +45,16 @@ interface AppStore {
 
   // Derived
   filteredNotes: () => Note[];
-
-  undo: () => void;
-  redo: () => void;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  sync_enabled: false,
-  sync_token: null,
   sort_mode: 'manual',
-  feature_sync: false,
   feature_status: true,
   feature_assignee: false,
   feature_date: true,
+  feature_memo: false,
+  feature_priority: false,
+  active_group_id: null,
 };
 
 function now() {
@@ -63,9 +65,7 @@ function sorted(notes: Note[], mode: SortMode): Note[] {
   const arr = [...notes];
   switch (mode) {
     case 'name':
-      return arr.sort((a, b) => a.title.localeCompare(b.title));
-    case 'status':
-      return arr.sort((a, b) => a.updated_at.localeCompare(b.updated_at));
+      return arr.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
     case 'manual':
     default:
       return arr.sort((a, b) => a.sort_order - b.sort_order);
@@ -76,24 +76,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
   notes: [],
   categories: [],
   statuses: [],
+  assigneeGroups: [],
+  assigneePersons: [],
   settings: DEFAULT_SETTINGS,
   selectedCategoryId: null,
   searchQuery: '',
-  _history: [],
-  _historyIdx: -1,
 
   load: async () => {
-    const [notes, categories, statuses, settings] = await Promise.all([
-      invoke<Note[]>('get_all_notes'),
-      invoke<Category[]>('get_categories'),
-      invoke<Status[]>('get_statuses'),
-      invoke<AppSettings>('get_settings'),
-    ]);
-    set({ notes, categories, statuses, settings });
+    const [notes, categories, statuses, assigneeGroups, assigneePersons, settings] =
+      await Promise.all([
+        invoke<Note[]>('get_all_notes'),
+        invoke<Category[]>('get_categories'),
+        invoke<Status[]>('get_statuses'),
+        invoke<AssigneeGroup[]>('get_assignee_groups'),
+        invoke<AssigneePerson[]>('get_assignee_persons'),
+        invoke<AppSettings>('get_settings').catch(() => DEFAULT_SETTINGS),
+      ]);
+    set({ notes, categories, statuses, assigneeGroups, assigneePersons, settings });
   },
 
-  createNote: async (title = '新しい付箋') => {
-    const note = await invoke<Note>('create_note', { title, categoryId: get().selectedCategoryId });
+  createNote: async (title = '新しいリスト') => {
+    const note = await invoke<Note>('create_note', {
+      title,
+      categoryId: get().selectedCategoryId,
+    });
     set((s) => ({ notes: [note, ...s.notes] }));
     return note;
   },
@@ -101,13 +107,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
   updateNote: (note: Note) => {
     const updated = { ...note, updated_at: now(), dirty: true };
     set((s) => ({ notes: s.notes.map((n) => (n.id === note.id ? updated : n)) }));
-    // debounced save
     debouncedSaveNote(updated);
   },
 
   deleteNote: async (id: string) => {
     await invoke('delete_note', { id });
     set((s) => ({ notes: s.notes.filter((n) => n.id !== id) }));
+  },
+
+  duplicateNote: async (id: string) => {
+    const note = await invoke<Note>('duplicate_note', { sourceId: id });
+    set((s) => ({ notes: [...s.notes, note] }));
+    return note;
   },
 
   openNote: async (note: Note) => {
@@ -130,7 +141,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           return { ...n, sort_order: i, dirty: true };
         })
         .filter(Boolean) as Note[];
-      reordered.forEach((n) => invoke('save_note', { note: n }));
+      reordered.forEach((n) => invoke('save_note', { note: n }).catch(console.error));
       return { notes: reordered };
     });
   },
@@ -169,6 +180,43 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((s) => ({ statuses: s.statuses.filter((st) => st.id !== id) }));
   },
 
+  saveAssigneeGroup: async (group: AssigneeGroup) => {
+    await invoke('save_assignee_group', { group });
+    set((s) => {
+      const exists = s.assigneeGroups.find((g) => g.id === group.id);
+      return {
+        assigneeGroups: exists
+          ? s.assigneeGroups.map((g) => (g.id === group.id ? group : g))
+          : [...s.assigneeGroups, group],
+      };
+    });
+  },
+
+  deleteAssigneeGroup: async (id: string) => {
+    await invoke('delete_assignee_group', { id });
+    set((s) => ({
+      assigneeGroups: s.assigneeGroups.filter((g) => g.id !== id),
+      assigneePersons: s.assigneePersons.filter((p) => p.group_id !== id),
+    }));
+  },
+
+  saveAssigneePerson: async (person: AssigneePerson) => {
+    await invoke('save_assignee_person', { person });
+    set((s) => {
+      const exists = s.assigneePersons.find((p) => p.id === person.id);
+      return {
+        assigneePersons: exists
+          ? s.assigneePersons.map((p) => (p.id === person.id ? person : p))
+          : [...s.assigneePersons, person],
+      };
+    });
+  },
+
+  deleteAssigneePerson: async (id: string) => {
+    await invoke('delete_assignee_person', { id });
+    set((s) => ({ assigneePersons: s.assigneePersons.filter((p) => p.id !== id) }));
+  },
+
   saveSettings: async (settings: AppSettings) => {
     await invoke('save_settings', { settings });
     set({ settings });
@@ -189,20 +237,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
     return sorted(result, settings.sort_mode);
   },
-
-  undo: () => {
-    const { _history, _historyIdx } = get();
-    if (_historyIdx <= 0) return;
-    const idx = _historyIdx - 1;
-    set({ notes: _history[idx], _historyIdx: idx });
-  },
-
-  redo: () => {
-    const { _history, _historyIdx } = get();
-    if (_historyIdx >= _history.length - 1) return;
-    const idx = _historyIdx + 1;
-    set({ notes: _history[idx], _historyIdx: idx });
-  },
 }));
 
 // ── Debounced save ────────────────────────────────────────────────────────────
@@ -214,7 +248,7 @@ function debouncedSaveNote(note: Note) {
   saveTimers.set(
     note.id,
     setTimeout(() => {
-      invoke('save_note', { note });
+      invoke('save_note', { note }).catch(console.error);
       saveTimers.delete(note.id);
     }, 500),
   );

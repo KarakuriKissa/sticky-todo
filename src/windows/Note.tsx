@@ -15,11 +15,24 @@ const NOTE_COLORS = [
   '#e9d5ff', '#fed7aa', '#f9fafb', '#fce7f3',
 ];
 
+const PRIORITY_OPTIONS = [
+  { value: null,     label: '（なし）' },
+  { value: 'high',   label: '高' },
+  { value: 'medium', label: '中' },
+  { value: 'low',    label: '低' },
+];
+
 export function NoteWindow({ noteId }: Props) {
-  const { load, items, note, setNote, addItem, flush, undo, redo } = useNoteStore();
-  const { notes, updateNote } = useAppStore();
+  const {
+    load, items, note, setNote, addItem, flush, undo, redo,
+    selectAll, clearSelection, selectedIds,
+  } = useNoteStore();
+  const { notes, updateNote, statuses, assigneeGroups, assigneePersons, settings } = useAppStore();
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const [showPriorityPicker, setShowPriorityPicker] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
 
@@ -30,7 +43,6 @@ export function NoteWindow({ noteId }: Props) {
       setNote(found);
       setAlwaysOnTop(found.always_on_top);
     } else {
-      // Fetch from backend if note not in store
       invoke<Note[]>('get_all_notes').then((all) => {
         const n = all.find((x) => x.id === noteId);
         if (n) { setNote(n); setAlwaysOnTop(n.always_on_top); }
@@ -38,6 +50,14 @@ export function NoteWindow({ noteId }: Props) {
     }
     load(noteId);
   }, [noteId]);
+
+  // Keep note in sync with appStore changes (e.g. title edits from launcher)
+  useEffect(() => {
+    const found = notes.find((n) => n.id === noteId);
+    if (found && note && found.updated_at !== note.updated_at) {
+      setNote(found);
+    }
+  }, [notes]);
 
   // Save window position/size on close
   useEffect(() => {
@@ -59,11 +79,13 @@ export function NoteWindow({ noteId }: Props) {
     return () => { unlisten.then((f) => f()); };
   }, [note]);
 
-  // Keyboard: Ctrl+Z/Y global for this window
+  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); selectAll(); }
+      if (e.key === 'Escape') { clearSelection(); setShowColorPicker(false); setShowStatusPicker(false); setShowAssigneePicker(false); setShowPriorityPicker(false); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -78,13 +100,30 @@ export function NoteWindow({ noteId }: Props) {
 
   const setColor = (color: string) => {
     if (!note) return;
-    updateNote({ ...note, color });
+    const updated = { ...note, color };
+    updateNote(updated);
+    setNote(updated);  // update local state immediately
     setShowColorPicker(false);
   };
 
   const close = async () => {
     await flush();
     await invoke('close_note_window', { noteId });
+  };
+
+  const handleTitleChange = (title: string) => {
+    if (!note) return;
+    const updated = { ...note, title };
+    updateNote(updated);
+    setNote(updated);
+  };
+
+  // Assign to selected items
+  const applyToSelected = (patch: Partial<TodoItem>) => {
+    const store = useNoteStore.getState();
+    if (store.selectedIds.size > 0) {
+      store.selectedIds.forEach((id) => store.updateItem(id, patch));
+    }
   };
 
   // Build visible item list (collapse children)
@@ -108,8 +147,29 @@ export function NoteWindow({ noteId }: Props) {
     useNoteStore.getState().updateItem(id, { item_type: type });
   };
 
+  // Active assignee group
+  const activeGroup = settings.active_group_id
+    ? assigneeGroups.find((g) => g.id === settings.active_group_id)
+    : assigneeGroups[0];
+
+  const groupPersons = activeGroup
+    ? assigneePersons.filter((p) => p.group_id === activeGroup.id)
+    : [];
+
+  const selCount = selectedIds.size;
+
   return (
-    <div className="note-window" style={{ background: noteColor }} data-tauri-drag-region="">
+    <div
+      className="note-window"
+      style={{ background: noteColor }}
+      data-tauri-drag-region=""
+      onClick={() => {
+        setShowColorPicker(false);
+        setShowStatusPicker(false);
+        setShowAssigneePicker(false);
+        setShowPriorityPicker(false);
+      }}
+    >
       {/* ── Title bar ── */}
       <div className="note-titlebar" data-tauri-drag-region="">
         <input
@@ -117,9 +177,8 @@ export function NoteWindow({ noteId }: Props) {
           className="note-title-input"
           value={titleText}
           placeholder="タイトル"
-          onChange={(e) => note && updateNote({ ...note, title: e.target.value })}
+          onChange={(e) => handleTitleChange(e.target.value)}
           onClick={(e) => e.stopPropagation()}
-          data-tauri-drag-region=""
         />
         <div className="note-titlebar-actions">
           <button
@@ -128,7 +187,12 @@ export function NoteWindow({ noteId }: Props) {
             title="最前面固定"
           >📌</button>
           <div style={{ position: 'relative' }}>
-            <button className="btn-icon" onClick={() => setShowColorPicker((o) => !o)} title="色">🎨</button>
+            <button
+              className="btn-icon"
+              onClick={(e) => { e.stopPropagation(); setShowColorPicker((o) => !o); }}
+              title="色"
+              style={{ background: noteColor, border: '1px solid rgba(0,0,0,.2)', borderRadius: 4, width: 20, height: 20 }}
+            />
             {showColorPicker && (
               <div className="color-picker" onClick={(e) => e.stopPropagation()}>
                 {NOTE_COLORS.map((c) => (
@@ -146,22 +210,137 @@ export function NoteWindow({ noteId }: Props) {
         </div>
       </div>
 
-      {/* ── Item type toolbar ── */}
+      {/* ── Toolbar ── */}
       <div className="note-type-bar">
-        <button className="type-btn" onClick={() => addItem()} title="通常項目">＋ 項目</button>
+        <button className="type-btn" onClick={() => addItem()} title="項目を追加 (Shift+Enter)">＋</button>
         <button className="type-btn" onClick={() => addTyped('heading')} title="見出し">H</button>
-        <button className="type-btn" onClick={() => addTyped('separator')} title="セパレータ">—</button>
+        <button className="type-btn" onClick={() => addTyped('separator')} title="区切り線">—</button>
+        <button
+          className="type-btn"
+          onClick={() => {
+            const store = useNoteStore.getState();
+            if (store.selectedIds.size > 0) {
+              store.selectedIds.forEach((id) => store.indent(id));
+            }
+          }}
+          title="インデント (Tab)"
+        >→</button>
+        <button
+          className="type-btn"
+          onClick={() => {
+            const store = useNoteStore.getState();
+            if (store.selectedIds.size > 0) {
+              store.selectedIds.forEach((id) => store.dedent(id));
+            }
+          }}
+          title="アウトデント (Shift+Tab)"
+        >←</button>
+
+        {/* Status picker for selection */}
+        {settings.feature_status && selCount > 0 && (
+          <div style={{ position: 'relative' }}>
+            <button
+              className="type-btn"
+              onClick={(e) => { e.stopPropagation(); setShowStatusPicker((o) => !o); }}
+              title="選択項目のステータス"
+            >
+              ● ST
+            </button>
+            {showStatusPicker && (
+              <div className="status-dropdown" style={{ top: '100%', left: 0, bottom: 'auto' }} onClick={(e) => e.stopPropagation()}>
+                <div className="status-option" onClick={() => { applyToSelected({ status: null }); setShowStatusPicker(false); }}>（なし）</div>
+                {statuses.map((s) => (
+                  <div
+                    key={s.id}
+                    className="status-option"
+                    style={{ borderLeft: `3px solid ${s.color}` }}
+                    onClick={() => { applyToSelected({ status: s.id }); setShowStatusPicker(false); }}
+                  >
+                    {s.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Assignee picker for selection */}
+        {settings.feature_assignee && selCount > 0 && groupPersons.length > 0 && (
+          <div style={{ position: 'relative' }}>
+            <button
+              className="type-btn"
+              onClick={(e) => { e.stopPropagation(); setShowAssigneePicker((o) => !o); }}
+              title="担当者を割り当て"
+            >
+              👤
+            </button>
+            {showAssigneePicker && (
+              <div className="status-dropdown" style={{ top: '100%', left: 0, bottom: 'auto' }} onClick={(e) => e.stopPropagation()}>
+                <div className="status-option" onClick={() => { applyToSelected({ assignee_person_id: null }); setShowAssigneePicker(false); }}>（なし）</div>
+                {groupPersons.map((p) => (
+                  <div
+                    key={p.id}
+                    className="status-option"
+                    style={{ borderLeft: `3px solid ${p.color}` }}
+                    onClick={() => { applyToSelected({ assignee_person_id: p.id }); setShowAssigneePicker(false); }}
+                  >
+                    {p.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Priority picker for selection */}
+        {settings.feature_priority && selCount > 0 && (
+          <div style={{ position: 'relative' }}>
+            <button
+              className="type-btn"
+              onClick={(e) => { e.stopPropagation(); setShowPriorityPicker((o) => !o); }}
+              title="優先度"
+            >
+              ★
+            </button>
+            {showPriorityPicker && (
+              <div className="status-dropdown" style={{ top: '100%', left: 0, bottom: 'auto' }} onClick={(e) => e.stopPropagation()}>
+                {PRIORITY_OPTIONS.map((p) => (
+                  <div
+                    key={String(p.value)}
+                    className="status-option"
+                    onClick={() => { applyToSelected({ priority: p.value }); setShowPriorityPicker(false); }}
+                  >
+                    {p.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="type-bar-spacer" />
-        <button className="type-btn" onClick={() => useNoteStore.getState().checkAll(true)} title="全チェック">☑ 全</button>
-        <button className="type-btn" onClick={() => useNoteStore.getState().checkAll(false)} title="全解除">☐ 全</button>
+
+        {selCount > 0 && (
+          <span className="sel-count">{selCount}件選択</span>
+        )}
+        <button
+          className="type-btn"
+          onClick={() => useNoteStore.getState().checkAll(true)}
+          title="全チェック"
+        >☑ 全</button>
+        <button
+          className="type-btn"
+          onClick={() => useNoteStore.getState().checkAll(false)}
+          title="全解除"
+        >☐ 全</button>
       </div>
 
       {/* ── Item list ── */}
-      <div className="note-items">
+      <div className="note-items" onClick={() => clearSelection()}>
         {visibleItems.length === 0 && (
           <div
             className="note-items-empty"
-            onClick={() => addItem()}
+            onClick={(e) => { e.stopPropagation(); addItem(); }}
           >
             クリックして追加…
           </div>

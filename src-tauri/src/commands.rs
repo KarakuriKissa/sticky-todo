@@ -38,11 +38,52 @@ pub fn create_note(
         always_on_top: false,
         color: "#fef08a".into(),
         sort_order: 0,
+        locked: false,
         updated_at: now(),
         dirty: true,
     };
     db.upsert_note(&note).map_err(|e| e.to_string())?;
     Ok(note)
+}
+
+#[tauri::command]
+pub fn duplicate_note(
+    source_id: String,
+    db: State<'_, Database>,
+) -> Result<Note, String> {
+    let notes = db.get_all_notes().map_err(|e| e.to_string())?;
+    let source = notes.iter().find(|n| n.id == source_id)
+        .ok_or_else(|| "Note not found".to_string())?;
+
+    let new_note = Note {
+        id: Uuid::new_v4().to_string(),
+        title: format!("{} (コピー)", source.title),
+        category_id: source.category_id.clone(),
+        window_x: source.window_x + 20.0,
+        window_y: source.window_y + 20.0,
+        window_width: source.window_width,
+        window_height: source.window_height,
+        always_on_top: false,
+        color: source.color.clone(),
+        sort_order: source.sort_order + 1,
+        locked: false,
+        updated_at: now(),
+        dirty: true,
+    };
+    db.upsert_note(&new_note).map_err(|e| e.to_string())?;
+
+    // Duplicate items
+    let items = db.get_items(&source_id).map_err(|e| e.to_string())?;
+    for item in &items {
+        let new_item = TodoItem {
+            id: Uuid::new_v4().to_string(),
+            note_id: new_note.id.clone(),
+            ..item.clone()
+        };
+        db.upsert_item(&new_item).map_err(|e| e.to_string())?;
+    }
+
+    Ok(new_note)
 }
 
 #[tauri::command]
@@ -107,6 +148,38 @@ pub fn save_status(status: Status, db: State<'_, Database>) -> Result<(), String
 #[tauri::command]
 pub fn delete_status(id: String, db: State<'_, Database>) -> Result<(), String> {
     db.delete_status(&id).map_err(|e| e.to_string())
+}
+
+// ── Assignee Groups ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_assignee_groups(db: State<'_, Database>) -> Result<Vec<AssigneeGroup>, String> {
+    db.get_assignee_groups().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_assignee_group(group: AssigneeGroup, db: State<'_, Database>) -> Result<(), String> {
+    db.upsert_assignee_group(&group).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_assignee_group(id: String, db: State<'_, Database>) -> Result<(), String> {
+    db.delete_assignee_group(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_assignee_persons(db: State<'_, Database>) -> Result<Vec<AssigneePerson>, String> {
+    db.get_assignee_persons().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_assignee_person(person: AssigneePerson, db: State<'_, Database>) -> Result<(), String> {
+    db.upsert_assignee_person(&person).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_assignee_person(id: String, db: State<'_, Database>) -> Result<(), String> {
+    db.delete_assignee_person(&id).map_err(|e| e.to_string())
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────────
