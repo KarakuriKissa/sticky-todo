@@ -19,9 +19,11 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
   } = useNoteStore();
   const { statuses, settings, assigneePersons } = useAppStore();
   const inputRef = useRef<HTMLInputElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState<'before' | 'after' | null>(null);
   const [showMemoEdit, setShowMemoEdit] = useState(false);
   const [memoText, setMemoText] = useState(item.memo ?? '');
+  const [commentAbove, setCommentAbove] = useState(false);
   const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
 
   const hasChildren = allItems.some((i) => i.parent_id === item.id);
@@ -50,7 +52,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
     },
     { label: '', separator: true, action: () => {} },
     { label: item.bold ? '太字を解除' : '太字', icon: 'B', action: () => toggleBold(item.id) },
-    { label: 'メモ編集', icon: '📝', action: () => { setMemoText(item.memo ?? ''); setShowMemoEdit(true); } },
+    { label: 'コメント', icon: '💬', action: () => { setMemoText(item.memo ?? ''); setShowMemoEdit(true); } },
     { label: '', separator: true, action: () => {} },
     { label: '見出しに変更', icon: 'H', action: () => updateItem(item.id, { item_type: 'heading' }) },
     { label: '通常に変更', icon: '•', action: () => updateItem(item.id, { item_type: 'normal' }) },
@@ -74,6 +76,29 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
         e.preventDefault();
         return;
       }
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const idx = visibleItems.findIndex((i) => i.id === item.id);
+      const prev = visibleItems[idx - 1];
+      if (prev) {
+        setTimeout(() => {
+          document.querySelector<HTMLInputElement>(`[data-item-id="${prev.id}"] [data-text-input]`)?.focus();
+        }, 0);
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const idx = visibleItems.findIndex((i) => i.id === item.id);
+      const next = visibleItems[idx + 1];
+      if (next) {
+        setTimeout(() => {
+          document.querySelector<HTMLInputElement>(`[data-item-id="${next.id}"] [data-text-input]`)?.focus();
+        }, 0);
+      }
+      return;
     }
 
     if (e.key === 'Enter' && e.shiftKey) {
@@ -167,10 +192,21 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
     setDragOver(null);
   };
 
-  // ── Memo ────────────────────────────────────────────────────────────────────
+  // ── Memo / Comment ──────────────────────────────────────────────────────────
   const saveMemo = () => {
     updateItem(item.id, { memo: memoText.trim() || null });
     setShowMemoEdit(false);
+  };
+
+  const openComment = (e: MouseEvent) => {
+    e.stopPropagation();
+    const el = (e.currentTarget as HTMLElement).closest('.todo-item, .todo-heading');
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      setCommentAbove(rect.top > window.innerHeight * 0.5);
+    }
+    setMemoText(item.memo ?? '');
+    setShowMemoEdit(true);
   };
 
   // ── Assignee ────────────────────────────────────────────────────────────────
@@ -239,6 +275,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
 
   return (
     <div
+      ref={rowRef}
       className={`todo-item${isSelected ? ' selected' : ''}${dragOver ? ` drag-${dragOver}` : ''}${item.locked ? ' locked-item' : ''}${isOverdue ? ' overdue-item' : isWarn ? ' warn-item' : ''}`}
       style={{ paddingLeft: item.indent * 20 + 4 }}
       data-item-id={item.id}
@@ -314,9 +351,9 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
           <span
             className="memo-indicator"
             title={item.memo}
-            onClick={(e) => { e.stopPropagation(); setMemoText(item.memo ?? ''); setShowMemoEdit(true); }}
+            onClick={openComment}
           >
-            📝
+            💬
           </span>
         )}
       </div>
@@ -358,16 +395,16 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
         <div className="memo-tooltip">{item.memo}</div>
       )}
 
-      {/* Memo edit popup */}
+      {/* Comment edit popup */}
       {showMemoEdit && (
-        <div className="memo-popup" onClick={(e) => e.stopPropagation()}>
-          <div className="memo-popup-title">メモ</div>
+        <div className={`comment-popup${commentAbove ? ' comment-popup-above' : ''}`} onClick={(e) => e.stopPropagation()}>
+          <div className="memo-popup-title">コメント</div>
           <textarea
             className="memo-textarea"
             autoFocus
             value={memoText}
             onChange={(e) => setMemoText(e.target.value)}
-            placeholder="メモを入力…"
+            placeholder="コメントを入力…"
             rows={4}
           />
           <div className="memo-popup-actions">

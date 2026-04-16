@@ -250,7 +250,7 @@ pub async fn open_note_window(
 pub async fn close_note_window(app: AppHandle, note_id: String) -> Result<(), String> {
     let label = format!("note-{}", note_id);
     if let Some(win) = app.get_webview_window(&label) {
-        win.close().map_err(|e| e.to_string())?;
+        win.destroy().map_err(|e| e.to_string())?;
     }
     Ok(())
 }

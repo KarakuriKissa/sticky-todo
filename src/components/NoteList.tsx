@@ -2,6 +2,7 @@ import { useState, DragEvent } from 'react';
 import { useAppStore } from '../store/appStore';
 import type { Note } from '../types';
 
+
 interface Props {
   onNew: () => void;
 }
@@ -12,6 +13,7 @@ export function NoteList({ onNew }: Props) {
   const notes = filteredNotes();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Note | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragPos, setDragPos] = useState<'before' | 'after'>('after');
   const [dragSrcId, setDragSrcId] = useState<string | null>(null);
@@ -149,18 +151,32 @@ export function NoteList({ onNew }: Props) {
             <button
               className="btn-icon note-action-btn danger"
               title="削除"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (confirm(`「${note.title || '（無題）'}」を削除しますか？`)) {
-                  deleteNote(note.id);
-                }
-              }}
+              onClick={(e) => { e.stopPropagation(); setDeleteTarget(note); }}
             >
               🗑
             </button>
           </div>
         </div>
       ))}
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <p>「{deleteTarget.title || '（無題）'}」を削除しますか？</p>
+            <div className="modal-actions">
+              <button
+                className="btn-danger"
+                onClick={() => { deleteNote(deleteTarget.id); setDeleteTarget(null); }}
+              >
+                削除
+              </button>
+              <button className="btn-secondary" onClick={() => setDeleteTarget(null)}>
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

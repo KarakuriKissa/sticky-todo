@@ -698,18 +698,23 @@ ul { list-style: none; }
 }
 .todo-item:hover .memo-tooltip { display: block; }
 
-/* Memo edit popup */
-.memo-popup {
+/* Comment popup (was memo-popup) */
+.memo-popup, .comment-popup {
   position: absolute;
-  bottom: calc(100% + 4px);
-  left: 24px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.2);
-  padding: 10px;
-  z-index: 300;
-  width: 220px;
+  z-index: 200;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+  padding: 12px;
+  width: 240px;
+  left: 0;
+  top: calc(100% + 6px);
+}
+
+.comment-popup-above {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 .memo-popup-title {
   font-size: 11px;
@@ -805,6 +810,25 @@ ul { list-style: none; }
   margin-top: 20px;
   border-top: 1px solid var(--border);
   padding-top: 16px;
+}
+
+/* Confirm modal */
+.confirm-modal p {
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.btn-danger {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn-danger:hover {
+  background: #dc2626;
 }
 
 /* Settings tabs */

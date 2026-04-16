@@ -14,7 +14,7 @@ export function Launcher() {
   const {
     load, reopenSavedWindows, createNote,
     searchQuery, setSearchQuery, settings, saveSettings,
-    selectedCategoryId,
+    selectedCategoryId, categories, saveCategory, setSelectedCategory,
   } = useAppStore();
   const [showSettings, setShowSettings] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -36,13 +36,33 @@ export function Launcher() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen<{ id: string; title: string; color: string }>('note-updated', (event) => {
+        const { id, title, color } = event.payload;
+        useAppStore.setState((s) => ({
+          notes: s.notes.map((n) => (n.id === id ? { ...n, title, color } : n)),
+        }));
+      }).then((fn) => { unlisten = fn; }).catch(() => {});
+    });
+    return () => { unlisten?.(); };
+  }, []);
+
   const handleNew = async () => {
-    if (!selectedCategoryId) {
-      // "すべて" selected — require category
-      alert('カテゴリを選択してからリストを作成してください。');
-      return;
+    let catId = selectedCategoryId;
+    if (!catId) {
+      if (categories.length === 0) {
+        // No categories at all — create a default one
+        const id = await invoke<string>('generate_id');
+        await saveCategory({ id, name: '新しいカテゴリ', color: '#6366f1', sort_order: 0 });
+        setSelectedCategory(id);
+        catId = id;
+      } else {
+        alert('カテゴリを選択してからリストを作成してください。');
+        return;
+      }
     }
-    // Create note but do NOT auto-open the window
     await createNote();
   };
 
@@ -315,18 +335,6 @@ function SettingsModal({
                       <button className="btn-primary" onClick={addPerson}>追加</button>
                     </div>
 
-                    <h3 style={{ marginTop: 14 }}>使用グループ</h3>
-                    <select
-                      className="sort-select"
-                      value={draft.active_group_id ?? ''}
-                      onChange={(e) => setDraft((d) => ({ ...d, active_group_id: e.target.value || null }))}
-                      style={{ width: '100%' }}
-                    >
-                      <option value="">（自動 - 先頭グループ）</option>
-                      {assigneeGroups.map((g) => (
-                        <option key={g.id} value={g.id}>{g.name}</option>
-                      ))}
-                    </select>
                   </>
                 )}
               </div>

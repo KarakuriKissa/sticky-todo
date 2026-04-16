@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import type { AppSettings, AssigneeGroup, AssigneePerson, Category, Note, SortMode, Status } from '../types';
 
@@ -145,9 +146,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const updated = { ...note, updated_at: now(), dirty: true };
     set((s) => ({ notes: s.notes.map((n) => (n.id === note.id ? updated : n)) }));
     debouncedSaveNote(updated);
+    emit('note-updated', { id: updated.id, title: updated.title, color: updated.color }).catch(() => {});
   },
 
   deleteNote: async (id: string) => {
+    await invoke('close_note_window', { noteId: id }).catch(() => {});
     await invoke('delete_note', { id });
     set((s) => ({
       notes: s.notes.filter((n) => n.id !== id),

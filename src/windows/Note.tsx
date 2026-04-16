@@ -87,6 +87,21 @@ export function NoteWindow({ noteId }: Props) {
     return () => { unlisten.then((f) => f()); };
   }, [note]);
 
+  // Listen for note-updated events from other windows
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen<{ id: string; title: string; color: string }>('note-updated', (event) => {
+        if (event.payload.id !== noteId) return;
+        const current = useNoteStore.getState().note;
+        if (current && !editingTitle) {
+          useNoteStore.setState({ note: { ...current, title: event.payload.title, color: event.payload.color } });
+        }
+      }).then((fn) => { unlisten = fn; }).catch(() => {});
+    });
+    return () => { unlisten?.(); };
+  }, [noteId, editingTitle]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
