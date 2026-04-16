@@ -17,6 +17,7 @@ export function Launcher() {
     selectedCategoryId, categories, saveCategory, setSelectedCategory,
   } = useAppStore();
   const [showSettings, setShowSettings] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(180);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -78,9 +79,28 @@ export function Launcher() {
     await saveSettings({ ...settings, sort_mode: mode });
   };
 
+  const onResizerMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sidebarWidth;
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.min(320, Math.max(120, startW + ev.clientX - startX));
+      setSidebarWidth(w);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   return (
     <div className="launcher">
-      <CategoryList />
+      <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+        <CategoryList />
+      </div>
+      <div className="sidebar-resizer" onMouseDown={onResizerMouseDown} />
 
       <main className="launcher-main">
         <header className="launcher-toolbar">

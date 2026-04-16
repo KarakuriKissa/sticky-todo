@@ -56,6 +56,7 @@ export function CategoryList() {
 
   const onDragOver = (e: DragEvent, id: string) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const mid = rect.top + rect.height / 2;
     setDragOverId(id);

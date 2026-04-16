@@ -17,10 +17,11 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
     indent, dedent, addItem, selectedIds, toggleSelected, moveItem,
     duplicateItem, setSelected,
   } = useNoteStore();
-  const { statuses, settings, assigneePersons } = useAppStore();
+  const { statuses, settings, assigneePersons, assigneeGroups } = useAppStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState<'before' | 'after' | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [showMemoEdit, setShowMemoEdit] = useState(false);
   const [memoText, setMemoText] = useState(item.memo ?? '');
   const [commentAbove, setCommentAbove] = useState(false);
@@ -144,8 +145,43 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
     }
   };
 
+  // ── Row keyboard handler (when not editing) ──────────────────────────────────
+  const onRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (isEditing) return; // let input handle it
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      enterEdit();
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const idx = visibleItems.findIndex((i) => i.id === item.id);
+      const prev = visibleItems[idx - 1];
+      if (prev) {
+        useNoteStore.getState().setSelected(new Set([prev.id]));
+        setTimeout(() => {
+          document.querySelector<HTMLDivElement>(`[data-item-id="${prev.id}"].todo-item`)?.focus();
+        }, 0);
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const idx = visibleItems.findIndex((i) => i.id === item.id);
+      const next = visibleItems[idx + 1];
+      if (next) {
+        useNoteStore.getState().setSelected(new Set([next.id]));
+        setTimeout(() => {
+          document.querySelector<HTMLDivElement>(`[data-item-id="${next.id}"].todo-item`)?.focus();
+        }, 0);
+      }
+      return;
+    }
+  };
+
   // ── Click / Selection ────────────────────────────────────────────────────────
   const onRowClick = (e: MouseEvent) => {
+    if (isEditing) return; // don't interfere while editing
     if (e.shiftKey) {
       const visIds = visibleItems.map((i) => i.id);
       const selectedArr = [...selectedIds];
@@ -159,10 +195,8 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
     } else if (e.ctrlKey || e.metaKey) {
       toggleSelected(item.id);
     } else {
-      // Single click on row (not on input) = select this item
-      if ((e.target as HTMLElement).tagName !== 'INPUT') {
-        setSelected(new Set([item.id]));
-      }
+      setSelected(new Set([item.id]));
+      rowRef.current?.focus();
     }
   };
 
@@ -180,6 +214,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
 
   const onDragOver = (e: DragEvent) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
     if (item.locked) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setDragOver(e.clientY < rect.top + rect.height / 2 ? 'before' : 'after');
@@ -209,10 +244,25 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
     setShowMemoEdit(true);
   };
 
+  // ── Edit mode ────────────────────────────────────────────────────────────────
+  const enterEdit = () => {
+    if (!item.locked) {
+      setIsEditing(true);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  };
+  const exitEdit = () => setIsEditing(false);
+
   // ── Assignee ────────────────────────────────────────────────────────────────
   const assigneePerson = item.assignee_person_id
     ? assigneePersons.find((p) => p.id === item.assignee_person_id)
     : null;
+
+  // Active group persons for inline pickers
+  const activeGroup = settings.active_group_id
+    ? assigneeGroups.find((g) => g.id === settings.active_group_id)
+    : assigneeGroups[0];
+  const groupPersons = activeGroup ? assigneePersons.filter((p) => p.group_id === activeGroup.id) : [];
 
   // ── Separator ────────────────────────────────────────────────────────────────
   if (item.item_type === 'separator') {
@@ -238,15 +288,24 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
   if (item.item_type === 'heading') {
     return (
       <div
-        className={`todo-heading${dragOver ? ` drag-${dragOver}` : ''}`}
+        className={`todo-heading${isSelected ? ' selected' : ''}${dragOver ? ` drag-${dragOver}` : ''}`}
         style={{ marginLeft: item.indent * 20 }}
         data-item-id={item.id}
+        tabIndex={isSelected && !isEditing ? 0 : -1}
         draggable={!item.locked}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragLeave={() => setDragOver(null)}
         onDrop={onDrop}
         onContextMenu={onContextMenu}
+        onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
+        onKeyDown={(e) => {
+          if (!isEditing && e.key === 'Enter') { e.preventDefault(); enterEdit(); }
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelected(new Set([item.id]));
+        }}
       >
         {item.locked && <span className="item-lock-icon">🔒</span>}
         <input
@@ -254,9 +313,12 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
           data-text-input=""
           className="todo-heading-input"
           value={item.text}
-          readOnly={item.locked}
-          onChange={(e) => !item.locked && updateItem(item.id, { text: e.target.value })}
+          readOnly={!isEditing || item.locked}
+          onChange={(e) => isEditing && !item.locked && updateItem(item.id, { text: e.target.value })}
           onKeyDown={onKeyDown}
+          onBlur={exitEdit}
+          onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
+          onMouseDown={(e) => e.stopPropagation()}
           placeholder="見出し"
         />
         <div className="todo-item-hover-actions">
@@ -279,12 +341,15 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
       className={`todo-item${isSelected ? ' selected' : ''}${dragOver ? ` drag-${dragOver}` : ''}${item.locked ? ' locked-item' : ''}${isOverdue ? ' overdue-item' : isWarn ? ' warn-item' : ''}`}
       style={{ paddingLeft: item.indent * 20 + 4 }}
       data-item-id={item.id}
+      tabIndex={isSelected && !isEditing ? 0 : -1}
       draggable={!item.locked}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragLeave={() => setDragOver(null)}
       onDrop={onDrop}
       onClick={onRowClick}
+      onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
+      onKeyDown={onRowKeyDown}
       onContextMenu={onContextMenu}
     >
       {/* Lock indicator */}
@@ -315,11 +380,14 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
         data-text-input=""
         className={`todo-text${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}`}
         value={item.text}
-        readOnly={item.locked}
-        onChange={(e) => !item.locked && updateItem(item.id, { text: e.target.value })}
+        readOnly={!isEditing || item.locked}
+        onChange={(e) => isEditing && !item.locked && updateItem(item.id, { text: e.target.value })}
         onKeyDown={onKeyDown}
+        onBlur={exitEdit}
         onClick={(e) => e.stopPropagation()}
-        placeholder="タスクを入力…"
+        onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
+        onMouseDown={(e) => e.stopPropagation()}
+        placeholder={isEditing ? 'タスクを入力…' : ''}
       />
 
       {/* Badges */}
@@ -333,18 +401,31 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
         )}
 
         {settings.feature_assignee && assigneePerson && (
-          <span className="assignee-badge" style={{ borderColor: assigneePerson.color }}>
-            {assigneePerson.name}
-          </span>
+          <AssigneeBadge
+            person={assigneePerson}
+            persons={groupPersons}
+            onSelect={(id) => updateItem(item.id, { assignee_person_id: id || null })}
+          />
         )}
 
         {settings.feature_date && item.limit_date && (
-          <span
-            className={`date-badge${isOverdue ? ' overdue' : isWarn ? ' warn' : ''}`}
-            title="期限"
-          >
-            {item.limit_date}
-          </span>
+          <DateBadge
+            date={item.limit_date}
+            isWarn={isWarn}
+            isOverdue={isOverdue}
+            onSelect={(d) => updateItem(item.id, { limit_date: d || null })}
+          />
+        )}
+
+        {/* Inline add buttons when values are empty */}
+        {settings.feature_status && !statusObj && (
+          <InlineStatusPicker statuses={statuses} onSelect={(id) => updateItem(item.id, { status: id || null })} />
+        )}
+        {settings.feature_assignee && !assigneePerson && groupPersons.length > 0 && (
+          <InlineAssigneePicker persons={groupPersons} onSelect={(id) => updateItem(item.id, { assignee_person_id: id || null })} />
+        )}
+        {settings.feature_date && !item.limit_date && (
+          <InlineDatePicker onSelect={(d) => updateItem(item.id, { limit_date: d || null })} />
         )}
 
         {settings.feature_memo && item.memo && (
@@ -492,5 +573,196 @@ function PriorityBadge({ priority, onSelect }: { priority: string; onSelect: (p:
         </div>
       )}
     </div>
+  );
+}
+
+// ── AssigneeBadge ─────────────────────────────────────────────────────────────
+function AssigneeBadge({
+  person,
+  persons,
+  onSelect,
+}: {
+  person: { id: string; name: string; color: string };
+  persons: { id: string; name: string; color: string }[];
+  onSelect: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="status-badge-wrap">
+      <span
+        className="assignee-badge"
+        style={{ borderColor: person.color, cursor: 'pointer' }}
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+      >
+        {person.name}
+      </span>
+      {open && (
+        <div className="status-dropdown">
+          <div className="status-option" onClick={(e) => { e.stopPropagation(); onSelect(null); setOpen(false); }}>（なし）</div>
+          {persons.map((p) => (
+            <div
+              key={p.id}
+              className="status-option"
+              style={{ borderLeft: `3px solid ${p.color}` }}
+              onClick={(e) => { e.stopPropagation(); onSelect(p.id); setOpen(false); }}
+            >
+              {p.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── DateBadge ─────────────────────────────────────────────────────────────────
+function DateBadge({
+  date,
+  isWarn,
+  isOverdue,
+  onSelect,
+}: {
+  date: string;
+  isWarn: boolean;
+  isOverdue: boolean;
+  onSelect: (d: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(date);
+  if (editing) {
+    return (
+      <input
+        type="date"
+        className="inline-date-input"
+        autoFocus
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onBlur={() => { onSelect(val || null); setEditing(false); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { onSelect(val || null); setEditing(false); }
+          if (e.key === 'Escape') setEditing(false);
+          if (e.key === 'Delete' || e.key === 'Backspace') { onSelect(null); setEditing(false); }
+          e.stopPropagation();
+        }}
+      />
+    );
+  }
+  return (
+    <span
+      className={`date-badge${isOverdue ? ' overdue' : isWarn ? ' warn' : ''}`}
+      title="期限（クリックで変更）"
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      style={{ cursor: 'pointer' }}
+    >
+      {date}
+    </span>
+  );
+}
+
+// ── InlineStatusPicker ────────────────────────────────────────────────────────
+function InlineStatusPicker({
+  statuses,
+  onSelect,
+}: {
+  statuses: Status[];
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (statuses.length === 0) return null;
+  return (
+    <div className="status-badge-wrap inline-add">
+      <span
+        className="inline-add-btn"
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        title="ステータスを設定"
+      >
+        ST＋
+      </span>
+      {open && (
+        <div className="status-dropdown">
+          {statuses.map((s) => (
+            <div
+              key={s.id}
+              className="status-option"
+              style={{ borderLeft: `3px solid ${s.color}` }}
+              onClick={(e) => { e.stopPropagation(); onSelect(s.id); setOpen(false); }}
+            >
+              {s.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── InlineAssigneePicker ──────────────────────────────────────────────────────
+function InlineAssigneePicker({
+  persons,
+  onSelect,
+}: {
+  persons: { id: string; name: string; color: string }[];
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (persons.length === 0) return null;
+  return (
+    <div className="status-badge-wrap inline-add">
+      <span
+        className="inline-add-btn"
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        title="担当者を設定"
+      >
+        👤＋
+      </span>
+      {open && (
+        <div className="status-dropdown">
+          {persons.map((p) => (
+            <div
+              key={p.id}
+              className="status-option"
+              style={{ borderLeft: `3px solid ${p.color}` }}
+              onClick={(e) => { e.stopPropagation(); onSelect(p.id); setOpen(false); }}
+            >
+              {p.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── InlineDatePicker ──────────────────────────────────────────────────────────
+function InlineDatePicker({ onSelect }: { onSelect: (d: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState('');
+  if (!open) {
+    return (
+      <span
+        className="inline-add-btn"
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        title="期日を設定"
+      >
+        📅＋
+      </span>
+    );
+  }
+  return (
+    <input
+      type="date"
+      className="inline-date-input"
+      autoFocus
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onBlur={() => { if (val) onSelect(val); setOpen(false); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { if (val) onSelect(val); setOpen(false); }
+        if (e.key === 'Escape') setOpen(false);
+        e.stopPropagation();
+      }}
+    />
   );
 }

@@ -46,6 +46,7 @@ export function NoteList({ onNew }: Props) {
 
   const onDragOver = (e: DragEvent, note: Note) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const mid = rect.top + rect.height / 2;
     setDragOverId(note.id);
@@ -166,6 +167,7 @@ export function NoteList({ onNew }: Props) {
             <div className="modal-actions">
               <button
                 className="btn-danger"
+                autoFocus
                 onClick={() => { deleteNote(deleteTarget.id); setDeleteTarget(null); }}
               >
                 削除
