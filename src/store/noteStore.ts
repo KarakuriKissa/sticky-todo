@@ -1,7 +1,3 @@
-/**
- * Per-note store used inside each note window.
- * Handles todo items with undo/redo history.
- */
 import { invoke } from '@tauri-apps/api/core';
 import { create } from 'zustand';
 import type { ItemType, Note, TodoItem } from '../types';
@@ -14,11 +10,13 @@ interface NoteStore {
   note: Note | null;
   items: TodoItem[];
   selectedIds: Set<string>;
+  searchQuery: string;
   history: Snapshot[];
   historyIdx: number;
 
   load: (noteId: string) => Promise<void>;
   setNote: (note: Note) => void;
+  setSearchQuery: (q: string) => void;
 
   // Item mutations
   addItem: (afterId?: string, indent?: number) => string;
@@ -26,6 +24,7 @@ interface NoteStore {
   deleteItem: (id: string) => void;
   toggleCheck: (id: string) => void;
   toggleBold: (id: string) => void;
+  toggleLock: (id: string) => void;
   toggleCollapse: (id: string) => void;
   indent: (id: string) => void;
   dedent: (id: string) => void;
@@ -61,6 +60,7 @@ function makeItem(noteId: string, partial: Partial<TodoItem> = {}): TodoItem {
     checked: false,
     indent: 0,
     collapsed: false,
+    locked: false,
     status: null,
     assignees: '[]',
     assignee_person_id: null,
@@ -120,16 +120,18 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     note: null,
     items: [],
     selectedIds: new Set(),
+    searchQuery: '',
     history: [],
     historyIdx: -1,
 
     load: async (noteId: string) => {
       const items = await invoke<TodoItem[]>('get_note_items', { noteId });
       const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order);
-      set({ items: sorted, history: [{ items: sorted }], historyIdx: 0 });
+      set({ items: sorted, history: [{ items: sorted }], historyIdx: 0, searchQuery: '' });
     },
 
     setNote: (note: Note) => set({ note }),
+    setSearchQuery: (q: string) => set({ searchQuery: q }),
 
     addItem: (afterId?: string, indent = 0) => {
       const noteId = get().note?.id ?? '';
@@ -174,7 +176,6 @@ export const useNoteStore = create<NoteStore>((set, get) => {
 
     toggleCheck: (id: string) => {
       const { selectedIds } = get();
-      // If item is selected, toggle all selected; otherwise toggle just this one
       if (selectedIds.has(id) && selectedIds.size > 1) {
         const item = get().items.find((i) => i.id === id);
         const newChecked = item ? !item.checked : true;
@@ -202,6 +203,14 @@ export const useNoteStore = create<NoteStore>((set, get) => {
       );
     },
 
+    toggleLock: (id: string) => {
+      mutate((items) =>
+        items.map((i) =>
+          i.id === id ? { ...i, locked: !i.locked, updated_at: now(), dirty: true } : i,
+        ),
+      );
+    },
+
     toggleCollapse: (id: string) => {
       set((s) => ({
         items: s.items.map((i) =>
@@ -211,6 +220,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
 
     indent: (id: string) => {
+      const item = get().items.find((i) => i.id === id);
+      if (item?.locked) return;
       mutate((items) =>
         items.map((i) =>
           i.id === id && i.indent < 6
@@ -221,6 +232,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
 
     dedent: (id: string) => {
+      const item = get().items.find((i) => i.id === id);
+      if (item?.locked) return;
       mutate((items) =>
         items.map((i) =>
           i.id === id && i.indent > 0
@@ -231,6 +244,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
 
     moveItem: (fromId: string, toId: string, position: 'before' | 'after') => {
+      const fromItem = get().items.find((i) => i.id === fromId);
+      if (fromItem?.locked) return;
       mutate((items) => {
         const from = items.find((i) => i.id === fromId);
         if (!from) return items;
@@ -267,7 +282,13 @@ export const useNoteStore = create<NoteStore>((set, get) => {
         const idx = items.findIndex((i) => i.id === id);
         if (idx === -1) return items;
         const orig = items[idx];
-        const copy = { ...orig, id: crypto.randomUUID(), dirty: true, updated_at: now() };
+        const copy = {
+          ...orig,
+          id: crypto.randomUUID(),
+          locked: false,
+          dirty: true,
+          updated_at: now(),
+        };
         return [...items.slice(0, idx + 1), copy, ...items.slice(idx + 1)];
       });
     },

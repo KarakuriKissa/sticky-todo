@@ -6,27 +6,37 @@ import { ContextMenu, ContextMenuItem } from './ContextMenu';
 
 interface Props {
   item: Item;
-  visibleItems: Item[]; // flat ordered list (excludes collapsed children)
+  visibleItems: Item[];
   allItems: Item[];
+  warnDays: number;
 }
 
-export function TodoItemRow({ item, visibleItems, allItems }: Props) {
+export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
   const {
-    updateItem, deleteItem, toggleCheck, toggleBold, toggleCollapse,
+    updateItem, deleteItem, toggleCheck, toggleBold, toggleLock, toggleCollapse,
     indent, dedent, addItem, selectedIds, toggleSelected, moveItem,
     duplicateItem, setSelected,
   } = useNoteStore();
-  const { statuses, settings } = useAppStore();
+  const { statuses, settings, assigneePersons } = useAppStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState<'before' | 'after' | null>(null);
-  const [showMemo, setShowMemo] = useState(false);
+  const [showMemoEdit, setShowMemoEdit] = useState(false);
   const [memoText, setMemoText] = useState(item.memo ?? '');
   const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
 
   const hasChildren = allItems.some((i) => i.parent_id === item.id);
   const isSelected = selectedIds.has(item.id);
 
-  // ── Context menu items ───────────────────────────────────────────────────────
+  // Deadline warning
+  const isWarn = !!item.limit_date && (() => {
+    const deadline = new Date(item.limit_date!);
+    const now = new Date();
+    const diffDays = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    return diffDays >= 0 && diffDays <= warnDays;
+  })();
+  const isOverdue = !!item.limit_date && new Date(item.limit_date) < new Date();
+
+  // Context menu
   const ctxItems: ContextMenuItem[] = [
     {
       label: '下に項目を追加',
@@ -34,72 +44,47 @@ export function TodoItemRow({ item, visibleItems, allItems }: Props) {
       action: () => {
         const newId = addItem(item.id, item.indent);
         setTimeout(() => {
-          document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] input`)?.focus();
+          document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] [data-text-input]`)?.focus();
         }, 30);
       },
     },
     { label: '', separator: true, action: () => {} },
-    {
-      label: item.bold ? '太字を解除' : '太字',
-      icon: 'B',
-      action: () => toggleBold(item.id),
-    },
-    {
-      label: 'メモ',
-      icon: '📝',
-      action: () => setShowMemo(true),
-    },
+    { label: item.bold ? '太字を解除' : '太字', icon: 'B', action: () => toggleBold(item.id) },
+    { label: 'メモ編集', icon: '📝', action: () => { setMemoText(item.memo ?? ''); setShowMemoEdit(true); } },
+    { label: '', separator: true, action: () => {} },
+    { label: '見出しに変更', icon: 'H', action: () => updateItem(item.id, { item_type: 'heading' }) },
+    { label: '通常に変更', icon: '•', action: () => updateItem(item.id, { item_type: 'normal' }) },
+    { label: '', separator: true, action: () => {} },
+    { label: 'インデント', icon: '→', action: () => indent(item.id), disabled: item.indent >= 6 || item.locked },
+    { label: 'アウトデント', icon: '←', action: () => dedent(item.id), disabled: item.indent <= 0 || item.locked },
     { label: '', separator: true, action: () => {} },
     {
-      label: '見出しに変更',
-      icon: 'H',
-      action: () => updateItem(item.id, { item_type: 'heading' }),
+      label: item.locked ? 'ロック解除' : 'ロック',
+      icon: item.locked ? '🔓' : '🔒',
+      action: () => toggleLock(item.id),
     },
-    {
-      label: '通常に変更',
-      icon: '•',
-      action: () => updateItem(item.id, { item_type: 'normal' }),
-    },
-    { label: '', separator: true, action: () => {} },
-    {
-      label: 'インデント',
-      icon: '→',
-      action: () => indent(item.id),
-      disabled: item.indent >= 6,
-    },
-    {
-      label: 'アウトデント',
-      icon: '←',
-      action: () => dedent(item.id),
-      disabled: item.indent <= 0,
-    },
-    { label: '', separator: true, action: () => {} },
-    {
-      label: '複製',
-      icon: '📋',
-      action: () => duplicateItem(item.id),
-    },
-    {
-      label: '削除',
-      icon: '🗑',
-      action: () => deleteItem(item.id),
-      danger: true,
-    },
+    { label: '複製', icon: '📋', action: () => duplicateItem(item.id) },
+    { label: '削除', icon: '🗑', action: () => deleteItem(item.id), danger: true },
   ];
 
   // ── Keyboard ────────────────────────────────────────────────────────────────
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    // Shift+Enter = new item below
+    if (item.locked && e.key !== 'Escape' && e.key !== 'Tab') {
+      if (!e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault();
       const newId = addItem(item.id, item.indent);
       setTimeout(() => {
-        document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] input`)?.focus();
+        document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] [data-text-input]`)?.focus();
       }, 30);
       return;
     }
 
-    // Enter = confirm / blur
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       inputRef.current?.blur();
@@ -111,55 +96,51 @@ export function TodoItemRow({ item, visibleItems, allItems }: Props) {
       e.shiftKey ? dedent(item.id) : indent(item.id);
     }
 
-    if (e.key === 'Backspace' && item.text === '') {
+    if (e.key === 'Backspace' && item.text === '' && !item.locked) {
       e.preventDefault();
       const idx = visibleItems.findIndex((i) => i.id === item.id);
       const prev = visibleItems[idx - 1];
       deleteItem(item.id);
       setTimeout(() => {
         if (prev) {
-          document.querySelector<HTMLInputElement>(`[data-item-id="${prev.id}"] input`)?.focus();
+          document.querySelector<HTMLInputElement>(`[data-item-id="${prev.id}"] [data-text-input]`)?.focus();
         }
       }, 30);
     }
 
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-      e.preventDefault();
-      useNoteStore.getState().undo();
+      e.preventDefault(); useNoteStore.getState().undo();
     }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
-      e.preventDefault();
-      useNoteStore.getState().redo();
+      e.preventDefault(); useNoteStore.getState().redo();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
-      e.preventDefault();
-      toggleBold(item.id);
+      e.preventDefault(); toggleBold(item.id);
     }
   };
 
   // ── Click / Selection ────────────────────────────────────────────────────────
   const onRowClick = (e: MouseEvent) => {
     if (e.shiftKey) {
-      // Shift+click: range select
       const visIds = visibleItems.map((i) => i.id);
       const selectedArr = [...selectedIds];
-      if (selectedArr.length === 0) {
-        toggleSelected(item.id);
-        return;
-      }
+      if (selectedArr.length === 0) { toggleSelected(item.id); return; }
       const lastSel = selectedArr[selectedArr.length - 1];
       const from = visIds.indexOf(lastSel);
       const to = visIds.indexOf(item.id);
       if (from === -1 || to === -1) { toggleSelected(item.id); return; }
       const [lo, hi] = from < to ? [from, to] : [to, from];
-      const range = visIds.slice(lo, hi + 1);
-      setSelected(new Set([...selectedIds, ...range]));
+      setSelected(new Set([...selectedIds, ...visIds.slice(lo, hi + 1)]));
     } else if (e.ctrlKey || e.metaKey) {
       toggleSelected(item.id);
+    } else {
+      // Single click on row (not on input) = select this item
+      if ((e.target as HTMLElement).tagName !== 'INPUT') {
+        setSelected(new Set([item.id]));
+      }
     }
   };
 
-  // ── Right click ──────────────────────────────────────────────────────────────
   const onContextMenu = (e: MouseEvent) => {
     e.preventDefault();
     setCtx({ x: e.clientX, y: e.clientY });
@@ -167,31 +148,35 @@ export function TodoItemRow({ item, visibleItems, allItems }: Props) {
 
   // ── Drag & Drop ─────────────────────────────────────────────────────────────
   const onDragStart = (e: DragEvent) => {
+    if (item.locked) { e.preventDefault(); return; }
     e.dataTransfer.setData('text/plain', item.id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const onDragOver = (e: DragEvent) => {
     e.preventDefault();
+    if (item.locked) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    setDragOver(e.clientY < midY ? 'before' : 'after');
+    setDragOver(e.clientY < rect.top + rect.height / 2 ? 'before' : 'after');
   };
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     const fromId = e.dataTransfer.getData('text/plain');
-    if (fromId !== item.id && dragOver) {
-      moveItem(fromId, item.id, dragOver);
-    }
+    if (fromId !== item.id && dragOver) moveItem(fromId, item.id, dragOver);
     setDragOver(null);
   };
 
   // ── Memo ────────────────────────────────────────────────────────────────────
   const saveMemo = () => {
     updateItem(item.id, { memo: memoText.trim() || null });
-    setShowMemo(false);
+    setShowMemoEdit(false);
   };
+
+  // ── Assignee ────────────────────────────────────────────────────────────────
+  const assigneePerson = item.assignee_person_id
+    ? assigneePersons.find((p) => p.id === item.assignee_person_id)
+    : null;
 
   // ── Separator ────────────────────────────────────────────────────────────────
   if (item.item_type === 'separator') {
@@ -200,7 +185,7 @@ export function TodoItemRow({ item, visibleItems, allItems }: Props) {
         className={`todo-separator${dragOver ? ` drag-${dragOver}` : ''}`}
         style={{ marginLeft: item.indent * 20 }}
         data-item-id={item.id}
-        draggable
+        draggable={!item.locked}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragLeave={() => setDragOver(null)}
@@ -220,23 +205,29 @@ export function TodoItemRow({ item, visibleItems, allItems }: Props) {
         className={`todo-heading${dragOver ? ` drag-${dragOver}` : ''}`}
         style={{ marginLeft: item.indent * 20 }}
         data-item-id={item.id}
-        draggable
+        draggable={!item.locked}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragLeave={() => setDragOver(null)}
         onDrop={onDrop}
         onContextMenu={onContextMenu}
       >
+        {item.locked && <span className="item-lock-icon">🔒</span>}
         <input
           ref={inputRef}
+          data-text-input=""
           className="todo-heading-input"
           value={item.text}
-          onChange={(e) => updateItem(item.id, { text: e.target.value })}
+          readOnly={item.locked}
+          onChange={(e) => !item.locked && updateItem(item.id, { text: e.target.value })}
           onKeyDown={onKeyDown}
           placeholder="見出し"
         />
         <div className="todo-item-hover-actions">
-          <button className="btn-icon" tabIndex={-1} title="削除" onClick={() => deleteItem(item.id)}>×</button>
+          <button className="btn-icon" tabIndex={-1} onClick={() => toggleLock(item.id)} title={item.locked ? 'ロック解除' : 'ロック'}>
+            {item.locked ? '🔓' : '🔒'}
+          </button>
+          <button className="btn-icon danger" tabIndex={-1} onClick={() => deleteItem(item.id)} title="削除">×</button>
         </div>
         {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems} onClose={() => setCtx(null)} />}
       </div>
@@ -248,10 +239,10 @@ export function TodoItemRow({ item, visibleItems, allItems }: Props) {
 
   return (
     <div
-      className={`todo-item${isSelected ? ' selected' : ''}${dragOver ? ` drag-${dragOver}` : ''}`}
+      className={`todo-item${isSelected ? ' selected' : ''}${dragOver ? ` drag-${dragOver}` : ''}${item.locked ? ' locked-item' : ''}${isOverdue ? ' overdue-item' : isWarn ? ' warn-item' : ''}`}
       style={{ paddingLeft: item.indent * 20 + 4 }}
       data-item-id={item.id}
-      draggable
+      draggable={!item.locked}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragLeave={() => setDragOver(null)}
@@ -259,6 +250,9 @@ export function TodoItemRow({ item, visibleItems, allItems }: Props) {
       onClick={onRowClick}
       onContextMenu={onContextMenu}
     >
+      {/* Lock indicator */}
+      {item.locked && <span className="item-lock-icon">🔒</span>}
+
       {/* Collapse toggle */}
       <button
         className={`collapse-btn${hasChildren ? '' : ' invisible'}`}
@@ -275,103 +269,97 @@ export function TodoItemRow({ item, visibleItems, allItems }: Props) {
         onChange={(e) => { e.stopPropagation(); toggleCheck(item.id); }}
         onClick={(e) => e.stopPropagation()}
         className="todo-check"
+        disabled={item.locked}
       />
 
       {/* Text */}
       <input
         ref={inputRef}
+        data-text-input=""
         className={`todo-text${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}`}
         value={item.text}
-        onChange={(e) => updateItem(item.id, { text: e.target.value })}
+        readOnly={item.locked}
+        onChange={(e) => !item.locked && updateItem(item.id, { text: e.target.value })}
         onKeyDown={onKeyDown}
         onClick={(e) => e.stopPropagation()}
         placeholder="タスクを入力…"
       />
 
+      {/* Badges */}
       <div className="todo-badges">
-        {/* Priority badge */}
         {settings.feature_priority && item.priority && (
-          <PriorityBadge
-            priority={item.priority}
-            onSelect={(p) => updateItem(item.id, { priority: p })}
-          />
+          <PriorityBadge priority={item.priority} onSelect={(p) => updateItem(item.id, { priority: p })} />
         )}
 
-        {/* Status badge */}
         {settings.feature_status && statusObj && (
-          <StatusBadge
-            status={statusObj}
-            allStatuses={statuses}
-            onSelect={(id) => updateItem(item.id, { status: id })}
-          />
+          <StatusBadge status={statusObj} allStatuses={statuses} onSelect={(id) => updateItem(item.id, { status: id || null })} />
         )}
 
-        {/* Date badge */}
+        {settings.feature_assignee && assigneePerson && (
+          <span className="assignee-badge" style={{ borderColor: assigneePerson.color }}>
+            {assigneePerson.name}
+          </span>
+        )}
+
         {settings.feature_date && item.limit_date && (
           <span
-            className={`date-badge${isOverdue(item.limit_date) ? ' overdue' : ''}`}
+            className={`date-badge${isOverdue ? ' overdue' : isWarn ? ' warn' : ''}`}
             title="期限"
           >
             {item.limit_date}
           </span>
         )}
 
-        {/* Memo indicator */}
         {settings.feature_memo && item.memo && (
-          <button
-            className="memo-badge"
+          <span
+            className="memo-indicator"
             title={item.memo}
-            onClick={(e) => { e.stopPropagation(); setMemoText(item.memo ?? ''); setShowMemo(true); }}
+            onClick={(e) => { e.stopPropagation(); setMemoText(item.memo ?? ''); setShowMemoEdit(true); }}
           >
             📝
-          </button>
+          </span>
         )}
       </div>
 
       {/* Hover actions */}
       <div className="todo-item-hover-actions">
-        {settings.feature_memo && (
-          <button
-            className="btn-icon"
-            tabIndex={-1}
-            title="メモ"
-            onClick={(e) => { e.stopPropagation(); setMemoText(item.memo ?? ''); setShowMemo(true); }}
-          >
-            📝
-          </button>
-        )}
         <button
           className={`btn-icon${item.bold ? ' active' : ''}`}
           tabIndex={-1}
-          title="太字"
+          title="太字 (Ctrl+B)"
           onClick={(e) => { e.stopPropagation(); toggleBold(item.id); }}
-          style={{ fontWeight: 'bold' }}
-        >
-          B
-        </button>
+          style={{ fontWeight: 800, fontSize: 12 }}
+        >B</button>
+        <button
+          className={`btn-icon${item.locked ? ' active' : ''}`}
+          tabIndex={-1}
+          title={item.locked ? 'ロック解除' : 'ロック'}
+          onClick={(e) => { e.stopPropagation(); toggleLock(item.id); }}
+        >{item.locked ? '🔓' : '🔒'}</button>
         <button
           className="btn-icon"
           tabIndex={-1}
           title="複製"
           onClick={(e) => { e.stopPropagation(); duplicateItem(item.id); }}
-        >
-          📋
-        </button>
+        >📋</button>
         <button
           className="btn-icon danger"
           tabIndex={-1}
           title="削除"
-          onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }}
-        >
-          ×
-        </button>
+          onClick={(e) => { e.stopPropagation(); if (!item.locked) deleteItem(item.id); }}
+        >×</button>
       </div>
 
       {/* Context menu */}
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems} onClose={() => setCtx(null)} />}
 
-      {/* Memo popup */}
-      {showMemo && (
+      {/* Memo hover tooltip */}
+      {settings.feature_memo && item.memo && !showMemoEdit && (
+        <div className="memo-tooltip">{item.memo}</div>
+      )}
+
+      {/* Memo edit popup */}
+      {showMemoEdit && (
         <div className="memo-popup" onClick={(e) => e.stopPropagation()}>
           <div className="memo-popup-title">メモ</div>
           <textarea
@@ -384,7 +372,7 @@ export function TodoItemRow({ item, visibleItems, allItems }: Props) {
           />
           <div className="memo-popup-actions">
             <button className="btn-primary" onClick={saveMemo}>保存</button>
-            <button className="btn-secondary" onClick={() => setShowMemo(false)}>キャンセル</button>
+            <button className="btn-secondary" onClick={() => setShowMemoEdit(false)}>キャンセル</button>
           </div>
         </div>
       )}
@@ -403,7 +391,6 @@ function StatusBadge({
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-
   return (
     <div className="status-badge-wrap">
       <span
@@ -415,13 +402,7 @@ function StatusBadge({
       </span>
       {open && (
         <div className="status-dropdown">
-          <div
-            className="status-option"
-            style={{ borderLeft: '3px solid #ccc' }}
-            onClick={(e) => { e.stopPropagation(); onSelect(''); setOpen(false); }}
-          >
-            （なし）
-          </div>
+          <div className="status-option" onClick={(e) => { e.stopPropagation(); onSelect(''); setOpen(false); }}>（なし）</div>
           {allStatuses.map((s) => (
             <div
               key={s.id}
@@ -440,22 +421,15 @@ function StatusBadge({
 
 // ── PriorityBadge ─────────────────────────────────────────────────────────────
 const PRIORITIES = [
-  { value: 'high',   label: '高', color: '#ef4444' },
+  { value: 'high', label: '高', color: '#ef4444' },
   { value: 'medium', label: '中', color: '#f97316' },
-  { value: 'low',    label: '低', color: '#22c55e' },
+  { value: 'low', label: '低', color: '#22c55e' },
 ];
 
-function PriorityBadge({
-  priority,
-  onSelect,
-}: {
-  priority: string;
-  onSelect: (p: string | null) => void;
-}) {
+function PriorityBadge({ priority, onSelect }: { priority: string; onSelect: (p: string | null) => void }) {
   const [open, setOpen] = useState(false);
   const p = PRIORITIES.find((x) => x.value === priority);
   if (!p) return null;
-
   return (
     <div className="status-badge-wrap">
       <span
@@ -467,12 +441,7 @@ function PriorityBadge({
       </span>
       {open && (
         <div className="status-dropdown">
-          <div
-            className="status-option"
-            onClick={(e) => { e.stopPropagation(); onSelect(null); setOpen(false); }}
-          >
-            （なし）
-          </div>
+          <div className="status-option" onClick={(e) => { e.stopPropagation(); onSelect(null); setOpen(false); }}>（なし）</div>
           {PRIORITIES.map((px) => (
             <div
               key={px.value}
@@ -487,8 +456,4 @@ function PriorityBadge({
       )}
     </div>
   );
-}
-
-function isOverdue(dateStr: string): boolean {
-  return new Date(dateStr) < new Date();
 }

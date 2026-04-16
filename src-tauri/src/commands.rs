@@ -9,6 +9,18 @@ fn now() -> String {
     Utc::now().to_rfc3339()
 }
 
+// ── KV Settings ────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_kv_setting(key: String, db: State<'_, Database>) -> Result<Option<String>, String> {
+    db.get_setting(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_kv_setting(key: String, value: String, db: State<'_, Database>) -> Result<(), String> {
+    db.set_setting(&key, &value).map_err(|e| e.to_string())
+}
+
 // ── Notes ──────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -39,6 +51,7 @@ pub fn create_note(
         color: "#fef08a".into(),
         sort_order: 0,
         locked: false,
+        warn_days: None,
         updated_at: now(),
         dirty: true,
     };
@@ -67,12 +80,12 @@ pub fn duplicate_note(
         color: source.color.clone(),
         sort_order: source.sort_order + 1,
         locked: false,
+        warn_days: source.warn_days,
         updated_at: now(),
         dirty: true,
     };
     db.upsert_note(&new_note).map_err(|e| e.to_string())?;
 
-    // Duplicate items
     let items = db.get_items(&source_id).map_err(|e| e.to_string())?;
     for item in &items {
         let new_item = TodoItem {
@@ -190,7 +203,8 @@ pub fn get_settings(db: State<'_, Database>) -> Result<AppSettings, String> {
         .get_setting("app_settings")
         .map_err(|e| e.to_string())?
         .unwrap_or_else(|| serde_json::to_string(&AppSettings::default()).unwrap());
-    serde_json::from_str(&json).map_err(|e| e.to_string())
+    serde_json::from_str(&json).map_err(|_| "".to_string())
+        .or_else(|_| Ok(AppSettings::default()))
 }
 
 #[tauri::command]

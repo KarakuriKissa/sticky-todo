@@ -11,8 +11,10 @@ interface AppStore {
   settings: AppSettings;
   selectedCategoryId: string | null;
   searchQuery: string;
+  openWindowIds: Set<string>;
 
   load: () => Promise<void>;
+  reopenSavedWindows: () => Promise<void>;
 
   // Notes
   createNote: (title?: string) => Promise<Note>;
@@ -20,11 +22,13 @@ interface AppStore {
   deleteNote: (id: string) => Promise<void>;
   duplicateNote: (id: string) => Promise<Note>;
   openNote: (note: Note) => Promise<void>;
+  trackWindowClose: (noteId: string) => Promise<void>;
   reorderNotes: (ids: string[]) => void;
 
   // Categories
   saveCategory: (cat: Category) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
+  reorderCategories: (ids: string[]) => void;
 
   // Statuses
   saveStatus: (s: Status) => Promise<void>;
@@ -50,11 +54,12 @@ interface AppStore {
 const DEFAULT_SETTINGS: AppSettings = {
   sort_mode: 'manual',
   feature_status: true,
-  feature_assignee: false,
+  feature_assignee: true,
   feature_date: true,
-  feature_memo: false,
-  feature_priority: false,
+  feature_memo: true,
+  feature_priority: true,
   active_group_id: null,
+  deadline_warn_days: 3,
 };
 
 function now() {
@@ -63,13 +68,19 @@ function now() {
 
 function sorted(notes: Note[], mode: SortMode): Note[] {
   const arr = [...notes];
-  switch (mode) {
-    case 'name':
-      return arr.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
-    case 'manual':
-    default:
-      return arr.sort((a, b) => a.sort_order - b.sort_order);
+  if (mode === 'name') {
+    return arr.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
   }
+  return arr.sort((a, b) => a.sort_order - b.sort_order);
+}
+
+async function persistOpenWindows(ids: Set<string>) {
+  try {
+    await invoke('set_kv_setting', {
+      key: 'open_windows',
+      value: JSON.stringify([...ids]),
+    });
+  } catch { /* ignore */ }
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -81,6 +92,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   settings: DEFAULT_SETTINGS,
   selectedCategoryId: null,
   searchQuery: '',
+  openWindowIds: new Set(),
 
   load: async () => {
     const [notes, categories, statuses, assigneeGroups, assigneePersons, settings] =
@@ -95,10 +107,35 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ notes, categories, statuses, assigneeGroups, assigneePersons, settings });
   },
 
+  reopenSavedWindows: async () => {
+    try {
+      const json = await invoke<string | null>('get_kv_setting', { key: 'open_windows' });
+      if (!json) return;
+      const ids: string[] = JSON.parse(json);
+      const { notes } = get();
+      const opened = new Set<string>();
+      for (const id of ids) {
+        const note = notes.find((n) => n.id === id);
+        if (note) {
+          await invoke('open_note_window', {
+            noteId: id,
+            x: note.window_x,
+            y: note.window_y,
+            width: note.window_width,
+            height: note.window_height,
+          }).catch(() => { /* skip if fails */ });
+          opened.add(id);
+        }
+      }
+      set({ openWindowIds: opened });
+    } catch { /* ignore */ }
+  },
+
   createNote: async (title = '新しいリスト') => {
+    const { selectedCategoryId } = get();
     const note = await invoke<Note>('create_note', {
       title,
-      categoryId: get().selectedCategoryId,
+      categoryId: selectedCategoryId,
     });
     set((s) => ({ notes: [note, ...s.notes] }));
     return note;
@@ -112,7 +149,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   deleteNote: async (id: string) => {
     await invoke('delete_note', { id });
-    set((s) => ({ notes: s.notes.filter((n) => n.id !== id) }));
+    set((s) => ({
+      notes: s.notes.filter((n) => n.id !== id),
+      openWindowIds: new Set([...s.openWindowIds].filter((wid) => wid !== id)),
+    }));
   },
 
   duplicateNote: async (id: string) => {
@@ -128,6 +168,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
       y: note.window_y,
       width: note.window_width,
       height: note.window_height,
+    });
+    set((s) => {
+      const next = new Set([...s.openWindowIds, note.id]);
+      persistOpenWindows(next);
+      return { openWindowIds: next };
+    });
+  },
+
+  trackWindowClose: async (noteId: string) => {
+    set((s) => {
+      const next = new Set([...s.openWindowIds].filter((id) => id !== noteId));
+      persistOpenWindows(next);
+      return { openWindowIds: next };
     });
   },
 
@@ -161,6 +214,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
   deleteCategory: async (id: string) => {
     await invoke('delete_category', { id });
     set((s) => ({ categories: s.categories.filter((c) => c.id !== id) }));
+  },
+
+  reorderCategories: (ids: string[]) => {
+    set((s) => {
+      const map = new Map(s.categories.map((c) => [c.id, c]));
+      const reordered = ids
+        .map((id, i) => {
+          const c = map.get(id);
+          if (!c) return null;
+          return { ...c, sort_order: i };
+        })
+        .filter(Boolean) as Category[];
+      reordered.forEach((c) => invoke('save_category', { category: c }).catch(console.error));
+      return { categories: reordered };
+    });
   },
 
   saveStatus: async (status: Status) => {

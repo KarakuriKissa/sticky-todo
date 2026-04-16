@@ -3,29 +3,26 @@ import { invoke } from '@tauri-apps/api/core';
 import { CategoryList } from '../components/CategoryList';
 import { NoteList } from '../components/NoteList';
 import { useAppStore } from '../store/appStore';
-import type {
-  AppSettings, AssigneeGroup, AssigneePerson, SortMode, Status,
-} from '../types';
+import type { AppSettings, AssigneeGroup, AssigneePerson, SortMode, Status } from '../types';
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'manual',     label: '手動' },
-  { value: 'name',       label: '名前順' },
-  { value: 'deadline',   label: '期限順' },
-  { value: 'start_date', label: '開始日順' },
-  { value: 'status',     label: 'ステータス順' },
-  { value: 'priority',   label: '優先度順' },
+  { value: 'manual', label: '手動' },
+  { value: 'name',   label: '名前順' },
 ];
 
 export function Launcher() {
   const {
-    load, createNote, openNote, searchQuery, setSearchQuery,
-    settings, saveSettings,
+    load, reopenSavedWindows, createNote,
+    searchQuery, setSearchQuery, settings, saveSettings,
+    selectedCategoryId,
   } = useAppStore();
   const [showSettings, setShowSettings] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    load();
+    load().then(() => {
+      reopenSavedWindows();
+    });
   }, []);
 
   useEffect(() => {
@@ -40,14 +37,19 @@ export function Launcher() {
   }, []);
 
   const handleNew = async () => {
-    const note = await createNote();
-    await openNote(note);
+    if (!selectedCategoryId) {
+      // "すべて" selected — require category
+      alert('カテゴリを選択してからリストを作成してください。');
+      return;
+    }
+    // Create note but do NOT auto-open the window
+    await createNote();
   };
 
   const handleSearchKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       const notes = useAppStore.getState().filteredNotes();
-      if (notes.length === 1) openNote(notes[0]);
+      if (notes.length === 1) useAppStore.getState().openNote(notes[0]);
     }
     if (e.key === 'Escape') setSearchQuery('');
   };
@@ -61,7 +63,6 @@ export function Launcher() {
       <CategoryList />
 
       <main className="launcher-main">
-        {/* ── Toolbar ── */}
         <header className="launcher-toolbar">
           <input
             ref={searchRef}
@@ -72,9 +73,12 @@ export function Launcher() {
             onKeyDown={handleSearchKey}
           />
 
-          <button className="btn-new" onClick={handleNew} title="新規リスト作成">
-            ＋
-          </button>
+          <button
+            className="btn-new"
+            onClick={handleNew}
+            title={selectedCategoryId ? '新規リスト作成' : 'カテゴリを選択してから作成'}
+            style={{ opacity: selectedCategoryId ? 1 : 0.5 }}
+          >＋</button>
 
           <select
             className="sort-select"
@@ -87,12 +91,9 @@ export function Launcher() {
             ))}
           </select>
 
-          <button className="btn-icon" onClick={() => setShowSettings(true)} title="設定">
-            ⚙
-          </button>
+          <button className="btn-icon" onClick={() => setShowSettings(true)} title="設定">⚙</button>
         </header>
 
-        {/* ── Note list ── */}
         <NoteList onNew={handleNew} />
       </main>
 
@@ -108,6 +109,8 @@ export function Launcher() {
 }
 
 // ── Settings Modal ────────────────────────────────────────────────────────────
+type SettingsTab = 'statuses' | 'assignees' | 'language' | 'sync';
+
 function SettingsModal({
   settings,
   onSave,
@@ -117,30 +120,24 @@ function SettingsModal({
   onSave: (s: AppSettings) => Promise<void>;
   onClose: () => void;
 }) {
+  const [tab, setTab] = useState<SettingsTab>('statuses');
   const [draft, setDraft] = useState<AppSettings>({ ...settings });
+
   const {
     statuses, saveStatus, deleteStatus,
     assigneeGroups, saveAssigneeGroup, deleteAssigneeGroup,
     assigneePersons, saveAssigneePerson, deleteAssigneePerson,
   } = useAppStore();
 
-  // Status management
+  // Status
   const [newStatusName, setNewStatusName] = useState('');
   const [newStatusColor, setNewStatusColor] = useState('#6366f1');
 
-  // Assignee group management
+  // Assignee
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(assigneeGroups[0]?.id ?? '');
   const [newGroupName, setNewGroupName] = useState('');
-  const [selectedGroupId, setSelectedGroupId] = useState<string>(
-    assigneeGroups[0]?.id ?? ''
-  );
   const [newPersonName, setNewPersonName] = useState('');
   const [newPersonColor, setNewPersonColor] = useState('#6366f1');
-
-  // Active tab
-  const [tab, setTab] = useState<'features' | 'statuses' | 'assignees'>('features');
-
-  const toggle = (key: keyof AppSettings) =>
-    setDraft((d) => ({ ...d, [key]: !d[key as keyof AppSettings] }));
 
   const save = async () => {
     await onSave(draft);
@@ -150,29 +147,14 @@ function SettingsModal({
   const addStatus = async () => {
     if (!newStatusName.trim()) return;
     const id = await invoke<string>('generate_id');
-    await saveStatus({
-      id,
-      name: newStatusName.trim(),
-      color: newStatusColor,
-      sort_order: statuses.length,
-    });
+    await saveStatus({ id, name: newStatusName.trim(), color: newStatusColor, sort_order: statuses.length });
     setNewStatusName('');
-  };
-
-  const editStatus = async (s: Status, newName: string) => {
-    if (newName.trim()) {
-      await saveStatus({ ...s, name: newName.trim() });
-    }
   };
 
   const addGroup = async () => {
     if (!newGroupName.trim()) return;
     const id = await invoke<string>('generate_id');
-    const group: AssigneeGroup = {
-      id,
-      name: newGroupName.trim(),
-      sort_order: assigneeGroups.length,
-    };
+    const group: AssigneeGroup = { id, name: newGroupName.trim(), sort_order: assigneeGroups.length };
     await saveAssigneeGroup(group);
     setNewGroupName('');
     setSelectedGroupId(id);
@@ -183,11 +165,8 @@ function SettingsModal({
     const id = await invoke<string>('generate_id');
     const groupPersons = assigneePersons.filter((p) => p.group_id === selectedGroupId);
     const person: AssigneePerson = {
-      id,
-      group_id: selectedGroupId,
-      name: newPersonName.trim(),
-      color: newPersonColor,
-      sort_order: groupPersons.length,
+      id, group_id: selectedGroupId, name: newPersonName.trim(),
+      color: newPersonColor, sort_order: groupPersons.length,
     };
     await saveAssigneePerson(person);
     setNewPersonName('');
@@ -195,59 +174,43 @@ function SettingsModal({
 
   const groupPersons = assigneePersons.filter((p) => p.group_id === selectedGroupId);
 
+  const TABS: { id: SettingsTab; label: string }[] = [
+    { id: 'statuses',  label: 'ステータス' },
+    { id: 'assignees', label: '担当者' },
+    { id: 'language',  label: '言語' },
+    { id: 'sync',      label: '同期' },
+  ];
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal settings-modal" onClick={(e) => e.stopPropagation()}>
         <h2>設定</h2>
 
-        {/* Tabs */}
         <div className="settings-tabs">
-          {(['features', 'statuses', 'assignees'] as const).map((t) => (
+          {TABS.map((t) => (
             <button
-              key={t}
-              className={`settings-tab${tab === t ? ' active' : ''}`}
-              onClick={() => setTab(t)}
+              key={t.id}
+              className={`settings-tab${tab === t.id ? ' active' : ''}`}
+              onClick={() => setTab(t.id)}
             >
-              {{ features: '機能', statuses: 'ステータス', assignees: '担当者' }[t]}
+              {t.label}
             </button>
           ))}
         </div>
 
-        {/* Features tab */}
-        {tab === 'features' && (
-          <section>
-            <h3>表示機能のON/OFF</h3>
-            {(
-              [
-                ['feature_status',   'ステータス'],
-                ['feature_assignee', '担当者'],
-                ['feature_date',     '日付'],
-                ['feature_memo',     'メモ'],
-                ['feature_priority', '優先度'],
-              ] as [keyof AppSettings, string][]
-            ).map(([key, label]) => (
-              <label key={key} className="toggle-row">
-                <input
-                  type="checkbox"
-                  checked={!!draft[key]}
-                  onChange={() => toggle(key)}
-                />
-                {label}
-              </label>
-            ))}
-          </section>
-        )}
-
-        {/* Statuses tab */}
+        {/* ── Status tab ── */}
         {tab === 'statuses' && (
           <section>
             <h3>ステータス管理</h3>
+            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+              ダブルクリックで名前を編集
+            </p>
             <div className="status-list">
               {statuses.map((s) => (
                 <StatusRow
                   key={s.id}
                   status={s}
-                  onEdit={(name) => editStatus(s, name)}
+                  onEdit={(name) => saveStatus({ ...s, name })}
                   onDelete={() => deleteStatus(s.id)}
                 />
               ))}
@@ -256,108 +219,156 @@ function SettingsModal({
               <input
                 value={newStatusName}
                 onChange={(e) => setNewStatusName(e.target.value)}
-                placeholder="新しいステータス名"
+                placeholder="ステータス名"
                 onKeyDown={(e) => e.key === 'Enter' && addStatus()}
               />
-              <input
-                type="color"
-                value={newStatusColor}
-                onChange={(e) => setNewStatusColor(e.target.value)}
-              />
+              <input type="color" value={newStatusColor} onChange={(e) => setNewStatusColor(e.target.value)} />
               <button className="btn-primary" onClick={addStatus}>追加</button>
             </div>
+
+            <h3 style={{ marginTop: 20 }}>期日警告（グローバル）</h3>
+            <label className="toggle-row" style={{ gap: 6 }}>
+              期限の
+              <input
+                type="number"
+                min={0} max={30}
+                value={draft.deadline_warn_days}
+                onChange={(e) => setDraft((d) => ({ ...d, deadline_warn_days: Number(e.target.value) }))}
+                style={{ width: 48, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', outline: 'none' }}
+              />
+              日前から警告色を表示
+            </label>
           </section>
         )}
 
-        {/* Assignees tab */}
+        {/* ── Assignee tab ── */}
         {tab === 'assignees' && (
           <section>
-            <h3>担当者グループ</h3>
-
-            {/* Group list */}
-            <div className="assignee-groups">
-              {assigneeGroups.map((g) => (
-                <button
-                  key={g.id}
-                  className={`group-tab${selectedGroupId === g.id ? ' active' : ''}`}
-                  onClick={() => setSelectedGroupId(g.id)}
-                >
-                  {g.name}
-                  <span
-                    className="group-del"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm(`グループ「${g.name}」を削除しますか？`)) {
-                        deleteAssigneeGroup(g.id);
-                        if (selectedGroupId === g.id) {
-                          setSelectedGroupId(assigneeGroups[0]?.id ?? '');
-                        }
-                      }
-                    }}
-                  >×</span>
-                </button>
-              ))}
-            </div>
-            <div className="status-add-row" style={{ marginBottom: 12 }}>
-              <input
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="グループ名"
-                onKeyDown={(e) => e.key === 'Enter' && addGroup()}
-              />
-              <button className="btn-primary" onClick={addGroup}>グループ追加</button>
-            </div>
-
-            {/* Active group setting */}
-            {assigneeGroups.length > 0 && (
-              <>
-                <h3>使用グループ</h3>
-                <select
-                  className="sort-select"
-                  value={draft.active_group_id ?? ''}
-                  onChange={(e) => setDraft((d) => ({ ...d, active_group_id: e.target.value || null }))}
-                  style={{ width: '100%', marginBottom: 12 }}
-                >
-                  <option value="">（自動）</option>
+            <h3>担当者グループと メンバー</h3>
+            <div className="assignee-split">
+              {/* LEFT: group list */}
+              <div className="assignee-left">
+                <div className="assignee-left-header">グループ</div>
+                <div className="assignee-group-list">
                   {assigneeGroups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
-              </>
-            )}
-
-            {/* Person list for selected group */}
-            {selectedGroupId && (
-              <>
-                <h3>メンバー</h3>
-                <div className="status-list">
-                  {groupPersons.map((p) => (
-                    <div key={p.id} className="status-row">
-                      <span className="status-dot" style={{ background: p.color }} />
-                      <span style={{ flex: 1 }}>{p.name}</span>
+                    <div
+                      key={g.id}
+                      className={`assignee-group-item${selectedGroupId === g.id ? ' active' : ''}`}
+                      onClick={() => setSelectedGroupId(g.id)}
+                    >
+                      <span className="assignee-group-name">{g.name}</span>
                       <button
                         className="btn-icon"
-                        onClick={() => deleteAssigneePerson(p.id)}
+                        style={{ fontSize: 11 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`グループ「${g.name}」を削除しますか？`)) {
+                            deleteAssigneeGroup(g.id);
+                            if (selectedGroupId === g.id) setSelectedGroupId(assigneeGroups[0]?.id ?? '');
+                          }
+                        }}
                       >×</button>
                     </div>
                   ))}
                 </div>
-                <div className="status-add-row">
+                <div className="assignee-add-group">
                   <input
-                    value={newPersonName}
-                    onChange={(e) => setNewPersonName(e.target.value)}
-                    placeholder="メンバー名"
-                    onKeyDown={(e) => e.key === 'Enter' && addPerson()}
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="グループ名"
+                    className="assignee-input"
+                    onKeyDown={(e) => e.key === 'Enter' && addGroup()}
                   />
-                  <input
-                    type="color"
-                    value={newPersonColor}
-                    onChange={(e) => setNewPersonColor(e.target.value)}
-                  />
-                  <button className="btn-primary" onClick={addPerson}>追加</button>
+                  <button className="btn-primary" onClick={addGroup} style={{ fontSize: 12, padding: '3px 8px' }}>追加</button>
                 </div>
-              </>
-            )}
+              </div>
+
+              {/* RIGHT: member list */}
+              <div className="assignee-right">
+                <div className="assignee-right-header">
+                  {selectedGroupId
+                    ? `${assigneeGroups.find((g) => g.id === selectedGroupId)?.name ?? ''} のメンバー`
+                    : 'グループを選択'}
+                </div>
+                {selectedGroupId && (
+                  <>
+                    <div className="status-list">
+                      {groupPersons.map((p) => (
+                        <div key={p.id} className="status-row">
+                          <span className="status-dot" style={{ background: p.color }} />
+                          <span style={{ flex: 1 }}>{p.name}</span>
+                          <button className="btn-icon" style={{ fontSize: 11 }} onClick={() => deleteAssigneePerson(p.id)}>×</button>
+                        </div>
+                      ))}
+                      {groupPersons.length === 0 && (
+                        <div style={{ color: 'var(--muted)', fontSize: 12, padding: 4 }}>メンバーなし</div>
+                      )}
+                    </div>
+                    <div className="status-add-row" style={{ marginTop: 8 }}>
+                      <input
+                        value={newPersonName}
+                        onChange={(e) => setNewPersonName(e.target.value)}
+                        placeholder="メンバー名"
+                        onKeyDown={(e) => e.key === 'Enter' && addPerson()}
+                      />
+                      <input type="color" value={newPersonColor} onChange={(e) => setNewPersonColor(e.target.value)} />
+                      <button className="btn-primary" onClick={addPerson}>追加</button>
+                    </div>
+
+                    <h3 style={{ marginTop: 14 }}>使用グループ</h3>
+                    <select
+                      className="sort-select"
+                      value={draft.active_group_id ?? ''}
+                      onChange={(e) => setDraft((d) => ({ ...d, active_group_id: e.target.value || null }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="">（自動 - 先頭グループ）</option>
+                      {assigneeGroups.map((g) => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Language tab ── */}
+        {tab === 'language' && (
+          <section>
+            <h3>言語 / Language</h3>
+            <div style={{ padding: '16px 0', color: 'var(--muted)', fontSize: 13, lineHeight: 1.8 }}>
+              <p>現在の言語: <strong style={{ color: 'var(--text)' }}>日本語</strong></p>
+              <p style={{ marginTop: 12, fontSize: 12 }}>
+                多言語対応は今後のバージョンで追加予定です。<br />
+                Language support (English etc.) will be added in a future update.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {/* ── Sync tab ── */}
+        {tab === 'sync' && (
+          <section>
+            <h3>同期</h3>
+            <div style={{ padding: '16px 0', color: 'var(--muted)', fontSize: 13, lineHeight: 1.8 }}>
+              <p style={{ marginBottom: 12 }}>
+                現在、同期機能は利用できません。
+              </p>
+              <p style={{ fontSize: 12 }}>
+                将来的に以下の同期機能を追加予定:<br />
+                • クラウドストレージへの自動バックアップ<br />
+                • 複数デバイス間でのリスト共有<br />
+                • チームメンバーとのリアルタイム同期
+              </p>
+              <p style={{ marginTop: 12, fontSize: 12 }}>
+                データは現在ローカルに保存されています。<br />
+                場所: <code style={{ fontSize: 11, background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>
+                  %APPDATA%\sticky-todo\sticky-todo.db
+                </code>
+              </p>
+            </div>
           </section>
         )}
 
@@ -370,7 +381,7 @@ function SettingsModal({
   );
 }
 
-// ── StatusRow (editable) ──────────────────────────────────────────────────────
+// ── StatusRow (editable inline) ───────────────────────────────────────────────
 function StatusRow({
   status,
   onEdit,
@@ -384,7 +395,7 @@ function StatusRow({
   const [name, setName] = useState(status.name);
 
   const commit = () => {
-    onEdit(name);
+    if (name.trim()) onEdit(name.trim());
     setEditing(false);
   };
 

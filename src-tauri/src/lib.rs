@@ -22,6 +22,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::get_kv_setting,
+            commands::set_kv_setting,
             commands::get_all_notes,
             commands::get_note_items,
             commands::create_note,

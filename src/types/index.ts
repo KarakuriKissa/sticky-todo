@@ -10,6 +10,7 @@ export interface Note {
   color: string;
   sort_order: number;
   locked: boolean;
+  warn_days: number | null; // per-note deadline warning days (null = use global)
   updated_at: string;
   dirty: boolean;
 }
@@ -24,12 +25,13 @@ export interface TodoItem {
   checked: boolean;
   indent: number;
   collapsed: boolean;
+  locked: boolean;
   status: string | null;
-  assignees: string; // legacy JSON array string
+  assignees: string;
   assignee_person_id: string | null;
   memo: string | null;
   bold: boolean;
-  priority: string | null; // 'high' | 'medium' | 'low' | null
+  priority: string | null;
   start_date: string | null;
   end_date: string | null;
   limit_date: string | null;
@@ -68,7 +70,7 @@ export interface AssigneePerson {
   sort_order: number;
 }
 
-export type SortMode = 'manual' | 'deadline' | 'start_date' | 'status' | 'name' | 'priority';
+export type SortMode = 'manual' | 'name';
 
 export interface AppSettings {
   sort_mode: SortMode;
@@ -78,4 +80,5 @@ export interface AppSettings {
   feature_memo: boolean;
   feature_priority: boolean;
   active_group_id: string | null;
+  deadline_warn_days: number;
 }

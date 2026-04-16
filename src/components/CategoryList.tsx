@@ -1,16 +1,22 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, DragEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { Category } from '../types';
 import { useAppStore } from '../store/appStore';
 
 export function CategoryList() {
-  const { categories, selectedCategoryId, setSelectedCategory, saveCategory, deleteCategory } =
-    useAppStore();
+  const {
+    categories, selectedCategoryId, setSelectedCategory,
+    saveCategory, deleteCategory, reorderCategories,
+  } = useAppStore();
   const [editing, setEditing] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
   const [addName, setAddName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Drag state
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dragPos, setDragPos] = useState<'before' | 'after'>('after');
 
   const startAdd = () => {
     setAdding(true);
@@ -42,6 +48,38 @@ export function CategoryList() {
     setEditing(null);
   };
 
+  // ── Drag & Drop ─────────────────────────────────────────────────────────────
+  const onDragStart = (e: DragEvent, id: string) => {
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const onDragOver = (e: DragEvent, id: string) => {
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    setDragOverId(id);
+    setDragPos(e.clientY < mid ? 'before' : 'after');
+  };
+
+  const onDrop = (e: DragEvent, toId: string) => {
+    e.preventDefault();
+    const fromId = e.dataTransfer.getData('text/plain');
+    setDragOverId(null);
+    if (!fromId || fromId === toId) return;
+    const ids = categories.map((c) => c.id);
+    const fromIdx = ids.indexOf(fromId);
+    const toIdx = ids.indexOf(toId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const newIds = [...ids];
+    newIds.splice(fromIdx, 1);
+    const insertAt = dragPos === 'before'
+      ? newIds.indexOf(toId)
+      : newIds.indexOf(toId) + 1;
+    newIds.splice(insertAt, 0, fromId);
+    reorderCategories(newIds);
+  };
+
   return (
     <aside className="category-list">
       <div className="category-header">
@@ -54,16 +92,24 @@ export function CategoryList() {
           className={selectedCategoryId === null ? 'active' : ''}
           onClick={() => setSelectedCategory(null)}
         >
-          すべて
+          <span className="cat-dot" style={{ background: '#6366f1' }} />
+          <span className="cat-name">すべて</span>
         </li>
 
         {categories.map((cat) => (
           <li
             key={cat.id}
-            className={selectedCategoryId === cat.id ? 'active' : ''}
+            className={`${selectedCategoryId === cat.id ? 'active' : ''}${dragOverId === cat.id ? ` drag-${dragPos}` : ''}`}
             onClick={() => setSelectedCategory(cat.id)}
             onDoubleClick={() => startEdit(cat)}
+            draggable
+            onDragStart={(e) => onDragStart(e, cat.id)}
+            onDragOver={(e) => onDragOver(e, cat.id)}
+            onDragLeave={() => setDragOverId(null)}
+            onDrop={(e) => onDrop(e, cat.id)}
+            onDragEnd={() => setDragOverId(null)}
           >
+            <span className="cat-grip" title="ドラッグで並び替え">⠿</span>
             <span className="cat-dot" style={{ background: cat.color }} />
             {editing === cat.id ? (
               <input

@@ -34,6 +34,7 @@ impl Database {
                  color         TEXT DEFAULT '#fef08a',
                  sort_order    INTEGER DEFAULT 0,
                  locked        INTEGER DEFAULT 0,
+                 warn_days     INTEGER,
                  updated_at    TEXT NOT NULL,
                  dirty         INTEGER DEFAULT 0
              );
@@ -45,6 +46,7 @@ impl Database {
                  checked            INTEGER DEFAULT 0,
                  indent             INTEGER DEFAULT 0,
                  collapsed          INTEGER DEFAULT 0,
+                 locked             INTEGER DEFAULT 0,
                  status             TEXT,
                  assignees          TEXT DEFAULT '[]',
                  assignee_person_id TEXT,
@@ -92,8 +94,10 @@ impl Database {
              );",
         )?;
 
-        // Migrations: add new columns if they don't exist (errors are ignored)
+        // Migrations (silently ignored if column already exists)
         let _ = conn.execute("ALTER TABLE notes ADD COLUMN locked INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE notes ADD COLUMN warn_days INTEGER", []);
+        let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN locked INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN assignee_person_id TEXT", []);
         let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN memo TEXT", []);
         let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN bold INTEGER DEFAULT 0", []);
@@ -147,7 +151,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id,title,category_id,window_x,window_y,window_width,window_height,
-                    always_on_top,color,sort_order,locked,updated_at,dirty
+                    always_on_top,color,sort_order,locked,warn_days,updated_at,dirty
              FROM notes ORDER BY sort_order, updated_at DESC",
         )?;
         let mut rows = stmt.query([])?;
@@ -165,8 +169,9 @@ impl Database {
                 color:         r.get(8)?,
                 sort_order:    r.get(9)?,
                 locked:        r.get::<_, i32>(10)? != 0,
-                updated_at:    r.get(11)?,
-                dirty:         r.get::<_, i32>(12)? != 0,
+                warn_days:     r.get(11)?,
+                updated_at:    r.get(12)?,
+                dirty:         r.get::<_, i32>(13)? != 0,
             });
         }
         Ok(out)
@@ -177,13 +182,14 @@ impl Database {
         conn.execute(
             "INSERT OR REPLACE INTO notes
              (id,title,category_id,window_x,window_y,window_width,window_height,
-              always_on_top,color,sort_order,locked,updated_at,dirty)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+              always_on_top,color,sort_order,locked,warn_days,updated_at,dirty)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 n.id, n.title, n.category_id,
                 n.window_x, n.window_y, n.window_width, n.window_height,
                 n.always_on_top as i32, n.color,
-                n.sort_order, n.locked as i32, n.updated_at, n.dirty as i32,
+                n.sort_order, n.locked as i32, n.warn_days,
+                n.updated_at, n.dirty as i32,
             ],
         )?;
         Ok(())
@@ -200,7 +206,7 @@ impl Database {
     pub fn get_items(&self, note_id: &str) -> Result<Vec<TodoItem>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id,note_id,parent_id,text,checked,indent,collapsed,status,
+            "SELECT id,note_id,parent_id,text,checked,indent,collapsed,locked,status,
                     assignees,assignee_person_id,memo,bold,priority,
                     start_date,end_date,limit_date,item_type,
                     sort_order,archived,updated_at,dirty
@@ -217,20 +223,21 @@ impl Database {
                 checked:            r.get::<_, i32>(4)? != 0,
                 indent:             r.get(5)?,
                 collapsed:          r.get::<_, i32>(6)? != 0,
-                status:             r.get(7)?,
-                assignees:          r.get::<_, Option<String>>(8)?.unwrap_or_else(|| "[]".into()),
-                assignee_person_id: r.get(9)?,
-                memo:               r.get(10)?,
-                bold:               r.get::<_, i32>(11)? != 0,
-                priority:           r.get(12)?,
-                start_date:         r.get(13)?,
-                end_date:           r.get(14)?,
-                limit_date:         r.get(15)?,
-                item_type:          r.get(16)?,
-                sort_order:         r.get(17)?,
-                archived:           r.get::<_, i32>(18)? != 0,
-                updated_at:         r.get(19)?,
-                dirty:              r.get::<_, i32>(20)? != 0,
+                locked:             r.get::<_, i32>(7)? != 0,
+                status:             r.get(8)?,
+                assignees:          r.get::<_, Option<String>>(9)?.unwrap_or_else(|| "[]".into()),
+                assignee_person_id: r.get(10)?,
+                memo:               r.get(11)?,
+                bold:               r.get::<_, i32>(12)? != 0,
+                priority:           r.get(13)?,
+                start_date:         r.get(14)?,
+                end_date:           r.get(15)?,
+                limit_date:         r.get(16)?,
+                item_type:          r.get(17)?,
+                sort_order:         r.get(18)?,
+                archived:           r.get::<_, i32>(19)? != 0,
+                updated_at:         r.get(20)?,
+                dirty:              r.get::<_, i32>(21)? != 0,
             });
         }
         Ok(out)
@@ -240,14 +247,14 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT OR REPLACE INTO todo_items
-             (id,note_id,parent_id,text,checked,indent,collapsed,status,
+             (id,note_id,parent_id,text,checked,indent,collapsed,locked,status,
               assignees,assignee_person_id,memo,bold,priority,
               start_date,end_date,limit_date,item_type,
               sort_order,archived,updated_at,dirty)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
             params![
                 it.id, it.note_id, it.parent_id, it.text,
-                it.checked as i32, it.indent, it.collapsed as i32,
+                it.checked as i32, it.indent, it.collapsed as i32, it.locked as i32,
                 it.status, it.assignees, it.assignee_person_id,
                 it.memo, it.bold as i32, it.priority,
                 it.start_date, it.end_date, it.limit_date,
@@ -426,7 +433,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id,title,category_id,window_x,window_y,window_width,window_height,
-                    always_on_top,color,sort_order,locked,updated_at,dirty
+                    always_on_top,color,sort_order,locked,warn_days,updated_at,dirty
              FROM notes WHERE dirty=1",
         )?;
         let mut rows = stmt.query([])?;
@@ -444,8 +451,9 @@ impl Database {
                 color:         r.get(8)?,
                 sort_order:    r.get(9)?,
                 locked:        r.get::<_, i32>(10)? != 0,
-                updated_at:    r.get(11)?,
-                dirty:         r.get::<_, i32>(12)? != 0,
+                warn_days:     r.get(11)?,
+                updated_at:    r.get(12)?,
+                dirty:         r.get::<_, i32>(13)? != 0,
             });
         }
         Ok(out)
@@ -454,7 +462,7 @@ impl Database {
     pub fn get_dirty_items(&self) -> Result<Vec<TodoItem>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id,note_id,parent_id,text,checked,indent,collapsed,status,
+            "SELECT id,note_id,parent_id,text,checked,indent,collapsed,locked,status,
                     assignees,assignee_person_id,memo,bold,priority,
                     start_date,end_date,limit_date,item_type,
                     sort_order,archived,updated_at,dirty
@@ -471,20 +479,21 @@ impl Database {
                 checked:            r.get::<_, i32>(4)? != 0,
                 indent:             r.get(5)?,
                 collapsed:          r.get::<_, i32>(6)? != 0,
-                status:             r.get(7)?,
-                assignees:          r.get::<_, Option<String>>(8)?.unwrap_or_else(|| "[]".into()),
-                assignee_person_id: r.get(9)?,
-                memo:               r.get(10)?,
-                bold:               r.get::<_, i32>(11)? != 0,
-                priority:           r.get(12)?,
-                start_date:         r.get(13)?,
-                end_date:           r.get(14)?,
-                limit_date:         r.get(15)?,
-                item_type:          r.get(16)?,
-                sort_order:         r.get(17)?,
-                archived:           r.get::<_, i32>(18)? != 0,
-                updated_at:         r.get(19)?,
-                dirty:              r.get::<_, i32>(20)? != 0,
+                locked:             r.get::<_, i32>(7)? != 0,
+                status:             r.get(8)?,
+                assignees:          r.get::<_, Option<String>>(9)?.unwrap_or_else(|| "[]".into()),
+                assignee_person_id: r.get(10)?,
+                memo:               r.get(11)?,
+                bold:               r.get::<_, i32>(12)? != 0,
+                priority:           r.get(13)?,
+                start_date:         r.get(14)?,
+                end_date:           r.get(15)?,
+                limit_date:         r.get(16)?,
+                item_type:          r.get(17)?,
+                sort_order:         r.get(18)?,
+                archived:           r.get::<_, i32>(19)? != 0,
+                updated_at:         r.get(20)?,
+                dirty:              r.get::<_, i32>(21)? != 0,
             });
         }
         Ok(out)

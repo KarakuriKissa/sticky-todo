@@ -13,6 +13,7 @@ pub struct Note {
     pub color: String,
     pub sort_order: i64,
     pub locked: bool,
+    pub warn_days: Option<i64>, // per-note deadline warning days (null = use global)
     pub updated_at: String,
     pub dirty: bool,
 }
@@ -26,16 +27,17 @@ pub struct TodoItem {
     pub checked: bool,
     pub indent: i32,
     pub collapsed: bool,
+    pub locked: bool,
     pub status: Option<String>,
-    pub assignees: String, // legacy JSON array string
+    pub assignees: String,
     pub assignee_person_id: Option<String>,
     pub memo: Option<String>,
     pub bold: bool,
-    pub priority: Option<String>, // "high" | "medium" | "low" | null
+    pub priority: Option<String>,
     pub start_date: Option<String>,
     pub end_date: Option<String>,
     pub limit_date: Option<String>,
-    pub item_type: String, // "normal" | "heading" | "separator"
+    pub item_type: String,
     pub sort_order: i64,
     pub archived: bool,
     pub updated_at: String,
@@ -76,7 +78,7 @@ pub struct AssigneePerson {
 
 fn default_sort_mode() -> String { "manual".into() }
 fn default_true() -> bool { true }
-fn default_false() -> bool { false }
+fn default_warn() -> i64 { 3 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppSettings {
@@ -84,16 +86,18 @@ pub struct AppSettings {
     pub sort_mode: String,
     #[serde(default = "default_true")]
     pub feature_status: bool,
-    #[serde(default = "default_false")]
+    #[serde(default = "default_true")]
     pub feature_assignee: bool,
     #[serde(default = "default_true")]
     pub feature_date: bool,
-    #[serde(default = "default_false")]
+    #[serde(default = "default_true")]
     pub feature_memo: bool,
-    #[serde(default = "default_false")]
+    #[serde(default = "default_true")]
     pub feature_priority: bool,
     #[serde(default)]
     pub active_group_id: Option<String>,
+    #[serde(default = "default_warn")]
+    pub deadline_warn_days: i64,
 }
 
 impl Default for AppSettings {
@@ -101,11 +105,12 @@ impl Default for AppSettings {
         Self {
             sort_mode: "manual".into(),
             feature_status: true,
-            feature_assignee: false,
+            feature_assignee: true,
             feature_date: true,
-            feature_memo: false,
-            feature_priority: false,
+            feature_memo: true,
+            feature_priority: true,
             active_group_id: None,
+            deadline_warn_days: 3,
         }
     }
 }
