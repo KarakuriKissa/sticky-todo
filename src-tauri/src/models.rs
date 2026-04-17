@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -14,8 +15,14 @@ pub struct Note {
     pub sort_order: i64,
     pub locked: bool,
     pub warn_days: Option<i64>, // per-note deadline warning days (null = use global)
+    #[serde(default = "default_created_at")]
+    pub created_at: String,
     pub updated_at: String,
     pub dirty: bool,
+}
+
+pub fn default_created_at() -> String {
+    Utc::now().to_rfc3339()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

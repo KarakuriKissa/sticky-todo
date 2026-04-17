@@ -68,12 +68,28 @@ function now() {
   return new Date().toISOString();
 }
 
-function sorted(notes: Note[], mode: SortMode): Note[] {
+function sorted(notes: Note[], mode: SortMode, categories: Category[] = []): Note[] {
   const arr = [...notes];
-  if (mode === 'name') {
-    return arr.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
+  switch (mode) {
+    case 'name_asc':
+      return arr.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
+    case 'name_desc':
+      return arr.sort((a, b) => b.title.localeCompare(a.title, 'ja'));
+    case 'created_asc':
+      return arr.sort((a, b) => (a.created_at || a.updated_at).localeCompare(b.created_at || b.updated_at));
+    case 'created_desc':
+      return arr.sort((a, b) => (b.created_at || b.updated_at).localeCompare(a.created_at || a.updated_at));
+    case 'group_asc': {
+      const catMap = new Map(categories.map(c => [c.id, c.name]));
+      return arr.sort((a, b) => (catMap.get(a.category_id ?? '') ?? '').localeCompare(catMap.get(b.category_id ?? '') ?? '', 'ja'));
+    }
+    case 'group_desc': {
+      const catMap = new Map(categories.map(c => [c.id, c.name]));
+      return arr.sort((a, b) => (catMap.get(b.category_id ?? '') ?? '').localeCompare(catMap.get(a.category_id ?? '') ?? '', 'ja'));
+    }
+    default: // 'manual'
+      return arr.sort((a, b) => a.sort_order - b.sort_order);
   }
-  return arr.sort((a, b) => a.sort_order - b.sort_order);
 }
 
 async function persistOpenWindows(ids: Set<string>) {
@@ -298,7 +314,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setSearchQuery: (q) => set({ searchQuery: q }),
 
   filteredNotes: () => {
-    const { notes, selectedCategoryId, searchQuery, settings } = get();
+    const { notes, selectedCategoryId, searchQuery, settings, categories } = get();
     let result = notes;
     if (selectedCategoryId) {
       result = result.filter((n) => n.category_id === selectedCategoryId);
@@ -307,7 +323,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const q = searchQuery.toLowerCase();
       result = result.filter((n) => n.title.toLowerCase().includes(q));
     }
-    return sorted(result, settings.sort_mode);
+    // Normalize legacy 'name' sort mode to 'name_asc'
+    const mode = (settings.sort_mode === 'name' ? 'name_asc' : settings.sort_mode) as SortMode;
+    return sorted(result, mode, categories);
   },
 }));
 

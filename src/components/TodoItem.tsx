@@ -610,7 +610,7 @@ function StatusBadge({
   };
 
   return (
-    <div className="status-badge-wrap">
+    <div className="status-badge-wrap" onMouseLeave={() => setOpen(false)}>
       <span
         ref={btnRef}
         className="status-badge"
@@ -707,7 +707,7 @@ function AssigneeBadge({
   };
 
   return (
-    <div className="status-badge-wrap">
+    <div className="status-badge-wrap" onMouseLeave={() => setOpen(false)}>
       <span
         ref={btnRef}
         className="assignee-badge"
@@ -803,7 +803,7 @@ function InlineStatusPicker({
 
   if (statuses.length === 0) return null;
   return (
-    <div className="status-badge-wrap inline-add">
+    <div className="status-badge-wrap inline-add" onMouseLeave={() => setOpen(false)}>
       <span
         ref={btnRef}
         className="inline-add-btn"
@@ -853,7 +853,7 @@ function InlineAssigneePicker({
 
   if (persons.length === 0) return null;
   return (
-    <div className="status-badge-wrap inline-add">
+    <div className="status-badge-wrap inline-add" onMouseLeave={() => setOpen(false)}>
       <span
         ref={btnRef}
         className="inline-add-btn"

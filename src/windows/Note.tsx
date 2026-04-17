@@ -70,13 +70,15 @@ export function NoteWindow({ noteId }: Props) {
           const pos = await appWin.outerPosition();
           const size = await appWin.outerSize();
           const scale = await appWin.scaleFactor();
-          updateNote({
+          const updated = {
             ...note,
             window_x: pos.x / scale,
             window_y: pos.y / scale,
             window_width: size.width / scale,
             window_height: size.height / scale,
-          });
+          };
+          updateNote(updated);
+          await invoke('save_note', { note: updated });
         }
         await trackWindowClose(noteId);
       } catch (e) {
@@ -102,6 +104,17 @@ export function NoteWindow({ noteId }: Props) {
     });
     return () => { unlisten?.(); };
   }, [noteId, editingTitle]);
+
+  // Listen for request-close event (emitted by NoteList "リストを閉じる")
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('request-close', () => {
+        if (!closingRef.current) close();
+      }).then(fn => { unlisten = fn; }).catch(() => {});
+    });
+    return () => { unlisten?.(); };
+  }, [note]); // re-subscribe when note changes so close() has fresh note
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -132,13 +145,15 @@ export function NoteWindow({ noteId }: Props) {
         const pos = await appWin.outerPosition();
         const size = await appWin.outerSize();
         const scale = await appWin.scaleFactor();
-        updateNote({
+        const updated = {
           ...note,
           window_x: pos.x / scale,
           window_y: pos.y / scale,
           window_width: size.width / scale,
           window_height: size.height / scale,
-        });
+        };
+        updateNote(updated);
+        await invoke('save_note', { note: updated });
       }
       await trackWindowClose(noteId);
     } catch (e) {

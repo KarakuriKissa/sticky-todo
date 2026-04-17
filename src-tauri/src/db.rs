@@ -35,6 +35,7 @@ impl Database {
                  sort_order    INTEGER DEFAULT 0,
                  locked        INTEGER DEFAULT 0,
                  warn_days     INTEGER,
+                 created_at    TEXT,
                  updated_at    TEXT NOT NULL,
                  dirty         INTEGER DEFAULT 0
              );
@@ -97,6 +98,7 @@ impl Database {
         // Migrations (silently ignored if column already exists)
         let _ = conn.execute("ALTER TABLE notes ADD COLUMN locked INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE notes ADD COLUMN warn_days INTEGER", []);
+        conn.execute("ALTER TABLE notes ADD COLUMN created_at TEXT", []).ok();
         let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN locked INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN assignee_person_id TEXT", []);
         let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN memo TEXT", []);
@@ -151,7 +153,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id,title,category_id,window_x,window_y,window_width,window_height,
-                    always_on_top,color,sort_order,locked,warn_days,updated_at,dirty
+                    always_on_top,color,sort_order,locked,warn_days,created_at,updated_at,dirty
              FROM notes ORDER BY sort_order, updated_at DESC",
         )?;
         let mut rows = stmt.query([])?;
@@ -170,8 +172,9 @@ impl Database {
                 sort_order:    r.get(9)?,
                 locked:        r.get::<_, i32>(10)? != 0,
                 warn_days:     r.get(11)?,
-                updated_at:    r.get(12)?,
-                dirty:         r.get::<_, i32>(13)? != 0,
+                created_at:    r.get::<_, Option<String>>(12)?.unwrap_or_else(default_created_at),
+                updated_at:    r.get(13)?,
+                dirty:         r.get::<_, i32>(14)? != 0,
             });
         }
         Ok(out)
@@ -182,14 +185,14 @@ impl Database {
         conn.execute(
             "INSERT OR REPLACE INTO notes
              (id,title,category_id,window_x,window_y,window_width,window_height,
-              always_on_top,color,sort_order,locked,warn_days,updated_at,dirty)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+              always_on_top,color,sort_order,locked,warn_days,created_at,updated_at,dirty)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
             params![
                 n.id, n.title, n.category_id,
                 n.window_x, n.window_y, n.window_width, n.window_height,
                 n.always_on_top as i32, n.color,
                 n.sort_order, n.locked as i32, n.warn_days,
-                n.updated_at, n.dirty as i32,
+                n.created_at, n.updated_at, n.dirty as i32,
             ],
         )?;
         Ok(())
@@ -433,7 +436,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id,title,category_id,window_x,window_y,window_width,window_height,
-                    always_on_top,color,sort_order,locked,warn_days,updated_at,dirty
+                    always_on_top,color,sort_order,locked,warn_days,created_at,updated_at,dirty
              FROM notes WHERE dirty=1",
         )?;
         let mut rows = stmt.query([])?;
@@ -452,8 +455,9 @@ impl Database {
                 sort_order:    r.get(9)?,
                 locked:        r.get::<_, i32>(10)? != 0,
                 warn_days:     r.get(11)?,
-                updated_at:    r.get(12)?,
-                dirty:         r.get::<_, i32>(13)? != 0,
+                created_at:    r.get::<_, Option<String>>(12)?.unwrap_or_else(default_created_at),
+                updated_at:    r.get(13)?,
+                dirty:         r.get::<_, i32>(14)? != 0,
             });
         }
         Ok(out)

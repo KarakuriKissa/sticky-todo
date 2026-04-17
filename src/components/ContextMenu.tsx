@@ -1,4 +1,4 @@
-import { useEffect, useRef, CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, CSSProperties } from 'react';
 
 export interface ContextMenuItem {
   label: string;
@@ -18,6 +18,18 @@ interface Props {
 
 export function ContextMenu({ x, y, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x, y });
+
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    setPos({
+      x: x + rect.width > vw ? Math.max(0, vw - rect.width - 2) : x,
+      y: y + rect.height > vh ? Math.max(0, vh - rect.height - 2) : y,
+    });
+  }, [x, y]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -36,11 +48,10 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     };
   }, [onClose]);
 
-  // Adjust position so menu stays in viewport
   const style: CSSProperties = {
     position: 'fixed',
-    left: x,
-    top: y,
+    left: pos.x,
+    top: pos.y,
     zIndex: 9999,
   };
 

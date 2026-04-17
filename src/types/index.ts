@@ -11,6 +11,7 @@ export interface Note {
   sort_order: number;
   locked: boolean;
   warn_days: number | null; // per-note deadline warning days (null = use global)
+  created_at: string | null;
   updated_at: string;
   dirty: boolean;
 }
@@ -70,7 +71,7 @@ export interface AssigneePerson {
   sort_order: number;
 }
 
-export type SortMode = 'manual' | 'name';
+export type SortMode = 'manual' | 'name_asc' | 'name_desc' | 'created_asc' | 'created_desc' | 'group_asc' | 'group_desc';
 
 export interface AppSettings {
   sort_mode: SortMode;

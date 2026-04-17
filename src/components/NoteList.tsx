@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { emitTo } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/appStore';
 import type { Note } from '../types';
 
@@ -83,6 +83,48 @@ export function NoteList({ onNew }: Props) {
     window.addEventListener('click', handler);
     return () => window.removeEventListener('click', handler);
   }, [noteCtx]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((document.activeElement as HTMLElement)?.tagName === 'INPUT') return;
+      if (!selectedNoteId && e.key !== 'ArrowDown') return;
+
+      const idx = notes.findIndex(n => n.id === selectedNoteId);
+
+      if (e.key === 'ArrowUp' && idx > 0) {
+        e.preventDefault();
+        setSelectedNoteId(notes[idx - 1].id);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (idx === -1) {
+          if (notes.length > 0) setSelectedNoteId(notes[0].id);
+        } else if (idx < notes.length - 1) {
+          setSelectedNoteId(notes[idx + 1].id);
+        }
+      } else if (e.key === 'Enter' && !e.shiftKey && selectedNoteId) {
+        e.preventDefault();
+        const note = notes.find(n => n.id === selectedNoteId);
+        if (note) openNote(note);
+      } else if (e.key === 'Enter' && e.shiftKey && selectedNoteId) {
+        e.preventDefault();
+        const note = notes.find(n => n.id === selectedNoteId);
+        if (note) {
+          setEditingId(note.id);
+          setEditTitle(note.title);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedNoteId, notes, openNote]);
+
+  // Auto-scroll selected card into view
+  useEffect(() => {
+    if (!selectedNoteId) return;
+    const el = document.querySelector(`[data-note-id="${selectedNoteId}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [selectedNoteId]);
 
   return (
     <div className="note-list">
@@ -213,7 +255,7 @@ export function NoteList({ onNew }: Props) {
           <button
             className="context-menu-item"
             onClick={() => {
-              invoke('close_note_window', { noteId: noteCtx.note.id }).catch(() => {});
+              emitTo(`note-${noteCtx.note.id}`, 'request-close', {}).catch(() => {});
               setNoteCtx(null);
             }}
           >

@@ -6,8 +6,13 @@ import { useAppStore } from '../store/appStore';
 import type { AppSettings, AssigneeGroup, AssigneePerson, SortMode, Status } from '../types';
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'manual', label: '手動' },
-  { value: 'name',   label: '名前順' },
+  { value: 'manual',       label: '手動' },
+  { value: 'name_asc',     label: '名前 昇順' },
+  { value: 'name_desc',    label: '名前 降順' },
+  { value: 'created_asc',  label: '作成日 古い順' },
+  { value: 'created_desc', label: '作成日 新しい順' },
+  { value: 'group_asc',    label: 'グループ 昇順' },
+  { value: 'group_desc',   label: 'グループ 降順' },
 ];
 
 export function Launcher() {
@@ -122,7 +127,7 @@ export function Launcher() {
 
           <select
             className="sort-select"
-            value={settings.sort_mode}
+            value={settings.sort_mode === 'name' as string ? 'name_asc' : settings.sort_mode}
             onChange={(e) => setSort(e.target.value as SortMode)}
             title="並び替え"
           >

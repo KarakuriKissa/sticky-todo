@@ -52,6 +52,7 @@ pub fn create_note(
         sort_order: 0,
         locked: false,
         warn_days: None,
+        created_at: now(),
         updated_at: now(),
         dirty: true,
     };
@@ -81,6 +82,7 @@ pub fn duplicate_note(
         sort_order: source.sort_order + 1,
         locked: false,
         warn_days: source.warn_days,
+        created_at: now(),
         updated_at: now(),
         dirty: true,
     };
