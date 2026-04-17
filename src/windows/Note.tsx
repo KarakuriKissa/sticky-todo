@@ -27,6 +27,7 @@ export function NoteWindow({ noteId }: Props) {
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showPriorityPicker, setShowPriorityPicker] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
+  const [priorityMode, setPriorityMode] = useState<'hml' | 'abc'>('hml');
   const [titleDraft, setTitleDraft] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
@@ -272,7 +273,12 @@ export function NoteWindow({ noteId }: Props) {
             className="note-title-text"
             data-tauri-drag-region=""
             onDoubleClick={startTitleEdit}
-            title="ダブルクリックで編集"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              startTitleEdit();
+            }}
+            title="ダブルクリックまたは右クリックで編集"
           >
             {titleText || 'タイトルなし'}
           </span>
@@ -385,6 +391,18 @@ export function NoteWindow({ noteId }: Props) {
 
         <div className="type-bar-spacer" />
 
+        {/* Priority mode toggle */}
+        {settings.feature_priority && (
+          <button
+            className="type-btn"
+            onClick={() => setPriorityMode(m => m === 'hml' ? 'abc' : 'hml')}
+            title={priorityMode === 'hml' ? 'ABC表記に切替' : '高中低表記に切替'}
+            style={{ fontSize: 10 }}
+          >
+            {priorityMode === 'hml' ? '高中低' : 'ABC'}
+          </button>
+        )}
+
         {selCount > 0 && <span className="sel-count">{selCount}件</span>}
 
         {/* Check/uncheck selected */}
@@ -445,6 +463,7 @@ export function NoteWindow({ noteId }: Props) {
             visibleItems={visibleItems}
             allItems={items}
             warnDays={warnDays}
+            priorityMode={priorityMode}
           />
         ))}
       </div>

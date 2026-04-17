@@ -1,4 +1,4 @@
-import { useRef, KeyboardEvent, DragEvent, useState, MouseEvent } from 'react';
+import { useRef, KeyboardEvent, useState, MouseEvent } from 'react';
 import type { TodoItem as Item, Status } from '../types';
 import { useNoteStore } from '../store/noteStore';
 import { useAppStore } from '../store/appStore';
@@ -9,23 +9,28 @@ interface Props {
   visibleItems: Item[];
   allItems: Item[];
   warnDays: number;
+  priorityMode?: 'hml' | 'abc';
 }
 
-export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
+export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMode }: Props) {
   const {
     updateItem, deleteItem, toggleCheck, toggleBold, toggleLock, toggleCollapse,
     indent, dedent, addItem, selectedIds, toggleSelected, moveItem,
-    duplicateItem, setSelected,
+    duplicateItem, setSelected, dragState, startDrag, updateDragOver, endDrag,
   } = useNoteStore();
   const { statuses, settings, assigneePersons, assigneeGroups } = useAppStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
-  const [dragOver, setDragOver] = useState<'before' | 'after' | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showMemoEdit, setShowMemoEdit] = useState(false);
   const [memoText, setMemoText] = useState(item.memo ?? '');
   const [commentAbove, setCommentAbove] = useState(false);
   const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
+  const [hoverMemo, setHoverMemo] = useState<{ above: boolean } | null>(null);
+
+  const isDragging = dragState?.fromId === item.id;
+  const isDragOver = dragState?.overItemId === item.id;
+  const dragOverPos = isDragOver ? dragState?.overPos : null;
 
   const hasChildren = allItems.some((i) => i.parent_id === item.id);
   const isSelected = selectedIds.has(item.id);
@@ -42,8 +47,18 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
   // Context menu
   const ctxItems: ContextMenuItem[] = [
     {
+      label: '上に項目を追加',
+      icon: '↑',
+      action: () => {
+        const newId = addItem(item.id, item.indent, 'before');
+        setTimeout(() => {
+          document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] [data-text-input]`)?.focus();
+        }, 30);
+      },
+    },
+    {
       label: '下に項目を追加',
-      icon: '＋',
+      icon: '↓',
       action: () => {
         const newId = addItem(item.id, item.indent);
         setTimeout(() => {
@@ -77,6 +92,17 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
         e.preventDefault();
         return;
       }
+    }
+
+    if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      exitEdit();
+      const idx = visibleItems.findIndex((i) => i.id === item.id);
+      const target = e.key === 'ArrowUp' ? visibleItems[idx - 1] : visibleItems[idx + 1];
+      if (target) {
+        setSelected(new Set([...selectedIds, target.id]));
+      }
+      return;
     }
 
     if (e.key === 'ArrowUp') {
@@ -148,6 +174,30 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
   // ── Row keyboard handler (when not editing) ──────────────────────────────────
   const onRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (isEditing) return; // let input handle it
+
+    // Shift+Arrow = multi-select
+    if (e.shiftKey && !e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      const idx = visibleItems.findIndex((i) => i.id === item.id);
+      const target = e.key === 'ArrowUp' ? visibleItems[idx - 1] : visibleItems[idx + 1];
+      if (target) {
+        const newSel = new Set([...selectedIds, target.id]);
+        setSelected(newSel);
+        setTimeout(() => {
+          document.querySelector<HTMLDivElement>(`[data-item-id="${target.id}"].todo-item, [data-item-id="${target.id}"].todo-heading`)?.focus();
+        }, 0);
+      }
+      return;
+    }
+
+    // Ctrl+Shift+Arrow = move selected items
+    if (e.shiftKey && e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      if (e.key === 'ArrowUp') useNoteStore.getState().moveSelectedUp();
+      else useNoteStore.getState().moveSelectedDown();
+      return;
+    }
+
     if (e.key === 'Enter') {
       e.preventDefault();
       enterEdit();
@@ -205,26 +255,31 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
     setCtx({ x: e.clientX, y: e.clientY });
   };
 
-  // ── Drag & Drop ─────────────────────────────────────────────────────────────
-  const onDragStart = (e: DragEvent) => {
-    if (item.locked) { e.preventDefault(); return; }
-    e.dataTransfer.setData('text/plain', item.id);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const onDragOver = (e: DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+  // ── Pointer-based Drag & Drop ─────────────────────────────────────────────────
+  const onGripPointerDown = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (item.locked) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setDragOver(e.clientY < rect.top + rect.height / 2 ? 'before' : 'after');
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    e.stopPropagation();
+    startDrag(item.id);
   };
 
-  const onDrop = (e: DragEvent) => {
-    e.preventDefault();
-    const fromId = e.dataTransfer.getData('text/plain');
-    if (fromId !== item.id && dragOver) moveItem(fromId, item.id, dragOver);
-    setDragOver(null);
+  const onGripPointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
+    if (!dragState || dragState.fromId !== item.id) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const itemEl = el?.closest('[data-item-id]') as HTMLElement | null;
+    if (itemEl?.dataset.itemId && itemEl.dataset.itemId !== item.id) {
+      const rect = itemEl.getBoundingClientRect();
+      updateDragOver(itemEl.dataset.itemId, e.clientY < rect.top + rect.height / 2 ? 'before' : 'after');
+    } else if (!itemEl?.dataset.itemId) {
+      updateDragOver(null, 'after');
+    }
+  };
+
+  const onGripPointerUp = () => {
+    if (dragState?.fromId === item.id && dragState.overItemId) {
+      moveItem(dragState.fromId, dragState.overItemId, dragState.overPos);
+    }
+    endDrag();
   };
 
   // ── Memo / Comment ──────────────────────────────────────────────────────────
@@ -268,16 +323,22 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
   if (item.item_type === 'separator') {
     return (
       <div
-        className={`todo-separator${dragOver ? ` drag-${dragOver}` : ''}`}
+        className={`todo-separator${dragOverPos ? ` drag-${dragOverPos}` : ''}`}
         style={{ marginLeft: item.indent * 20 }}
         data-item-id={item.id}
-        draggable={!item.locked}
-        onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragLeave={() => setDragOver(null)}
-        onDrop={onDrop}
         onContextMenu={onContextMenu}
       >
+        {!item.locked && (
+          <span
+            className="item-drag-grip"
+            style={{ touchAction: 'none', cursor: isDragging ? 'grabbing' : 'grab' }}
+            onPointerDown={onGripPointerDown}
+            onPointerMove={onGripPointerMove}
+            onPointerUp={onGripPointerUp}
+            onPointerCancel={endDrag}
+            title="ドラッグで並び替え"
+          >⠿</span>
+        )}
         <hr />
         {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems} onClose={() => setCtx(null)} />}
       </div>
@@ -288,15 +349,10 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
   if (item.item_type === 'heading') {
     return (
       <div
-        className={`todo-heading${isSelected ? ' selected' : ''}${dragOver ? ` drag-${dragOver}` : ''}`}
+        className={`todo-heading${isSelected ? ' selected' : ''}${dragOverPos ? ` drag-${dragOverPos}` : ''}`}
         style={{ marginLeft: item.indent * 20 }}
         data-item-id={item.id}
         tabIndex={isSelected && !isEditing ? 0 : -1}
-        draggable={!item.locked}
-        onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragLeave={() => setDragOver(null)}
-        onDrop={onDrop}
         onContextMenu={onContextMenu}
         onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
         onKeyDown={(e) => {
@@ -307,6 +363,17 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
           setSelected(new Set([item.id]));
         }}
       >
+        {!item.locked && (
+          <span
+            className="item-drag-grip"
+            style={{ touchAction: 'none', cursor: isDragging ? 'grabbing' : 'grab' }}
+            onPointerDown={onGripPointerDown}
+            onPointerMove={onGripPointerMove}
+            onPointerUp={onGripPointerUp}
+            onPointerCancel={endDrag}
+            title="ドラッグで並び替え"
+          >⠿</span>
+        )}
         {item.locked && <span className="item-lock-icon">🔒</span>}
         <input
           ref={inputRef}
@@ -338,20 +405,35 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
   return (
     <div
       ref={rowRef}
-      className={`todo-item${isSelected ? ' selected' : ''}${dragOver ? ` drag-${dragOver}` : ''}${item.locked ? ' locked-item' : ''}${isOverdue ? ' overdue-item' : isWarn ? ' warn-item' : ''}`}
+      className={`todo-item${isSelected ? ' selected' : ''}${dragOverPos ? ` drag-${dragOverPos}` : ''}${isDragging ? ' dragging' : ''}${item.locked ? ' locked-item' : ''}${isOverdue ? ' overdue-item' : isWarn ? ' warn-item' : ''}`}
       style={{ paddingLeft: item.indent * 20 + 4 }}
       data-item-id={item.id}
       tabIndex={isSelected && !isEditing ? 0 : -1}
-      draggable={!item.locked}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragLeave={() => setDragOver(null)}
-      onDrop={onDrop}
       onClick={onRowClick}
       onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
       onKeyDown={onRowKeyDown}
       onContextMenu={onContextMenu}
+      onMouseEnter={(e) => {
+        if (item.memo) {
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setHoverMemo({ above: rect.top > window.innerHeight * 0.5 });
+        }
+      }}
+      onMouseLeave={() => setHoverMemo(null)}
     >
+      {/* Drag grip */}
+      {!item.locked && (
+        <span
+          className="item-drag-grip"
+          style={{ touchAction: 'none', cursor: isDragging ? 'grabbing' : 'grab' }}
+          onPointerDown={onGripPointerDown}
+          onPointerMove={onGripPointerMove}
+          onPointerUp={onGripPointerUp}
+          onPointerCancel={endDrag}
+          title="ドラッグで並び替え"
+        >⠿</span>
+      )}
+
       {/* Lock indicator */}
       {item.locked && <span className="item-lock-icon">🔒</span>}
 
@@ -393,7 +475,11 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
       {/* Badges */}
       <div className="todo-badges">
         {settings.feature_priority && item.priority && (
-          <PriorityBadge priority={item.priority} onSelect={(p) => updateItem(item.id, { priority: p })} />
+          <PriorityBadge
+            priority={item.priority}
+            onSelect={(p) => updateItem(item.id, { priority: p })}
+            mode={priorityMode ?? 'hml'}
+          />
         )}
 
         {settings.feature_status && statusObj && (
@@ -471,9 +557,11 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays }: Props) {
       {/* Context menu */}
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems} onClose={() => setCtx(null)} />}
 
-      {/* Memo hover tooltip */}
-      {settings.feature_memo && item.memo && !showMemoEdit && (
-        <div className="memo-tooltip">{item.memo}</div>
+      {/* Memo hover tooltip - Google Sheets style */}
+      {item.memo && hoverMemo && !showMemoEdit && (
+        <div className={`memo-tooltip${hoverMemo.above ? ' memo-tooltip-above' : ''}`}>
+          <div className="memo-tooltip-text">{item.memo}</div>
+        </div>
       )}
 
       {/* Comment edit popup */}
@@ -509,17 +597,30 @@ function StatusBadge({
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [above, setAbove] = useState(false);
+  const btnRef = useRef<HTMLSpanElement>(null);
+
+  const openPicker = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setAbove(rect.top > window.innerHeight * 0.5);
+    }
+    setOpen((o) => !o);
+  };
+
   return (
     <div className="status-badge-wrap">
       <span
+        ref={btnRef}
         className="status-badge"
         style={{ background: status.color }}
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={openPicker}
       >
         {status.name}
       </span>
       {open && (
-        <div className="status-dropdown">
+        <div className="status-dropdown" style={above ? { bottom: '100%', top: 'auto' } : {}}>
           <div className="status-option" onClick={(e) => { e.stopPropagation(); onSelect(''); setOpen(false); }}>（なし）</div>
           {allStatuses.map((s) => (
             <div
@@ -538,14 +639,20 @@ function StatusBadge({
 }
 
 // ── PriorityBadge ─────────────────────────────────────────────────────────────
-const PRIORITIES = [
+const PRIORITIES_HML = [
   { value: 'high', label: '高', color: '#ef4444' },
   { value: 'medium', label: '中', color: '#f97316' },
   { value: 'low', label: '低', color: '#22c55e' },
 ];
+const PRIORITIES_ABC = [
+  { value: 'high', label: 'A', color: '#ef4444' },
+  { value: 'medium', label: 'B', color: '#f97316' },
+  { value: 'low', label: 'C', color: '#22c55e' },
+];
 
-function PriorityBadge({ priority, onSelect }: { priority: string; onSelect: (p: string | null) => void }) {
+function PriorityBadge({ priority, onSelect, mode = 'hml' }: { priority: string; onSelect: (p: string | null) => void; mode?: 'hml' | 'abc' }) {
   const [open, setOpen] = useState(false);
+  const PRIORITIES = mode === 'abc' ? PRIORITIES_ABC : PRIORITIES_HML;
   const p = PRIORITIES.find((x) => x.value === priority);
   if (!p) return null;
   return (
@@ -587,17 +694,30 @@ function AssigneeBadge({
   onSelect: (id: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [above, setAbove] = useState(false);
+  const btnRef = useRef<HTMLSpanElement>(null);
+
+  const openPicker = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setAbove(rect.top > window.innerHeight * 0.5);
+    }
+    setOpen((o) => !o);
+  };
+
   return (
     <div className="status-badge-wrap">
       <span
+        ref={btnRef}
         className="assignee-badge"
         style={{ borderColor: person.color, cursor: 'pointer' }}
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={openPicker}
       >
         {person.name}
       </span>
       {open && (
-        <div className="status-dropdown">
+        <div className="status-dropdown" style={above ? { bottom: '100%', top: 'auto' } : {}}>
           <div className="status-option" onClick={(e) => { e.stopPropagation(); onSelect(null); setOpen(false); }}>（なし）</div>
           {persons.map((p) => (
             <div
@@ -669,18 +789,31 @@ function InlineStatusPicker({
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [above, setAbove] = useState(false);
+  const btnRef = useRef<HTMLSpanElement>(null);
+
+  const openPicker = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setAbove(rect.top > window.innerHeight * 0.5);
+    }
+    setOpen((o) => !o);
+  };
+
   if (statuses.length === 0) return null;
   return (
     <div className="status-badge-wrap inline-add">
       <span
+        ref={btnRef}
         className="inline-add-btn"
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={openPicker}
         title="ステータスを設定"
       >
         ST＋
       </span>
       {open && (
-        <div className="status-dropdown">
+        <div className="status-dropdown" style={above ? { bottom: '100%', top: 'auto' } : {}}>
           {statuses.map((s) => (
             <div
               key={s.id}
@@ -706,18 +839,31 @@ function InlineAssigneePicker({
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [above, setAbove] = useState(false);
+  const btnRef = useRef<HTMLSpanElement>(null);
+
+  const openPicker = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setAbove(rect.top > window.innerHeight * 0.5);
+    }
+    setOpen((o) => !o);
+  };
+
   if (persons.length === 0) return null;
   return (
     <div className="status-badge-wrap inline-add">
       <span
+        ref={btnRef}
         className="inline-add-btn"
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={openPicker}
         title="担当者を設定"
       >
         👤＋
       </span>
       {open && (
-        <div className="status-dropdown">
+        <div className="status-dropdown" style={above ? { bottom: '100%', top: 'auto' } : {}}>
           {persons.map((p) => (
             <div
               key={p.id}

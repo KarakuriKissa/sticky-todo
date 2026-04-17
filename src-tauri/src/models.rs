@@ -79,6 +79,7 @@ pub struct AssigneePerson {
 fn default_sort_mode() -> String { "manual".into() }
 fn default_true() -> bool { true }
 fn default_warn() -> i64 { 3 }
+fn default_priority_mode() -> String { "hml".to_string() }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppSettings {
@@ -98,6 +99,8 @@ pub struct AppSettings {
     pub active_group_id: Option<String>,
     #[serde(default = "default_warn")]
     pub deadline_warn_days: i64,
+    #[serde(default = "default_priority_mode")]
+    pub priority_mode: String,
 }
 
 impl Default for AppSettings {
@@ -111,6 +114,7 @@ impl Default for AppSettings {
             feature_priority: true,
             active_group_id: None,
             deadline_warn_days: 3,
+            priority_mode: "hml".to_string(),
         }
     }
 }

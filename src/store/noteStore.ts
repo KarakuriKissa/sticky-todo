@@ -14,12 +14,18 @@ interface NoteStore {
   history: Snapshot[];
   historyIdx: number;
 
+  // Drag state for pointer-based DnD
+  dragState: { fromId: string; overItemId: string | null; overPos: 'before' | 'after' } | null;
+  startDrag: (fromId: string) => void;
+  updateDragOver: (overId: string | null, pos: 'before' | 'after') => void;
+  endDrag: () => void;
+
   load: (noteId: string) => Promise<void>;
   setNote: (note: Note) => void;
   setSearchQuery: (q: string) => void;
 
   // Item mutations
-  addItem: (afterId?: string, indent?: number) => string;
+  addItem: (afterId?: string, indent?: number, position?: 'before' | 'after') => string;
   updateItem: (id: string, patch: Partial<TodoItem>) => void;
   deleteItem: (id: string) => void;
   toggleCheck: (id: string) => void;
@@ -38,6 +44,10 @@ interface NoteStore {
   toggleSelected: (id: string) => void;
   selectAll: () => void;
   clearSelection: () => void;
+
+  // Move selected items up/down
+  moveSelectedUp: () => void;
+  moveSelectedDown: () => void;
 
   // History
   undo: () => void;
@@ -123,6 +133,10 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     searchQuery: '',
     history: [],
     historyIdx: -1,
+    dragState: null,
+    startDrag: (fromId) => set({ dragState: { fromId, overItemId: null, overPos: 'after' } }),
+    updateDragOver: (overId, pos) => set((s) => s.dragState ? { dragState: { ...s.dragState, overItemId: overId, overPos: pos } } : {}),
+    endDrag: () => set({ dragState: null }),
 
     load: async (noteId: string) => {
       const items = await invoke<TodoItem[]>('get_note_items', { noteId });
@@ -133,14 +147,18 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     setNote: (note: Note) => set({ note }),
     setSearchQuery: (q: string) => set({ searchQuery: q }),
 
-    addItem: (afterId?: string, indent = 0) => {
+    addItem: (afterId?: string, indent = 0, position: 'before' | 'after' = 'after') => {
       const noteId = get().note?.id ?? '';
       const newItem = makeItem(noteId, { indent });
       let items = get().items;
 
       if (afterId) {
         const idx = items.findIndex((i) => i.id === afterId);
-        items = [...items.slice(0, idx + 1), newItem, ...items.slice(idx + 1)];
+        if (position === 'before') {
+          items = [...items.slice(0, idx), newItem, ...items.slice(idx)];
+        } else {
+          items = [...items.slice(0, idx + 1), newItem, ...items.slice(idx + 1)];
+        }
       } else {
         items = [...items, newItem];
       }
@@ -308,6 +326,42 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
 
     clearSelection: () => set({ selectedIds: new Set() }),
+
+    moveSelectedUp: () => {
+      const { selectedIds } = get();
+      if (selectedIds.size === 0) return;
+      mutate((items) => {
+        const sorted = [...selectedIds].sort((a, b) => items.findIndex(i => i.id === a) - items.findIndex(i => i.id === b));
+        const firstIdx = items.findIndex(i => i.id === sorted[0]);
+        if (firstIdx === 0) return items;
+        const newItems = [...items];
+        for (const id of sorted) {
+          const idx = newItems.findIndex(i => i.id === id);
+          if (idx > 0 && !selectedIds.has(newItems[idx - 1].id)) {
+            [newItems[idx - 1], newItems[idx]] = [newItems[idx], newItems[idx - 1]];
+          }
+        }
+        return newItems.map(i => ({ ...i, dirty: true }));
+      });
+    },
+
+    moveSelectedDown: () => {
+      const { selectedIds } = get();
+      if (selectedIds.size === 0) return;
+      mutate((items) => {
+        const sorted = [...selectedIds].sort((a, b) => items.findIndex(i => i.id === b) - items.findIndex(i => i.id === a));
+        const lastIdx = items.findIndex(i => i.id === sorted[0]);
+        if (lastIdx === items.length - 1) return items;
+        const newItems = [...items];
+        for (const id of sorted) {
+          const idx = newItems.findIndex(i => i.id === id);
+          if (idx < newItems.length - 1 && !selectedIds.has(newItems[idx + 1].id)) {
+            [newItems[idx], newItems[idx + 1]] = [newItems[idx + 1], newItems[idx]];
+          }
+        }
+        return newItems.map(i => ({ ...i, dirty: true }));
+      });
+    },
 
     undo: () => {
       const { history, historyIdx } = get();

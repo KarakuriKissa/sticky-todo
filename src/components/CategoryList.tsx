@@ -1,4 +1,4 @@
-import { useRef, useState, DragEvent } from 'react';
+import { useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { Category } from '../types';
 import { useAppStore } from '../store/appStore';
@@ -14,9 +14,12 @@ export function CategoryList() {
   const [addName, setAddName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Drag state
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [dragPos, setDragPos] = useState<'before' | 'after'>('after');
+  // Pointer-based drag state
+  const [catDrag, setCatDrag] = useState<{
+    fromId: string;
+    overItemId: string | null;
+    overPos: 'before' | 'after';
+  } | null>(null);
 
   const startAdd = () => {
     setAdding(true);
@@ -48,37 +51,36 @@ export function CategoryList() {
     setEditing(null);
   };
 
-  // ── Drag & Drop ─────────────────────────────────────────────────────────────
-  const onDragStart = (e: DragEvent, id: string) => {
-    e.dataTransfer.setData('text/plain', id);
-    e.dataTransfer.effectAllowed = 'move';
+  // ── Pointer-based Drag & Drop ────────────────────────────────────────────────
+  const onGripPointerDown = (e: React.PointerEvent<HTMLSpanElement>, id: string) => {
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    e.stopPropagation();
+    setCatDrag({ fromId: id, overItemId: null, overPos: 'after' });
   };
 
-  const onDragOver = (e: DragEvent, id: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    setDragOverId(id);
-    setDragPos(e.clientY < mid ? 'before' : 'after');
+  const onGripPointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
+    if (!catDrag) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const liEl = el?.closest('[data-cat-id]') as HTMLElement | null;
+    if (liEl?.dataset.catId && liEl.dataset.catId !== catDrag.fromId) {
+      const rect = liEl.getBoundingClientRect();
+      const pos = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+      setCatDrag(d => d ? { ...d, overItemId: liEl.dataset.catId!, overPos: pos } : d);
+    }
   };
 
-  const onDrop = (e: DragEvent, toId: string) => {
-    e.preventDefault();
-    const fromId = e.dataTransfer.getData('text/plain');
-    setDragOverId(null);
-    if (!fromId || fromId === toId) return;
-    const ids = categories.map((c) => c.id);
-    const fromIdx = ids.indexOf(fromId);
-    const toIdx = ids.indexOf(toId);
-    if (fromIdx === -1 || toIdx === -1) return;
-    const newIds = [...ids];
-    newIds.splice(fromIdx, 1);
-    const insertAt = dragPos === 'before'
-      ? newIds.indexOf(toId)
-      : newIds.indexOf(toId) + 1;
-    newIds.splice(insertAt, 0, fromId);
-    reorderCategories(newIds);
+  const onGripPointerUp = () => {
+    if (catDrag?.overItemId) {
+      const ids = categories.map(c => c.id);
+      const fromIdx = ids.indexOf(catDrag.fromId);
+      const newIds = [...ids];
+      newIds.splice(fromIdx, 1);
+      const toIdx = newIds.indexOf(catDrag.overItemId);
+      const insertAt = catDrag.overPos === 'before' ? toIdx : toIdx + 1;
+      newIds.splice(insertAt, 0, catDrag.fromId);
+      reorderCategories(newIds);
+    }
+    setCatDrag(null);
   };
 
   return (
@@ -100,17 +102,20 @@ export function CategoryList() {
         {categories.map((cat) => (
           <li
             key={cat.id}
-            className={`${selectedCategoryId === cat.id ? 'active' : ''}${dragOverId === cat.id ? ` drag-${dragPos}` : ''}`}
+            data-cat-id={cat.id}
+            className={`${selectedCategoryId === cat.id ? 'active' : ''}${catDrag?.overItemId === cat.id ? ` drag-${catDrag.overPos}` : ''}`}
             onClick={() => setSelectedCategory(cat.id)}
             onDoubleClick={() => startEdit(cat)}
-            draggable
-            onDragStart={(e) => onDragStart(e, cat.id)}
-            onDragOver={(e) => onDragOver(e, cat.id)}
-            onDragLeave={() => setDragOverId(null)}
-            onDrop={(e) => onDrop(e, cat.id)}
-            onDragEnd={() => setDragOverId(null)}
           >
-            <span className="cat-grip" title="ドラッグで並び替え">⠿</span>
+            <span
+              className="cat-grip"
+              style={{ touchAction: 'none', cursor: catDrag?.fromId === cat.id ? 'grabbing' : 'grab' }}
+              onPointerDown={(e) => onGripPointerDown(e, cat.id)}
+              onPointerMove={onGripPointerMove}
+              onPointerUp={onGripPointerUp}
+              onPointerCancel={() => setCatDrag(null)}
+              title="ドラッグで並び替え"
+            >⠿</span>
             <span className="cat-dot" style={{ background: cat.color }} />
             {editing === cat.id ? (
               <input

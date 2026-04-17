@@ -81,4 +81,5 @@ export interface AppSettings {
   feature_priority: boolean;
   active_group_id: string | null;
   deadline_warn_days: number;
+  priority_mode: 'hml' | 'abc'; // 'hml' = 高中低, 'abc' = ABC
 }

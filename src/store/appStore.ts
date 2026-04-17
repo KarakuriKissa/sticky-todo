@@ -61,6 +61,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   feature_priority: true,
   active_group_id: null,
   deadline_warn_days: 3,
+  priority_mode: 'hml' as const,
 };
 
 function now() {

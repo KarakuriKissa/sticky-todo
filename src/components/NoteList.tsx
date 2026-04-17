@@ -1,4 +1,5 @@
-import { useState, DragEvent } from 'react';
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/appStore';
 import type { Note } from '../types';
 
@@ -14,9 +15,15 @@ export function NoteList({ onNew }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Note | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [dragPos, setDragPos] = useState<'before' | 'after'>('after');
-  const [dragSrcId, setDragSrcId] = useState<string | null>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [noteCtx, setNoteCtx] = useState<{ note: Note; x: number; y: number } | null>(null);
+
+  // Pointer-based drag state
+  const [noteDrag, setNoteDrag] = useState<{
+    fromId: string;
+    overItemId: string | null;
+    overPos: 'before' | 'after';
+  } | null>(null);
 
   const catName = (id: string | null) => {
     if (!id) return '';
@@ -36,39 +43,46 @@ export function NoteList({ onNew }: Props) {
     setEditingId(null);
   };
 
-  // ── Drag & Drop ─────────────────────────────────────────────────────────────
-  const onDragStart = (e: DragEvent, note: Note) => {
-    if (note.locked) { e.preventDefault(); return; }
-    e.dataTransfer.setData('text/plain', note.id);
-    e.dataTransfer.effectAllowed = 'move';
-    setDragSrcId(note.id);
+  // ── Pointer-based Drag & Drop ────────────────────────────────────────────────
+  const onGripPointerDown = (e: React.PointerEvent<HTMLSpanElement>, note: Note) => {
+    if (note.locked) return;
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    e.stopPropagation();
+    setNoteDrag({ fromId: note.id, overItemId: null, overPos: 'after' });
   };
 
-  const onDragOver = (e: DragEvent, note: Note) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    setDragOverId(note.id);
-    setDragPos(e.clientY < mid ? 'before' : 'after');
+  const onGripPointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
+    if (!noteDrag) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const cardEl = el?.closest('[data-note-id]') as HTMLElement | null;
+    if (cardEl?.dataset.noteId && cardEl.dataset.noteId !== noteDrag.fromId) {
+      const rect = cardEl.getBoundingClientRect();
+      const pos = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+      setNoteDrag(d => d ? { ...d, overItemId: cardEl.dataset.noteId!, overPos: pos } : d);
+    }
   };
 
-  const onDrop = (e: DragEvent, toNote: Note) => {
-    e.preventDefault();
-    const fromId = e.dataTransfer.getData('text/plain');
-    setDragOverId(null);
-    setDragSrcId(null);
-    if (!fromId || fromId === toNote.id) return;
-    const ids = notes.map((n) => n.id);
-    const fromIdx = ids.indexOf(fromId);
-    const toIdx = ids.indexOf(toNote.id);
-    if (fromIdx === -1 || toIdx === -1) return;
-    const newIds = [...ids];
-    newIds.splice(fromIdx, 1);
-    const insertAt = dragPos === 'before' ? newIds.indexOf(toNote.id) : newIds.indexOf(toNote.id) + 1;
-    newIds.splice(insertAt, 0, fromId);
-    reorderNotes(newIds);
+  const onGripPointerUp = () => {
+    if (noteDrag?.overItemId) {
+      const ids = notes.map(n => n.id);
+      const fromIdx = ids.indexOf(noteDrag.fromId);
+      const newIds = [...ids];
+      newIds.splice(fromIdx, 1);
+      const toIdx = newIds.indexOf(noteDrag.overItemId);
+      const insertAt = noteDrag.overPos === 'before' ? toIdx : toIdx + 1;
+      newIds.splice(insertAt, 0, noteDrag.fromId);
+      reorderNotes(newIds);
+    }
+    setNoteDrag(null);
   };
+
+  // Click-away handler for context menu
+  useEffect(() => {
+    if (!noteCtx) return;
+    const handler = () => setNoteCtx(null);
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  }, [noteCtx]);
 
   return (
     <div className="note-list">
@@ -81,19 +95,28 @@ export function NoteList({ onNew }: Props) {
       {notes.map((note) => (
         <div
           key={note.id}
-          className={`note-card${dragOverId === note.id ? ` drag-${dragPos}` : ''}${dragSrcId === note.id ? ' dragging' : ''}`}
+          data-note-id={note.id}
+          className={`note-card${noteDrag?.overItemId === note.id ? ` drag-${noteDrag.overPos}` : ''}${noteDrag?.fromId === note.id ? ' dragging' : ''}${selectedNoteId === note.id ? ' selected' : ''}`}
           style={{ borderLeft: `4px solid ${note.color}` }}
-          draggable={!note.locked}
-          onDragStart={(e) => onDragStart(e, note)}
-          onDragOver={(e) => onDragOver(e, note)}
-          onDragLeave={() => setDragOverId(null)}
-          onDrop={(e) => onDrop(e, note)}
-          onDragEnd={() => { setDragOverId(null); setDragSrcId(null); }}
+          onClick={() => setSelectedNoteId(note.id)}
           onDoubleClick={() => openNote(note)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setNoteCtx({ note, x: e.clientX, y: e.clientY });
+          }}
         >
           {/* Drag handle */}
           {!note.locked && (
-            <span className="note-card-grip" title="ドラッグで並び替え">⠿</span>
+            <span
+              className="note-card-grip"
+              style={{ touchAction: 'none', cursor: noteDrag?.fromId === note.id ? 'grabbing' : 'grab' }}
+              onPointerDown={(e) => onGripPointerDown(e, note)}
+              onPointerMove={onGripPointerMove}
+              onPointerUp={onGripPointerUp}
+              onPointerCancel={() => setNoteDrag(null)}
+              title="ドラッグで並び替え"
+            >⠿</span>
           )}
           {note.locked && (
             <span className="note-card-grip locked" title="ロック中">🔒</span>
@@ -177,6 +200,35 @@ export function NoteList({ onNew }: Props) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Note card context menu */}
+      {noteCtx && (
+        <div
+          className="context-menu"
+          style={{ position: 'fixed', left: noteCtx.x, top: noteCtx.y, zIndex: 1000 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="context-menu-item"
+            onClick={() => {
+              invoke('close_note_window', { noteId: noteCtx.note.id }).catch(() => {});
+              setNoteCtx(null);
+            }}
+          >
+            <span className="ctx-icon">✕</span> リストを閉じる
+          </button>
+          <div className="context-menu-sep" />
+          <button
+            className="context-menu-item danger"
+            onClick={() => {
+              setDeleteTarget(noteCtx.note);
+              setNoteCtx(null);
+            }}
+          >
+            <span className="ctx-icon">🗑</span> リストの削除
+          </button>
         </div>
       )}
     </div>

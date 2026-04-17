@@ -149,7 +149,7 @@ export function Launcher() {
 }
 
 // ── Settings Modal ────────────────────────────────────────────────────────────
-type SettingsTab = 'statuses' | 'assignees' | 'language' | 'sync';
+type SettingsTab = 'statuses' | 'deadline' | 'assignees' | 'language' | 'sync' | 'advanced';
 
 function SettingsModal({
   settings,
@@ -216,9 +216,11 @@ function SettingsModal({
 
   const TABS: { id: SettingsTab; label: string }[] = [
     { id: 'statuses',  label: 'ステータス' },
+    { id: 'deadline',  label: '期日警告' },
     { id: 'assignees', label: '担当者' },
     { id: 'language',  label: '言語' },
     { id: 'sync',      label: '同期' },
+    { id: 'advanced',  label: '詳細設定' },
   ];
 
   return (
@@ -265,8 +267,16 @@ function SettingsModal({
               <input type="color" value={newStatusColor} onChange={(e) => setNewStatusColor(e.target.value)} />
               <button className="btn-primary" onClick={addStatus}>追加</button>
             </div>
+          </section>
+        )}
 
-            <h3 style={{ marginTop: 20 }}>期日警告（グローバル）</h3>
+        {/* ── Deadline tab ── */}
+        {tab === 'deadline' && (
+          <section>
+            <h3>期日警告（グローバル設定）</h3>
+            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>
+              期日が近いタスクに警告色を表示します。各リストで個別に上書き可能です。
+            </p>
             <label className="toggle-row" style={{ gap: 6 }}>
               期限の
               <input
@@ -284,12 +294,12 @@ function SettingsModal({
         {/* ── Assignee tab ── */}
         {tab === 'assignees' && (
           <section>
-            <h3>担当者グループと メンバー</h3>
+            <h3>担当者グループとメンバー</h3>
             <div className="assignee-split">
               {/* LEFT: group list */}
-              <div className="assignee-left">
-                <div className="assignee-left-header">グループ</div>
-                <div className="assignee-group-list">
+              <div className="assignee-col">
+                <div className="assignee-col-header">グループ</div>
+                <div className="assignee-col-list">
                   {assigneeGroups.map((g) => (
                     <div
                       key={g.id}
@@ -302,16 +312,16 @@ function SettingsModal({
                         style={{ fontSize: 11 }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`グループ「${g.name}」を削除しますか？`)) {
+                          if (window.confirm(`グループ「${g.name}」を削除しますか？`)) {
                             deleteAssigneeGroup(g.id);
-                            if (selectedGroupId === g.id) setSelectedGroupId(assigneeGroups[0]?.id ?? '');
+                            if (selectedGroupId === g.id) setSelectedGroupId(assigneeGroups.filter(x => x.id !== g.id)[0]?.id ?? '');
                           }
                         }}
                       >×</button>
                     </div>
                   ))}
                 </div>
-                <div className="assignee-add-group">
+                <div className="assignee-col-add">
                   <input
                     value={newGroupName}
                     onChange={(e) => setNewGroupName(e.target.value)}
@@ -319,43 +329,47 @@ function SettingsModal({
                     className="assignee-input"
                     onKeyDown={(e) => e.key === 'Enter' && addGroup()}
                   />
-                  <button className="btn-primary" onClick={addGroup} style={{ fontSize: 12, padding: '3px 8px' }}>追加</button>
+                  <button className="btn-primary" onClick={addGroup} style={{ fontSize: 12, padding: '3px 10px', flexShrink: 0 }}>追加</button>
                 </div>
               </div>
 
               {/* RIGHT: member list */}
-              <div className="assignee-right">
-                <div className="assignee-right-header">
+              <div className="assignee-col">
+                <div className="assignee-col-header">
                   {selectedGroupId
                     ? `${assigneeGroups.find((g) => g.id === selectedGroupId)?.name ?? ''} のメンバー`
                     : 'グループを選択'}
                 </div>
-                {selectedGroupId && (
+                {selectedGroupId ? (
                   <>
-                    <div className="status-list">
+                    <div className="assignee-col-list">
                       {groupPersons.map((p) => (
-                        <div key={p.id} className="status-row">
+                        <div key={p.id} className="assignee-group-item">
                           <span className="status-dot" style={{ background: p.color }} />
                           <span style={{ flex: 1 }}>{p.name}</span>
                           <button className="btn-icon" style={{ fontSize: 11 }} onClick={() => deleteAssigneePerson(p.id)}>×</button>
                         </div>
                       ))}
                       {groupPersons.length === 0 && (
-                        <div style={{ color: 'var(--muted)', fontSize: 12, padding: 4 }}>メンバーなし</div>
+                        <div style={{ color: 'var(--muted)', fontSize: 12, padding: '8px 10px' }}>メンバーなし</div>
                       )}
                     </div>
-                    <div className="status-add-row" style={{ marginTop: 8 }}>
+                    <div className="assignee-col-add">
                       <input
                         value={newPersonName}
                         onChange={(e) => setNewPersonName(e.target.value)}
                         placeholder="メンバー名"
+                        className="assignee-input"
                         onKeyDown={(e) => e.key === 'Enter' && addPerson()}
                       />
-                      <input type="color" value={newPersonColor} onChange={(e) => setNewPersonColor(e.target.value)} />
-                      <button className="btn-primary" onClick={addPerson}>追加</button>
+                      <input type="color" value={newPersonColor} onChange={(e) => setNewPersonColor(e.target.value)} style={{ width: 32, height: 28, cursor: 'pointer', border: 'none', borderRadius: 4, flexShrink: 0 }} />
+                      <button className="btn-primary" onClick={addPerson} style={{ fontSize: 12, padding: '3px 10px', flexShrink: 0 }}>追加</button>
                     </div>
-
                   </>
+                ) : (
+                  <div className="assignee-col-list" style={{ color: 'var(--muted)', fontSize: 12, padding: '8px 10px' }}>
+                    グループを選択してください
+                  </div>
                 )}
               </div>
             </div>
@@ -390,13 +404,32 @@ function SettingsModal({
                 • 複数デバイス間でのリスト共有<br />
                 • チームメンバーとのリアルタイム同期
               </p>
-              <p style={{ marginTop: 12, fontSize: 12 }}>
-                データは現在ローカルに保存されています。<br />
-                場所: <code style={{ fontSize: 11, background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>
-                  %APPDATA%\sticky-todo\sticky-todo.db
-                </code>
-              </p>
             </div>
+          </section>
+        )}
+
+        {/* ── Advanced tab ── */}
+        {tab === 'advanced' && (
+          <section>
+            <h3>データベース</h3>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
+              すべてのデータはローカルのSQLiteデータベースに保存されています。
+            </p>
+            <div className="db-path-box">
+              <code className="db-path-text">%APPDATA%\com.stickytodo.app\sticky-todo.db</code>
+              <button
+                className="btn-secondary"
+                style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}
+                onClick={() => {
+                  const path = `${String.fromCharCode(37)}APPDATA${String.fromCharCode(37)}\\com.stickytodo.app\\sticky-todo.db`;
+                  navigator.clipboard.writeText(path).catch(() => {});
+                }}
+                title="パスをコピー"
+              >📋 コピー</button>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12, lineHeight: 1.6 }}>
+              データを完全にリセットするにはこのファイルを削除してください。
+            </p>
           </section>
         )}
 
