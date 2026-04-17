@@ -822,7 +822,21 @@ ul { list-style: none; }
   overflow-y: auto;
   box-shadow: var(--shadow);
 }
-.settings-modal { width: 600px; max-width: 96vw; }
+/* Settings modal: fixed height, flex column so content scrolls without resizing */
+.settings-modal {
+  width: 600px;
+  max-width: 96vw;
+  height: 540px;
+  max-height: 90vh;
+  overflow-y: visible; /* override .modal scroll — body handles it */
+  display: flex;
+  flex-direction: column;
+}
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0; /* allow flex child to shrink */
+}
 .modal h2 { margin-bottom: 12px; font-size: 16px; }
 .modal h3 {
   font-size: 11px;
@@ -838,6 +852,7 @@ ul { list-style: none; }
   margin-top: 20px;
   border-top: 1px solid var(--border);
   padding-top: 16px;
+  flex-shrink: 0;
 }
 
 /* Confirm modal */

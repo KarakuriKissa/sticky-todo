@@ -324,7 +324,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       result = result.filter((n) => n.title.toLowerCase().includes(q));
     }
     // Normalize legacy 'name' sort mode to 'name_asc'
-    const mode = (settings.sort_mode === 'name' ? 'name_asc' : settings.sort_mode) as SortMode;
+    const mode = ((settings.sort_mode as string) === 'name' ? 'name_asc' : settings.sort_mode) as SortMode;
     return sorted(result, mode, categories);
   },
 }));
