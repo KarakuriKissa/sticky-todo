@@ -1,8 +1,62 @@
-import { useRef, KeyboardEvent, useState, MouseEvent } from 'react';
+import { useRef, KeyboardEvent, useState, MouseEvent, useLayoutEffect, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { TodoItem as Item, Status } from '../types';
 import { useNoteStore } from '../store/noteStore';
 import { useAppStore } from '../store/appStore';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
+
+// ── FloatingDropdown ──────────────────────────────────────────────────────────
+// Renders via React portal into document.body so parent overflow never clips it.
+// Pattern: trigger uses onMouseDown+stopPropagation to toggle; dropdown stops its
+// own onMouseDown so document handler only fires for true outside-clicks.
+function FloatingDropdown({
+  anchor,
+  onClose,
+  children,
+}: {
+  anchor: DOMRect;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x: anchor.left, y: anchor.bottom + 2 });
+
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = anchor.left;
+    let y = anchor.bottom + 2;
+    if (y + rect.height > vh - 4) y = Math.max(4, anchor.top - rect.height - 2);
+    if (x + rect.width > vw - 4) x = Math.max(4, vw - rect.width - 4);
+    setPos({ x, y });
+  }, [anchor.left, anchor.bottom, anchor.top]);
+
+  // Close when mousedown happens outside this dropdown.
+  // Trigger spans call stopPropagation on their own onMouseDown, so they don't
+  // reach this handler — preventing the close→reopen toggle glitch.
+  useEffect(() => {
+    const handler = (e: globalThis.MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="floating-dropdown"
+      style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999 }}
+      onMouseDown={(e) => e.stopPropagation()} // don't let inside-clicks reach document
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
 
 interface Props {
   item: Item;
@@ -388,12 +442,6 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           onMouseDown={(e) => e.stopPropagation()}
           placeholder="見出し"
         />
-        <div className="todo-item-hover-actions">
-          <button className="btn-icon" tabIndex={-1} onClick={() => toggleLock(item.id)} title={item.locked ? 'ロック解除' : 'ロック'}>
-            {item.locked ? '🔓' : '🔒'}
-          </button>
-          <button className="btn-icon danger" tabIndex={-1} onClick={() => deleteItem(item.id)} title="削除">×</button>
-        </div>
         {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems} onClose={() => setCtx(null)} />}
       </div>
     );
@@ -525,35 +573,6 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         )}
       </div>
 
-      {/* Hover actions */}
-      <div className="todo-item-hover-actions">
-        <button
-          className={`btn-icon${item.bold ? ' active' : ''}`}
-          tabIndex={-1}
-          title="太字 (Ctrl+B)"
-          onClick={(e) => { e.stopPropagation(); toggleBold(item.id); }}
-          style={{ fontWeight: 800, fontSize: 12 }}
-        >B</button>
-        <button
-          className={`btn-icon${item.locked ? ' active' : ''}`}
-          tabIndex={-1}
-          title={item.locked ? 'ロック解除' : 'ロック'}
-          onClick={(e) => { e.stopPropagation(); toggleLock(item.id); }}
-        >{item.locked ? '🔓' : '🔒'}</button>
-        <button
-          className="btn-icon"
-          tabIndex={-1}
-          title="複製"
-          onClick={(e) => { e.stopPropagation(); duplicateItem(item.id); }}
-        >📋</button>
-        <button
-          className="btn-icon danger"
-          tabIndex={-1}
-          title="削除"
-          onClick={(e) => { e.stopPropagation(); if (!item.locked) deleteItem(item.id); }}
-        >×</button>
-      </div>
-
       {/* Context menu */}
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems} onClose={() => setCtx(null)} />}
 
@@ -596,45 +615,33 @@ function StatusBadge({
   allStatuses: Status[];
   onSelect: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [above, setAbove] = useState(false);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const btnRef = useRef<HTMLSpanElement>(null);
 
-  const openPicker = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      setAbove(rect.top > window.innerHeight * 0.5);
-    }
-    setOpen((o) => !o);
-  };
-
   return (
-    <div className="status-badge-wrap" onMouseLeave={() => setOpen(false)}>
-      <span
-        ref={btnRef}
-        className="status-badge"
-        style={{ background: status.color }}
-        onClick={openPicker}
-      >
-        {status.name}
-      </span>
-      {open && (
-        <div className="status-dropdown" style={above ? { bottom: '100%', top: 'auto' } : {}}>
-          <div className="status-option" onClick={(e) => { e.stopPropagation(); onSelect(''); setOpen(false); }}>（なし）</div>
+    <span
+      ref={btnRef}
+      className="status-badge"
+      style={{ background: status.color }}
+      onMouseDown={(e) => { e.stopPropagation(); setAnchor((a) => a ? null : btnRef.current?.getBoundingClientRect() ?? null); }}
+    >
+      {status.name}
+      {anchor && (
+        <FloatingDropdown anchor={anchor} onClose={() => setAnchor(null)}>
+          <div className="status-option" onClick={() => { onSelect(''); setAnchor(null); }}>（なし）</div>
           {allStatuses.map((s) => (
             <div
               key={s.id}
               className="status-option"
               style={{ borderLeft: `3px solid ${s.color}` }}
-              onClick={(e) => { e.stopPropagation(); onSelect(s.id); setOpen(false); }}
+              onClick={() => { onSelect(s.id); setAnchor(null); }}
             >
               {s.name}
             </div>
           ))}
-        </div>
+        </FloatingDropdown>
       )}
-    </div>
+    </span>
   );
 }
 
@@ -651,35 +658,35 @@ const PRIORITIES_ABC = [
 ];
 
 function PriorityBadge({ priority, onSelect, mode = 'hml' }: { priority: string; onSelect: (p: string | null) => void; mode?: 'hml' | 'abc' }) {
-  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLSpanElement>(null);
   const PRIORITIES = mode === 'abc' ? PRIORITIES_ABC : PRIORITIES_HML;
   const p = PRIORITIES.find((x) => x.value === priority);
   if (!p) return null;
   return (
-    <div className="status-badge-wrap">
-      <span
-        className="priority-badge"
-        style={{ background: p.color }}
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
-      >
-        {p.label}
-      </span>
-      {open && (
-        <div className="status-dropdown">
-          <div className="status-option" onClick={(e) => { e.stopPropagation(); onSelect(null); setOpen(false); }}>（なし）</div>
+    <span
+      ref={btnRef}
+      className="priority-badge"
+      style={{ background: p.color }}
+      onMouseDown={(e) => { e.stopPropagation(); setAnchor((a) => a ? null : btnRef.current?.getBoundingClientRect() ?? null); }}
+    >
+      {p.label}
+      {anchor && (
+        <FloatingDropdown anchor={anchor} onClose={() => setAnchor(null)}>
+          <div className="status-option" onClick={() => { onSelect(null); setAnchor(null); }}>（なし）</div>
           {PRIORITIES.map((px) => (
             <div
               key={px.value}
               className="status-option"
               style={{ borderLeft: `3px solid ${px.color}` }}
-              onClick={(e) => { e.stopPropagation(); onSelect(px.value); setOpen(false); }}
+              onClick={() => { onSelect(px.value); setAnchor(null); }}
             >
               {px.label}
             </div>
           ))}
-        </div>
+        </FloatingDropdown>
       )}
-    </div>
+    </span>
   );
 }
 
@@ -693,45 +700,33 @@ function AssigneeBadge({
   persons: { id: string; name: string; color: string }[];
   onSelect: (id: string | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [above, setAbove] = useState(false);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const btnRef = useRef<HTMLSpanElement>(null);
 
-  const openPicker = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      setAbove(rect.top > window.innerHeight * 0.5);
-    }
-    setOpen((o) => !o);
-  };
-
   return (
-    <div className="status-badge-wrap" onMouseLeave={() => setOpen(false)}>
-      <span
-        ref={btnRef}
-        className="assignee-badge"
-        style={{ borderColor: person.color, cursor: 'pointer' }}
-        onClick={openPicker}
-      >
-        {person.name}
-      </span>
-      {open && (
-        <div className="status-dropdown" style={above ? { bottom: '100%', top: 'auto' } : {}}>
-          <div className="status-option" onClick={(e) => { e.stopPropagation(); onSelect(null); setOpen(false); }}>（なし）</div>
+    <span
+      ref={btnRef}
+      className="assignee-badge"
+      style={{ borderColor: person.color, cursor: 'pointer' }}
+      onMouseDown={(e) => { e.stopPropagation(); setAnchor((a) => a ? null : btnRef.current?.getBoundingClientRect() ?? null); }}
+    >
+      {person.name}
+      {anchor && (
+        <FloatingDropdown anchor={anchor} onClose={() => setAnchor(null)}>
+          <div className="status-option" onClick={() => { onSelect(null); setAnchor(null); }}>（なし）</div>
           {persons.map((p) => (
             <div
               key={p.id}
               className="status-option"
               style={{ borderLeft: `3px solid ${p.color}` }}
-              onClick={(e) => { e.stopPropagation(); onSelect(p.id); setOpen(false); }}
+              onClick={() => { onSelect(p.id); setAnchor(null); }}
             >
               {p.name}
             </div>
           ))}
-        </div>
+        </FloatingDropdown>
       )}
-    </div>
+    </span>
   );
 }
 
@@ -788,45 +783,33 @@ function InlineStatusPicker({
   statuses: Status[];
   onSelect: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [above, setAbove] = useState(false);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const btnRef = useRef<HTMLSpanElement>(null);
-
-  const openPicker = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      setAbove(rect.top > window.innerHeight * 0.5);
-    }
-    setOpen((o) => !o);
-  };
 
   if (statuses.length === 0) return null;
   return (
-    <div className="status-badge-wrap inline-add" onMouseLeave={() => setOpen(false)}>
-      <span
-        ref={btnRef}
-        className="inline-add-btn"
-        onClick={openPicker}
-        title="ステータスを設定"
-      >
-        ST＋
-      </span>
-      {open && (
-        <div className="status-dropdown" style={above ? { bottom: '100%', top: 'auto' } : {}}>
+    <span
+      ref={btnRef}
+      className="inline-add-btn"
+      title="ステータスを設定"
+      onMouseDown={(e) => { e.stopPropagation(); setAnchor((a) => a ? null : btnRef.current?.getBoundingClientRect() ?? null); }}
+    >
+      ST＋
+      {anchor && (
+        <FloatingDropdown anchor={anchor} onClose={() => setAnchor(null)}>
           {statuses.map((s) => (
             <div
               key={s.id}
               className="status-option"
               style={{ borderLeft: `3px solid ${s.color}` }}
-              onClick={(e) => { e.stopPropagation(); onSelect(s.id); setOpen(false); }}
+              onClick={() => { onSelect(s.id); setAnchor(null); }}
             >
               {s.name}
             </div>
           ))}
-        </div>
+        </FloatingDropdown>
       )}
-    </div>
+    </span>
   );
 }
 
@@ -838,45 +821,33 @@ function InlineAssigneePicker({
   persons: { id: string; name: string; color: string }[];
   onSelect: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [above, setAbove] = useState(false);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const btnRef = useRef<HTMLSpanElement>(null);
-
-  const openPicker = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      setAbove(rect.top > window.innerHeight * 0.5);
-    }
-    setOpen((o) => !o);
-  };
 
   if (persons.length === 0) return null;
   return (
-    <div className="status-badge-wrap inline-add" onMouseLeave={() => setOpen(false)}>
-      <span
-        ref={btnRef}
-        className="inline-add-btn"
-        onClick={openPicker}
-        title="担当者を設定"
-      >
-        👤＋
-      </span>
-      {open && (
-        <div className="status-dropdown" style={above ? { bottom: '100%', top: 'auto' } : {}}>
+    <span
+      ref={btnRef}
+      className="inline-add-btn"
+      title="担当者を設定"
+      onMouseDown={(e) => { e.stopPropagation(); setAnchor((a) => a ? null : btnRef.current?.getBoundingClientRect() ?? null); }}
+    >
+      👤＋
+      {anchor && (
+        <FloatingDropdown anchor={anchor} onClose={() => setAnchor(null)}>
           {persons.map((p) => (
             <div
               key={p.id}
               className="status-option"
               style={{ borderLeft: `3px solid ${p.color}` }}
-              onClick={(e) => { e.stopPropagation(); onSelect(p.id); setOpen(false); }}
+              onClick={() => { onSelect(p.id); setAnchor(null); }}
             >
               {p.name}
             </div>
           ))}
-        </div>
+        </FloatingDropdown>
       )}
-    </div>
+    </span>
   );
 }
 

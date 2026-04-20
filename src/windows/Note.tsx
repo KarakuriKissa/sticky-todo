@@ -158,8 +158,9 @@ export function NoteWindow({ noteId }: Props) {
       await trackWindowClose(noteId);
     } catch (e) {
       console.error(e);
+    } finally {
+      appWin.destroy();
     }
-    appWin.destroy();
   };
 
   const togglePin = async () => {

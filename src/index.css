@@ -503,7 +503,16 @@ ul { list-style: none; }
   transition: background .1s;
 }
 .todo-item:hover { background: rgba(0,0,0,.06); }
-.todo-item.selected { background: rgba(99,102,241,.14); }
+.todo-item.selected {
+  background: rgba(99,102,241,.14);
+  outline: 1.5px solid rgba(99,102,241,.55);
+  outline-offset: -1px;
+  border-radius: 3px;
+}
+.todo-heading.selected {
+  outline: 1.5px solid rgba(99,102,241,.55);
+  outline-offset: -1px;
+}
 .todo-item.drag-before { border-top: 2px solid #6366f1; }
 .todo-item.drag-after  { border-bottom: 2px solid #6366f1; }
 
@@ -626,16 +635,26 @@ ul { list-style: none; }
   white-space: nowrap;
   font-weight: 700;
 }
+/* Toolbar-level dropdowns (still absolute, inside relative containers in the toolbar) */
 .status-dropdown {
   position: absolute;
-  bottom: 22px;
-  right: 0;
+  top: 100%;
+  left: 0;
   background: #fff;
   border: 1px solid #ddd;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   z-index: 200;
   min-width: 120px;
+  overflow: hidden;
+}
+/* Portal-based floating dropdown — renders into document.body at fixed coords */
+.floating-dropdown {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0,0,0,.22);
+  min-width: 130px;
   overflow: hidden;
 }
 .status-option {
