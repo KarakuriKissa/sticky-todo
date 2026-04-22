@@ -23,12 +23,11 @@ export function NoteWindow({ noteId }: Props) {
   const { notes, updateNote, statuses, assigneeGroups, assigneePersons, settings, trackWindowClose } = useAppStore();
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showStatusPicker, setShowStatusPicker] = useState(false);
-  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showPriorityPicker, setShowPriorityPicker] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [priorityMode, setPriorityMode] = useState<'hml' | 'abc'>('hml');
   const [titleDraft, setTitleDraft] = useState('');
+  const [activeGroupId, setActiveGroupId] = useState<string>('');
   const titleInputRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
   const closingRef = useRef(false);
@@ -47,6 +46,13 @@ export function NoteWindow({ noteId }: Props) {
     }
     load(noteId);
   }, [noteId]);
+
+  // Initialize activeGroupId once groups are available
+  useEffect(() => {
+    if (!activeGroupId && assigneeGroups.length > 0) {
+      setActiveGroupId(settings.active_group_id ?? assigneeGroups[0].id);
+    }
+  }, [assigneeGroups]);
 
   // Sync title/color from appStore when another window changes them
   useEffect(() => {
@@ -127,8 +133,6 @@ export function NoteWindow({ noteId }: Props) {
         clearSelection();
         setSearchQuery('');
         setShowColorPicker(false);
-        setShowStatusPicker(false);
-        setShowAssigneePicker(false);
         setShowPriorityPicker(false);
       }
     };
@@ -241,12 +245,9 @@ export function NoteWindow({ noteId }: Props) {
     useNoteStore.getState().updateItem(id, { item_type: type });
   };
 
-  // Assignee group
-  const activeGroup = settings.active_group_id
-    ? assigneeGroups.find((g) => g.id === settings.active_group_id)
-    : assigneeGroups[0];
-  const groupPersons = activeGroup
-    ? assigneePersons.filter((p) => p.group_id === activeGroup.id)
+  // Assignee group — driven by local activeGroupId state (per-window selector)
+  const groupPersons = activeGroupId
+    ? assigneePersons.filter((p) => p.group_id === activeGroupId)
     : [];
 
   const selCount = selectedIds.size;
@@ -264,8 +265,6 @@ export function NoteWindow({ noteId }: Props) {
       style={{ background: noteColor }}
       onClick={() => {
         setShowColorPicker(false);
-        setShowStatusPicker(false);
-        setShowAssigneePicker(false);
         setShowPriorityPicker(false);
       }}
     >
@@ -352,40 +351,19 @@ export function NoteWindow({ noteId }: Props) {
           title="アウトデント (Shift+Tab)"
         >←</button>
 
-        {/* Status for selection */}
-        {settings.feature_status && selCount > 0 && (
-          <div style={{ position: 'relative' }}>
-            <button className="type-btn active-feature" onClick={(e) => { e.stopPropagation(); setShowStatusPicker((o) => !o); }}>ST</button>
-            {showStatusPicker && (
-              <div className="status-dropdown" style={{ top: '100%', left: 0, bottom: 'auto' }} onClick={(e) => e.stopPropagation()}>
-                <div className="status-option" onClick={() => { applyToSelected({ status: null }); setShowStatusPicker(false); }}>（なし）</div>
-                {statuses.map((s) => (
-                  <div key={s.id} className="status-option" style={{ borderLeft: `3px solid ${s.color}` }}
-                    onClick={() => { applyToSelected({ status: s.id }); setShowStatusPicker(false); }}>
-                    {s.name}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Assignee for selection */}
-        {settings.feature_assignee && selCount > 0 && groupPersons.length > 0 && (
-          <div style={{ position: 'relative' }}>
-            <button className="type-btn active-feature" onClick={(e) => { e.stopPropagation(); setShowAssigneePicker((o) => !o); }}>👤</button>
-            {showAssigneePicker && (
-              <div className="status-dropdown" style={{ top: '100%', left: 0, bottom: 'auto' }} onClick={(e) => e.stopPropagation()}>
-                <div className="status-option" onClick={() => { applyToSelected({ assignee_person_id: null }); setShowAssigneePicker(false); }}>（なし）</div>
-                {groupPersons.map((p) => (
-                  <div key={p.id} className="status-option" style={{ borderLeft: `3px solid ${p.color}` }}
-                    onClick={() => { applyToSelected({ assignee_person_id: p.id }); setShowAssigneePicker(false); }}>
-                    {p.name}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Group selector — choose which assignee group is shown in task badges */}
+        {settings.feature_assignee && assigneeGroups.length > 0 && (
+          <select
+            className="group-selector"
+            value={activeGroupId}
+            onChange={(e) => setActiveGroupId(e.target.value)}
+            title="担当者グループ"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {assigneeGroups.map((g) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
         )}
 
         {/* Priority for selection */}
@@ -480,6 +458,7 @@ export function NoteWindow({ noteId }: Props) {
             allItems={items}
             warnDays={warnDays}
             priorityMode={priorityMode}
+            activeGroupId={activeGroupId}
           />
         ))}
       </div>

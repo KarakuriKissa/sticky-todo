@@ -49,8 +49,9 @@ function FloatingDropdown({
       ref={ref}
       className="floating-dropdown"
       style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999 }}
-      onMouseDown={(e) => e.stopPropagation()} // don't let inside-clicks reach document
+      onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
+      onMouseLeave={onClose}
     >
       {children}
     </div>,
@@ -64,9 +65,10 @@ interface Props {
   allItems: Item[];
   warnDays: number;
   priorityMode?: 'hml' | 'abc';
+  activeGroupId?: string;
 }
 
-export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMode }: Props) {
+export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMode, activeGroupId }: Props) {
   const {
     updateItem, deleteItem, toggleCheck, toggleBold, toggleLock, toggleCollapse,
     indent, dedent, addItem, selectedIds, toggleSelected, moveItem,
@@ -367,11 +369,11 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     ? assigneePersons.find((p) => p.id === item.assignee_person_id)
     : null;
 
-  // Active group persons for inline pickers
-  const activeGroup = settings.active_group_id
-    ? assigneeGroups.find((g) => g.id === settings.active_group_id)
-    : assigneeGroups[0];
-  const groupPersons = activeGroup ? assigneePersons.filter((p) => p.group_id === activeGroup.id) : [];
+  // Active group persons — use prop activeGroupId if provided, fall back to settings
+  const resolvedGroupId = activeGroupId ?? settings.active_group_id ?? assigneeGroups[0]?.id;
+  const groupPersons = resolvedGroupId
+    ? assigneePersons.filter((p) => p.group_id === resolvedGroupId)
+    : [];
 
   // ── Separator ────────────────────────────────────────────────────────────────
   if (item.item_type === 'separator') {
@@ -520,8 +522,39 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         placeholder={isEditing ? 'タスクを入力…' : ''}
       />
 
-      {/* Badges */}
+      {/* Badges — fixed-width columns: 担当者 | ステータス | 期日 */}
       <div className="todo-badges">
+        {/* ── 担当者 column ── */}
+        {settings.feature_assignee && (
+          <div className="badge-col badge-col-assignee">
+            {assigneePerson
+              ? <AssigneeBadge person={assigneePerson} persons={groupPersons} onSelect={(id) => updateItem(item.id, { assignee_person_id: id || null })} />
+              : groupPersons.length > 0 && <InlineAssigneePicker persons={groupPersons} onSelect={(id) => updateItem(item.id, { assignee_person_id: id || null })} />
+            }
+          </div>
+        )}
+
+        {/* ── ステータス column ── */}
+        {settings.feature_status && (
+          <div className="badge-col badge-col-status">
+            {statusObj
+              ? <StatusBadge status={statusObj} allStatuses={statuses} onSelect={(id) => updateItem(item.id, { status: id || null })} />
+              : statuses.length > 0 && <InlineStatusPicker statuses={statuses} onSelect={(id) => updateItem(item.id, { status: id || null })} />
+            }
+          </div>
+        )}
+
+        {/* ── 期日 column ── */}
+        {settings.feature_date && (
+          <div className="badge-col badge-col-date">
+            {item.limit_date
+              ? <DateBadge date={item.limit_date} isWarn={isWarn} isOverdue={isOverdue} onSelect={(d) => updateItem(item.id, { limit_date: d || null })} />
+              : <InlineDatePicker onSelect={(d) => updateItem(item.id, { limit_date: d || null })} />
+            }
+          </div>
+        )}
+
+        {/* ── Priority (compact, after the main columns) ── */}
         {settings.feature_priority && item.priority && (
           <PriorityBadge
             priority={item.priority}
@@ -530,46 +563,9 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           />
         )}
 
-        {settings.feature_status && statusObj && (
-          <StatusBadge status={statusObj} allStatuses={statuses} onSelect={(id) => updateItem(item.id, { status: id || null })} />
-        )}
-
-        {settings.feature_assignee && assigneePerson && (
-          <AssigneeBadge
-            person={assigneePerson}
-            persons={groupPersons}
-            onSelect={(id) => updateItem(item.id, { assignee_person_id: id || null })}
-          />
-        )}
-
-        {settings.feature_date && item.limit_date && (
-          <DateBadge
-            date={item.limit_date}
-            isWarn={isWarn}
-            isOverdue={isOverdue}
-            onSelect={(d) => updateItem(item.id, { limit_date: d || null })}
-          />
-        )}
-
-        {/* Inline add buttons when values are empty */}
-        {settings.feature_status && !statusObj && (
-          <InlineStatusPicker statuses={statuses} onSelect={(id) => updateItem(item.id, { status: id || null })} />
-        )}
-        {settings.feature_assignee && !assigneePerson && groupPersons.length > 0 && (
-          <InlineAssigneePicker persons={groupPersons} onSelect={(id) => updateItem(item.id, { assignee_person_id: id || null })} />
-        )}
-        {settings.feature_date && !item.limit_date && (
-          <InlineDatePicker onSelect={(d) => updateItem(item.id, { limit_date: d || null })} />
-        )}
-
+        {/* ── Memo indicator ── */}
         {settings.feature_memo && item.memo && (
-          <span
-            className="memo-indicator"
-            title={item.memo}
-            onClick={openComment}
-          >
-            💬
-          </span>
+          <span className="memo-indicator" title={item.memo} onClick={openComment}>💬</span>
         )}
       </div>
 

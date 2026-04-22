@@ -56,7 +56,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
   };
 
   return (
-    <div ref={ref} className="context-menu" style={style}>
+    <div ref={ref} className="context-menu" style={style} onMouseLeave={onClose}>
       {items.map((item, i) =>
         item.separator ? (
           <div key={i} className="context-menu-sep" />
