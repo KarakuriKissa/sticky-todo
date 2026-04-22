@@ -140,33 +140,11 @@ export function NoteWindow({ noteId }: Props) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const close = async () => {
-    // Do NOT gate on closingRef here — if a previous destroy() silently failed,
-    // the user must still be able to retry by clicking close again.
-    // We only set closingRef just before calling destroy() to stop onCloseRequested
-    // from double-processing in case the OS also tries to close the window.
-    try {
-      await flush();
-      if (note) {
-        const pos = await appWin.outerPosition();
-        const size = await appWin.outerSize();
-        const scale = await appWin.scaleFactor();
-        const updated = {
-          ...note,
-          window_x: pos.x / scale,
-          window_y: pos.y / scale,
-          window_width: size.width / scale,
-          window_height: size.height / scale,
-        };
-        updateNote(updated);
-        await invoke('save_note', { note: updated });
-      }
-      await trackWindowClose(noteId);
-    } catch (e) {
-      console.error(e);
-    }
-    closingRef.current = true;  // prevent onCloseRequested from re-running
-    appWin.destroy();
+  const close = () => {
+    // Simply request a close — onCloseRequested handles saving + destroy().
+    // Using appWin.close() (not destroy()) so the onCloseRequested handler
+    // fires and performs the full save-then-destroy sequence.
+    appWin.close();
   };
 
   const togglePin = async () => {

@@ -519,7 +519,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         onChange={(e) => isEditing && !item.locked && updateItem(item.id, { text: e.target.value })}
         onKeyDown={onKeyDown}
         onBlur={exitEdit}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); if (!isEditing) onRowClick(e); }}
         onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
         onMouseDown={(e) => e.stopPropagation()}
         placeholder={isEditing ? 'タスクを入力…' : ''}
