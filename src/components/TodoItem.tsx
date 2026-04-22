@@ -73,6 +73,8 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     updateItem, deleteItem, toggleCheck, toggleBold, toggleLock, toggleCollapse,
     indent, dedent, addItem, selectedIds, toggleSelected, moveItem,
     duplicateItem, setSelected, dragState, startDrag, updateDragOver, endDrag,
+    moveSelectedItems, deleteSelected, duplicateSelected, lockSelected,
+    indentSelected, dedentSelected,
   } = useNoteStore();
   const { statuses, settings, assigneePersons, assigneeGroups } = useAppStore();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -100,7 +102,10 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
   })();
   const isOverdue = !!item.limit_date && new Date(item.limit_date) < new Date();
 
-  // Context menu
+  // Context menu — bulk-aware when right-clicked item is part of a multi-selection
+  const isInSel = selectedIds.has(item.id) && selectedIds.size > 1;
+  const selSuffix = isInSel ? ` (${selectedIds.size}件)` : '';
+
   const ctxItems: ContextMenuItem[] = [
     {
       label: '上に項目を追加',
@@ -115,6 +120,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     {
       label: '下に項目を追加',
       icon: '↓',
+      shortcut: 'Shift+Enter',
       action: () => {
         const newId = addItem(item.id, item.indent);
         setTimeout(() => {
@@ -123,22 +129,56 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
       },
     },
     { label: '', separator: true, action: () => {} },
-    { label: item.bold ? '太字を解除' : '太字', icon: 'B', action: () => toggleBold(item.id) },
-    { label: 'コメント', icon: '💬', action: () => { setMemoText(item.memo ?? ''); setShowMemoEdit(true); } },
+    {
+      label: `${item.bold ? '太字を解除' : '太字'}${selSuffix}`,
+      icon: 'B',
+      shortcut: 'Ctrl+B',
+      action: () => toggleBold(item.id), // toggleBold already handles selectedIds internally
+    },
+    {
+      label: 'コメント',
+      icon: '💬',
+      shortcut: 'Ctrl+M',
+      action: () => { setMemoText(item.memo ?? ''); setShowMemoEdit(true); },
+    },
     { label: '', separator: true, action: () => {} },
     { label: '見出しに変更', icon: 'H', action: () => updateItem(item.id, { item_type: 'heading' }) },
     { label: '通常に変更', icon: '•', action: () => updateItem(item.id, { item_type: 'normal' }) },
     { label: '', separator: true, action: () => {} },
-    { label: 'インデント', icon: '→', action: () => indent(item.id), disabled: item.indent >= 6 || item.locked },
-    { label: 'アウトデント', icon: '←', action: () => dedent(item.id), disabled: item.indent <= 0 || item.locked },
+    {
+      label: `インデント${selSuffix}`,
+      icon: '→',
+      shortcut: 'Tab',
+      action: () => isInSel ? indentSelected() : indent(item.id),
+      disabled: !isInSel && (item.indent >= 6 || item.locked),
+    },
+    {
+      label: `アウトデント${selSuffix}`,
+      icon: '←',
+      shortcut: 'Shift+Tab',
+      action: () => isInSel ? dedentSelected() : dedent(item.id),
+      disabled: !isInSel && (item.indent <= 0 || item.locked),
+    },
     { label: '', separator: true, action: () => {} },
     {
-      label: item.locked ? 'ロック解除' : 'ロック',
+      label: `${item.locked ? 'ロック解除' : 'ロック'}${selSuffix}`,
       icon: item.locked ? '🔓' : '🔒',
-      action: () => toggleLock(item.id),
+      shortcut: 'Ctrl+L',
+      action: () => isInSel ? lockSelected(!item.locked) : toggleLock(item.id),
     },
-    { label: '複製', icon: '📋', action: () => duplicateItem(item.id) },
-    { label: '削除', icon: '🗑', action: () => deleteItem(item.id), danger: true },
+    {
+      label: `複製${selSuffix}`,
+      icon: '📋',
+      shortcut: 'Ctrl+D',
+      action: () => isInSel ? duplicateSelected() : duplicateItem(item.id),
+    },
+    {
+      label: `削除${selSuffix}`,
+      icon: '🗑',
+      shortcut: 'Del',
+      action: () => isInSel ? deleteSelected() : deleteItem(item.id),
+      danger: true,
+    },
   ];
 
   // ── Keyboard ────────────────────────────────────────────────────────────────
@@ -246,7 +286,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
       return;
     }
 
-    // Ctrl+Shift+Arrow = move selected items
+    // Ctrl+Shift+Arrow = move selected items up/down
     if (e.shiftKey && e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
       e.preventDefault();
       if (e.key === 'ArrowUp') useNoteStore.getState().moveSelectedUp();
@@ -254,11 +294,14 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
       return;
     }
 
+    // Enter = enter edit
     if (e.key === 'Enter') {
       e.preventDefault();
       enterEdit();
       return;
     }
+
+    // ArrowUp / ArrowDown = move selection
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       const idx = visibleItems.findIndex((i) => i.id === item.id);
@@ -281,6 +324,53 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           document.querySelector<HTMLDivElement>(`[data-item-id="${next.id}"].todo-item`)?.focus();
         }, 0);
       }
+      return;
+    }
+
+    // Tab / Shift+Tab = indent / dedent
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        isInSel ? dedentSelected() : dedent(item.id);
+      } else {
+        isInSel ? indentSelected() : indent(item.id);
+      }
+      return;
+    }
+
+    // Del = delete
+    if (e.key === 'Delete') {
+      e.preventDefault();
+      isInSel ? deleteSelected() : deleteItem(item.id);
+      return;
+    }
+
+    // Ctrl+B = bold
+    if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+      e.preventDefault();
+      toggleBold(item.id); // toggleBold already applies to selection
+      return;
+    }
+
+    // Ctrl+D = duplicate
+    if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      e.preventDefault();
+      isInSel ? duplicateSelected() : duplicateItem(item.id);
+      return;
+    }
+
+    // Ctrl+L = lock / unlock
+    if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+      e.preventDefault();
+      isInSel ? lockSelected(!item.locked) : toggleLock(item.id);
+      return;
+    }
+
+    // Ctrl+M = open comment
+    if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
+      e.preventDefault();
+      setMemoText(item.memo ?? '');
+      setShowMemoEdit(true);
       return;
     }
   };
@@ -336,7 +426,12 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
 
   const onGripPointerUp = () => {
     if (dragState?.fromId === item.id && dragState.overItemId) {
-      moveItem(dragState.fromId, dragState.overItemId, dragState.overPos);
+      // If the dragged item is part of a multi-selection, move all selected items as a group
+      if (selectedIds.has(item.id) && selectedIds.size > 1) {
+        moveSelectedItems(dragState.overItemId, dragState.overPos);
+      } else {
+        moveItem(dragState.fromId, dragState.overItemId, dragState.overPos);
+      }
     }
     endDrag();
   };

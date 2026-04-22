@@ -7,6 +7,7 @@ export interface ContextMenuItem {
   danger?: boolean;
   separator?: boolean;
   disabled?: boolean;
+  shortcut?: string;
 }
 
 interface Props {
@@ -72,7 +73,8 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
             }}
           >
             {item.icon && <span className="ctx-icon">{item.icon}</span>}
-            {item.label}
+            <span className="ctx-label">{item.label}</span>
+            {item.shortcut && <span className="ctx-shortcut">{item.shortcut}</span>}
           </button>
         ),
       )}

@@ -830,7 +830,7 @@ ul { list-style: none; }
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 28px rgba(0,0,0,.5);
-  min-width: 160px;
+  min-width: 210px;
   overflow: hidden;
   padding: 4px 0;
 }
@@ -853,7 +853,17 @@ ul { list-style: none; }
 .context-menu-item.danger:hover { background: rgba(248,113,113,.1); }
 .context-menu-item.disabled { opacity: .38; cursor: default; }
 .context-menu-item.disabled:hover { background: none; }
-.ctx-icon { font-size: 12px; font-weight: 700; width: 16px; text-align: center; color: var(--muted); }
+.ctx-icon { font-size: 12px; font-weight: 700; width: 16px; text-align: center; color: var(--muted); flex-shrink: 0; }
+.ctx-label { flex: 1; }
+.ctx-shortcut {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+  opacity: .65;
+  white-space: nowrap;
+  padding-left: 12px;
+  font-family: 'Consolas', 'Menlo', monospace;
+}
 .context-menu-sep { height: 1px; background: var(--border); margin: 3px 0; }
 
 /* ── Modal ───────────────────────────────────────────────────────────────── */

@@ -45,6 +45,16 @@ interface NoteStore {
   selectAll: () => void;
   clearSelection: () => void;
 
+  // Move selected items as a group via drag
+  moveSelectedItems: (toId: string, position: 'before' | 'after') => void;
+
+  // Bulk operations on selected items
+  deleteSelected: () => void;
+  duplicateSelected: () => void;
+  lockSelected: (locked: boolean) => void;
+  indentSelected: () => void;
+  dedentSelected: () => void;
+
   // Move selected items up/down
   moveSelectedUp: () => void;
   moveSelectedDown: () => void;
@@ -277,6 +287,102 @@ export const useNoteStore = create<NoteStore>((set, get) => {
           ...rest.slice(insertAt),
         ];
       });
+    },
+
+    moveSelectedItems: (toId: string, position: 'before' | 'after') => {
+      const { selectedIds } = get();
+      if (selectedIds.size <= 1) return;
+      mutate((items) => {
+        // Cannot insert into a target that is itself selected
+        if (selectedIds.has(toId)) return items;
+        // Bail if any selected item is locked
+        if (items.filter((i) => selectedIds.has(i.id)).some((i) => i.locked)) return items;
+        // Selected items in their current order
+        const selected = items.filter((i) => selectedIds.has(i.id));
+        // Remaining (non-selected) items
+        const rest = items.filter((i) => !selectedIds.has(i.id));
+        const toIdx = rest.findIndex((i) => i.id === toId);
+        if (toIdx === -1) return items;
+        const insertAt = position === 'before' ? toIdx : toIdx + 1;
+        return [
+          ...rest.slice(0, insertAt),
+          ...selected.map((i) => ({ ...i, dirty: true })),
+          ...rest.slice(insertAt),
+        ];
+      });
+    },
+
+    deleteSelected: () => {
+      const { selectedIds } = get();
+      if (selectedIds.size === 0) return;
+      mutate((items) => {
+        const idsToRemove = new Set<string>(selectedIds);
+        const collectChildren = (parentId: string) => {
+          items.forEach((i) => {
+            if (i.parent_id === parentId && !idsToRemove.has(i.id)) {
+              idsToRemove.add(i.id);
+              collectChildren(i.id);
+            }
+          });
+        };
+        selectedIds.forEach((id) => collectChildren(id));
+        idsToRemove.forEach((id) => invoke('delete_item', { id }).catch(console.error));
+        return items.filter((i) => !idsToRemove.has(i.id));
+      });
+      set({ selectedIds: new Set() });
+    },
+
+    duplicateSelected: () => {
+      const { selectedIds } = get();
+      if (selectedIds.size === 0) return;
+      mutate((items) => {
+        // Process in descending index order so earlier inserts don't shift later indices
+        const indices = [...selectedIds]
+          .map((id) => items.findIndex((i) => i.id === id))
+          .filter((idx) => idx !== -1)
+          .sort((a, b) => b - a);
+        const result = [...items];
+        for (const idx of indices) {
+          const orig = result[idx];
+          const copy = { ...orig, id: crypto.randomUUID(), locked: false, dirty: true, updated_at: now() };
+          result.splice(idx + 1, 0, copy);
+        }
+        return result;
+      });
+    },
+
+    lockSelected: (locked: boolean) => {
+      const { selectedIds } = get();
+      if (selectedIds.size === 0) return;
+      mutate((items) =>
+        items.map((i) =>
+          selectedIds.has(i.id) ? { ...i, locked, updated_at: now(), dirty: true } : i,
+        ),
+      );
+    },
+
+    indentSelected: () => {
+      const { selectedIds } = get();
+      if (selectedIds.size === 0) return;
+      mutate((items) =>
+        items.map((i) =>
+          selectedIds.has(i.id) && !i.locked && i.indent < 6
+            ? { ...i, indent: i.indent + 1, updated_at: now(), dirty: true }
+            : i,
+        ),
+      );
+    },
+
+    dedentSelected: () => {
+      const { selectedIds } = get();
+      if (selectedIds.size === 0) return;
+      mutate((items) =>
+        items.map((i) =>
+          selectedIds.has(i.id) && !i.locked && i.indent > 0
+            ? { ...i, indent: i.indent - 1, updated_at: now(), dirty: true }
+            : i,
+        ),
+      );
     },
 
     checkSelected: (checked: boolean) => {
