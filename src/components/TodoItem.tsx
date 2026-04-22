@@ -287,7 +287,10 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
 
   // ── Click / Selection ────────────────────────────────────────────────────────
   const onRowClick = (e: MouseEvent) => {
-    if (isEditing) return; // don't interfere while editing
+    if (isEditing) return;
+    // stopPropagation is critical: without it the click bubbles to note-items
+    // which calls clearSelection() and immediately undoes the selection we just set.
+    e.stopPropagation();
     if (e.shiftKey) {
       const visIds = visibleItems.map((i) => i.id);
       const selectedArr = [...selectedIds];

@@ -141,8 +141,10 @@ export function NoteWindow({ noteId }: Props) {
   }, []);
 
   const close = async () => {
-    if (closingRef.current) return;
-    closingRef.current = true;
+    // Do NOT gate on closingRef here — if a previous destroy() silently failed,
+    // the user must still be able to retry by clicking close again.
+    // We only set closingRef just before calling destroy() to stop onCloseRequested
+    // from double-processing in case the OS also tries to close the window.
     try {
       await flush();
       if (note) {
@@ -162,9 +164,9 @@ export function NoteWindow({ noteId }: Props) {
       await trackWindowClose(noteId);
     } catch (e) {
       console.error(e);
-    } finally {
-      appWin.destroy();
     }
+    closingRef.current = true;  // prevent onCloseRequested from re-running
+    appWin.destroy();
   };
 
   const togglePin = async () => {
