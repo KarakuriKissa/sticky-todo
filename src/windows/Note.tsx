@@ -20,7 +20,7 @@ export function NoteWindow({ noteId }: Props) {
     load, items, note, setNote, addItem, flush, undo, redo,
     selectAll, clearSelection, selectedIds, searchQuery, setSearchQuery,
   } = useNoteStore();
-  const { notes, updateNote, statuses, assigneeGroups, assigneePersons, settings, trackWindowClose } = useAppStore();
+  const { notes, updateNote, assigneeGroups, settings, trackWindowClose } = useAppStore();
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showPriorityPicker, setShowPriorityPicker] = useState(false);
@@ -244,11 +244,6 @@ export function NoteWindow({ noteId }: Props) {
     const id = addItem(undefined, 0);
     useNoteStore.getState().updateItem(id, { item_type: type });
   };
-
-  // Assignee group — driven by local activeGroupId state (per-window selector)
-  const groupPersons = activeGroupId
-    ? assigneePersons.filter((p) => p.group_id === activeGroupId)
-    : [];
 
   const selCount = selectedIds.size;
 
