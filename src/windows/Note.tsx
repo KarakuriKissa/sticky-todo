@@ -31,6 +31,9 @@ export function NoteWindow({ noteId }: Props) {
   const titleInputRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
   const closingRef = useRef(false);
+  // noteRef lets the onCloseRequested closure (registered once) always read the
+  // latest note without needing to re-register whenever note changes.
+  const noteRef = useRef<Note | null>(null);
 
   // Load note + items
   useEffect(() => {
@@ -54,6 +57,9 @@ export function NoteWindow({ noteId }: Props) {
     }
   }, [assigneeGroups]);
 
+  // Keep noteRef in sync so the close handler always has the latest note.
+  useEffect(() => { noteRef.current = note; }, [note]);
+
   // Sync title/color from appStore when another window changes them
   useEffect(() => {
     const found = notes.find((n) => n.id === noteId);
@@ -64,7 +70,8 @@ export function NoteWindow({ noteId }: Props) {
     }
   }, [notes]);
 
-  // Save window position/size + track close
+  // Register the close handler ONCE (empty deps) so there is never a gap where no
+  // handler is listening.  noteRef gives it access to the current note at any time.
   useEffect(() => {
     const unlisten = appWin.onCloseRequested(async (event) => {
       if (closingRef.current) return;
@@ -72,12 +79,13 @@ export function NoteWindow({ noteId }: Props) {
       closingRef.current = true;
       try {
         await flush();
-        if (note) {
+        const currentNote = noteRef.current;
+        if (currentNote) {
           const pos = await appWin.outerPosition();
           const size = await appWin.outerSize();
           const scale = await appWin.scaleFactor();
           const updated = {
-            ...note,
+            ...currentNote,
             window_x: pos.x / scale,
             window_y: pos.y / scale,
             window_width: size.width / scale,
@@ -88,13 +96,13 @@ export function NoteWindow({ noteId }: Props) {
         }
         await trackWindowClose(noteId);
       } catch (e) {
-        console.error(e);
+        console.error('onCloseRequested error:', e);
       } finally {
         appWin.destroy();
       }
     });
     return () => { unlisten.then((f) => f()); };
-  }, [note]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for note-updated events from other windows
   useEffect(() => {

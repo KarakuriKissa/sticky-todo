@@ -125,13 +125,21 @@ export const useNoteStore = create<NoteStore>((set, get) => {
       if (prev) clearTimeout(prev);
       saveTimers.set(
         item.id,
-        setTimeout(() => {
-          invoke('save_item', { item }).catch(console.error);
-          set((s) => ({
-            items: s.items.map((i) => (i.id === item.id ? { ...i, dirty: false } : i)),
-          }));
+        setTimeout(async () => {
           saveTimers.delete(item.id);
-        }, 600),
+          try {
+            // Capture the LATEST version from the store, not the stale closure value
+            const latest = get().items.find((i) => i.id === item.id);
+            if (latest && latest.dirty) {
+              await invoke('save_item', { item: latest });
+              set((s) => ({
+                items: s.items.map((i) => (i.id === item.id ? { ...i, dirty: false } : i)),
+              }));
+            }
+          } catch (e) {
+            console.error('save_item failed:', e);
+          }
+        }, 400),
       );
     });
   };
@@ -158,7 +166,10 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     setSearchQuery: (q: string) => set({ searchQuery: q }),
 
     addItem: (afterId?: string, indent = 0, position: 'before' | 'after' = 'after') => {
-      const noteId = get().note?.id ?? '';
+      // Guard: if the note hasn't loaded yet, note_id would be '' which violates the
+      // FK constraint and causes save_item / save_items to fail silently.
+      const noteId = get().note?.id;
+      if (!noteId) return '';
       const newItem = makeItem(noteId, { indent });
       let items = get().items;
 
@@ -484,9 +495,19 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
 
     flush: async () => {
-      const dirty = get().items.filter((i) => i.dirty);
-      if (dirty.length > 0) {
-        await invoke('save_items', { items: dirty });
+      // Cancel all pending debounce timers — they may have stale snapshots and would
+      // race with the save we're about to do.
+      saveTimers.forEach((timer) => clearTimeout(timer));
+      saveTimers.clear();
+
+      const noteId = get().note?.id;
+      if (!noteId) return; // No note loaded, nothing to save.
+
+      // Save ALL items for this note (not just dirty ones) so that anything not yet
+      // persisted by the debounce is captured.  On close this is acceptable overhead.
+      const items = get().items;
+      if (items.length > 0) {
+        await invoke('save_items', { items });
         set((s) => ({
           items: s.items.map((i) => ({ ...i, dirty: false })),
         }));
