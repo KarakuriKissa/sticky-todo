@@ -99,7 +99,8 @@ function makeItem(noteId: string, partial: Partial<TodoItem> = {}): TodoItem {
   };
 }
 
-const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// Single global debounce timer — avoids concurrent per-item save races.
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useNoteStore = create<NoteStore>((set, get) => {
   const pushHistory = (items: TodoItem[]) => {
@@ -115,33 +116,29 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     const ordered = next.map((item, i) => ({ ...item, sort_order: i }));
     pushHistory(ordered);
     set({ items: ordered });
-    scheduleSave(ordered);
+    scheduleSave();
   };
 
-  const scheduleSave = (items: TodoItem[]) => {
-    const dirty = items.filter((i) => i.dirty);
-    dirty.forEach((item) => {
-      const prev = saveTimers.get(item.id);
-      if (prev) clearTimeout(prev);
-      saveTimers.set(
-        item.id,
-        setTimeout(async () => {
-          saveTimers.delete(item.id);
-          try {
-            // Capture the LATEST version from the store, not the stale closure value
-            const latest = get().items.find((i) => i.id === item.id);
-            if (latest && latest.dirty) {
-              await invoke('save_item', { item: latest });
-              set((s) => ({
-                items: s.items.map((i) => (i.id === item.id ? { ...i, dirty: false } : i)),
-              }));
-            }
-          } catch (e) {
-            console.error('save_item failed:', e);
-          }
-        }, 400),
-      );
-    });
+  // Schedule a debounced batch save of all dirty items.
+  // Resets the timer on every mutation so rapid edits are coalesced into one save.
+  const scheduleSave = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      saveTimer = null;
+      const noteId = get().note?.id;
+      if (!noteId) return;
+      const dirty = get().items.filter((i) => i.dirty);
+      if (dirty.length === 0) return;
+      try {
+        await invoke('save_items', { items: dirty });
+        const savedIds = new Set(dirty.map((i) => i.id));
+        set((s) => ({
+          items: s.items.map((i) => (savedIds.has(i.id) ? { ...i, dirty: false } : i)),
+        }));
+      } catch (e) {
+        console.error('[noteStore] scheduleSave failed:', e);
+      }
+    }, 400);
   };
 
   return {
@@ -495,10 +492,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
 
     flush: async () => {
-      // Cancel all pending debounce timers — they may have stale snapshots and would
-      // race with the save we're about to do.
-      saveTimers.forEach((timer) => clearTimeout(timer));
-      saveTimers.clear();
+      // Cancel the pending debounce timer so it doesn't race with our save.
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
 
       const noteId = get().note?.id;
       if (!noteId) return; // No note loaded, nothing to save.

@@ -78,22 +78,31 @@ export function NoteWindow({ noteId }: Props) {
       event.preventDefault();
       closingRef.current = true;
       try {
+        // ── 1. Flush all dirty items to SQLite ──────────────────────────────
         await flush();
+
+        // ── 2. Persist window geometry (best-effort — failures are non-fatal) ──
         const currentNote = noteRef.current;
         if (currentNote) {
-          const pos = await appWin.outerPosition();
-          const size = await appWin.outerSize();
-          const scale = await appWin.scaleFactor();
-          const updated = {
-            ...currentNote,
-            window_x: pos.x / scale,
-            window_y: pos.y / scale,
-            window_width: size.width / scale,
-            window_height: size.height / scale,
-          };
-          updateNote(updated);
-          await invoke('save_note', { note: updated });
+          try {
+            const pos = await appWin.outerPosition();
+            const size = await appWin.outerSize();
+            const scale = await appWin.scaleFactor();
+            const updated = {
+              ...currentNote,
+              window_x: pos.x / scale,
+              window_y: pos.y / scale,
+              window_width: size.width / scale,
+              window_height: size.height / scale,
+            };
+            updateNote(updated);
+            await invoke('save_note', { note: updated });
+          } catch (posErr) {
+            console.warn('Could not save window geometry:', posErr);
+            // Items already saved above — geometry failure is non-fatal.
+          }
         }
+
         await trackWindowClose(noteId);
       } catch (e) {
         console.error('onCloseRequested error:', e);
