@@ -123,15 +123,31 @@ export const useNoteStore = create<NoteStore>((set, get) => {
   };
 
   // The actual save — reads the LATEST items and writes them all.
+  // Verbose logging + 1 retry so you can diagnose failures in DevTools console.
   const doSave = async () => {
-    const items = get().items.filter((i) => i.note_id);
-    if (items.length === 0) return;
+    const items = get().items.filter((i) => i.note_id !== '' && i.note_id != null);
+    if (items.length === 0) {
+      console.log('[save] skip — no items with valid note_id');
+      return;
+    }
+    console.log('[save] start, count=', items.length, 'first note_id=', items[0].note_id);
     set({ saveStatus: 'saving' });
     try {
       await invoke('save_items', { items });
+      console.log('[save] OK count=', items.length);
+      set({ saveStatus: 'saved', lastSavedAt: Date.now() });
+      return;
+    } catch (e) {
+      console.error('[save] FAILED 1st attempt:', e);
+    }
+    // Retry once after 400ms.
+    await new Promise((r) => setTimeout(r, 400));
+    try {
+      await invoke('save_items', { items });
+      console.log('[save] OK on retry, count=', items.length);
       set({ saveStatus: 'saved', lastSavedAt: Date.now() });
     } catch (e) {
-      console.error('[noteStore] save_items failed:', e);
+      console.error('[save] FAILED on retry too:', e);
       set({ saveStatus: 'error' });
     }
   };

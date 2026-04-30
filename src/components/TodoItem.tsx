@@ -173,6 +173,18 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
       action: () => isInSel ? duplicateSelected() : duplicateItem(item.id),
     },
     {
+      label: item.archived ? `アーカイブから戻す${selSuffix}` : `アーカイブ${selSuffix}`,
+      icon: item.archived ? '↩' : '🗄',
+      action: () => {
+        const next = !item.archived;
+        if (isInSel) {
+          [...selectedIds].forEach((id) => updateItem(id, { archived: next }));
+        } else {
+          updateItem(item.id, { archived: next });
+        }
+      },
+    },
+    {
       label: `削除${selSuffix}`,
       icon: '🗑',
       shortcut: 'Del',

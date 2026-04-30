@@ -583,9 +583,13 @@ ul { list-style: none; }
 
 /* Flex layout — badges with content take their natural width and push the text
    to ellipsis. Empty inline pickers are display:none until row hover, so empty
-   rows let the text use the full row width. */
+   rows let the text use the full row width.
+   flex-wrap: wrap → if the row gets narrow, badges drop onto a second line
+   instead of being clipped. */
 .todo-badges {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 2px;
   align-items: center;
   flex-shrink: 0;
@@ -598,7 +602,13 @@ ul { list-style: none; }
   flex-shrink: 0;
   overflow: hidden;
 }
-.badge-col-assignee, .badge-col-status, .badge-col-date { width: auto; }
+.badge-col-assignee { width: auto; }
+/* Status column has a fixed min-width so all rows align — width is sized for
+   the longest typical status name (e.g. "確認待ち" = 4 zenkaku chars). */
+.badge-col-status   { min-width: 64px; display: flex; justify-content: flex-end; }
+.badge-col-date     { width: auto; }
+/* Status badge itself fills the column so colors line up across rows. */
+.badge-col-status .status-badge { width: 100%; text-align: center; }
 
 /* Hover action buttons inside todo item */
 .todo-item-hover-actions {
@@ -779,6 +789,73 @@ ul { list-style: none; }
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Category color stripe on the left edge of a note window */
+.note-category-stripe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Quick-add bar — always-on-top text input for fast task entry */
+.quick-add-bar {
+  display: flex;
+  padding: 4px 8px 0;
+}
+.quick-add-input {
+  flex: 1;
+  padding: 5px 9px;
+  border: 1px dashed rgba(0,0,0,.18);
+  border-radius: 4px;
+  background: rgba(255,255,255,.4);
+  font-size: 12px;
+  outline: none;
+}
+.quick-add-input:focus {
+  border-style: solid;
+  border-color: #6366f1;
+  background: rgba(255,255,255,.7);
+}
+
+/* Cheat sheet overlay */
+.cheat-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 99998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cheat-sheet {
+  background: white;
+  color: #1e1e2e;
+  padding: 16px 22px;
+  border-radius: 8px;
+  font-size: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.25);
+  min-width: 260px;
+}
+.cheat-sheet h4 { margin: 0 0 8px; font-size: 13px; }
+.cheat-sheet-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+}
+.cheat-sheet-row:last-child { border: none; }
+.cheat-sheet-key {
+  font-family: ui-monospace, Consolas, monospace;
+  background: rgba(0,0,0,.06);
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 12px;
+  font-size: 11px;
+}
 
 /* Save indicator in the title bar */
 .save-indicator {

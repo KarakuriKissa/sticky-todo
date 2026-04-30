@@ -331,19 +331,23 @@ pub fn export_database(
 
 #[tauri::command]
 pub fn import_database(app: AppHandle, src_path: String) -> Result<(), String> {
-    let dest = db_file_path(&app)?;
-    std::fs::copy(&src_path, &dest).map_err(|e| e.to_string())?;
-    // Stale WAL/SHM from the old DB would corrupt reads — remove them.
-    let _ = std::fs::remove_file(dest.with_file_name("sticky-todo.db-wal"));
-    let _ = std::fs::remove_file(dest.with_file_name("sticky-todo.db-shm"));
+    // Verify the source is a valid (non-empty) SQLite file before scheduling.
+    let meta = std::fs::metadata(&src_path).map_err(|e| format!("ファイルが読めません: {}", e))?;
+    if meta.len() < 100 {
+        return Err("インポートファイルが小さすぎます（壊れている可能性）".into());
+    }
+    // Don't try to overwrite the live DB while it's open. Write a marker file
+    // and let the next startup do the swap (see lib.rs setup hook).
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let marker = data_dir.join(".import-pending");
+    std::fs::write(&marker, &src_path).map_err(|e| e.to_string())?;
     app.restart();
 }
 
 #[tauri::command]
 pub fn delete_database(app: AppHandle) -> Result<(), String> {
-    let dest = db_file_path(&app)?;
-    let _ = std::fs::remove_file(&dest);
-    let _ = std::fs::remove_file(dest.with_file_name("sticky-todo.db-wal"));
-    let _ = std::fs::remove_file(dest.with_file_name("sticky-todo.db-shm"));
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let marker = data_dir.join(".delete-pending");
+    std::fs::write(&marker, "").map_err(|e| e.to_string())?;
     app.restart();
 }

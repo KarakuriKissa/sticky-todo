@@ -17,6 +17,27 @@ pub fn run() {
                 .expect("Cannot resolve app data dir");
             std::fs::create_dir_all(&data_dir)?;
             let db_path = data_dir.join("sticky-todo.db");
+
+            // ── Apply pending import / delete BEFORE opening the connection ──
+            let import_marker = data_dir.join(".import-pending");
+            if import_marker.exists() {
+                if let Ok(src) = std::fs::read_to_string(&import_marker) {
+                    let src = src.trim();
+                    if std::fs::copy(src, &db_path).is_ok() {
+                        let _ = std::fs::remove_file(data_dir.join("sticky-todo.db-wal"));
+                        let _ = std::fs::remove_file(data_dir.join("sticky-todo.db-shm"));
+                    }
+                }
+                let _ = std::fs::remove_file(&import_marker);
+            }
+            let delete_marker = data_dir.join(".delete-pending");
+            if delete_marker.exists() {
+                let _ = std::fs::remove_file(&db_path);
+                let _ = std::fs::remove_file(data_dir.join("sticky-todo.db-wal"));
+                let _ = std::fs::remove_file(data_dir.join("sticky-todo.db-shm"));
+                let _ = std::fs::remove_file(&delete_marker);
+            }
+
             let db = Database::new(db_path.to_str().unwrap())
                 .expect("Failed to initialize database");
             app.manage(db);

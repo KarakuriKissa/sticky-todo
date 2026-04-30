@@ -21,7 +21,7 @@ export function NoteWindow({ noteId }: Props) {
     selectAll, clearSelection, selectedIds, searchQuery, setSearchQuery,
     saveStatus, lastSavedAt,
   } = useNoteStore();
-  const { notes, updateNote, assigneeGroups, settings, trackWindowClose } = useAppStore();
+  const { notes, updateNote, assigneeGroups, settings, trackWindowClose, categories } = useAppStore();
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showPriorityPicker, setShowPriorityPicker] = useState(false);
@@ -30,6 +30,9 @@ export function NoteWindow({ noteId }: Props) {
   const [titleDraft, setTitleDraft] = useState('');
   const [activeGroupId, setActiveGroupId] = useState<string>('');
   const [closingOverlay, setClosingOverlay] = useState<null | 'saving' | 'failed'>(null);
+  const [quickAddText, setQuickAddText] = useState('');
+  const [showCheatSheet, setShowCheatSheet] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
   const closingRef = useRef(false);
@@ -170,20 +173,43 @@ export function NoteWindow({ noteId }: Props) {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); selectAll(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); document.querySelector<HTMLInputElement>('.note-search-input')?.focus(); }
+      // Don't intercept when typing inside a text field, except for shortcuts that
+      // are explicitly modifier-based (Ctrl/Meta).
+      const target = e.target as HTMLElement | null;
+      const isInputFocused = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); selectAll(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); document.querySelector<HTMLInputElement>('.note-search-input')?.focus(); return; }
       if (e.key === 'Escape') {
         clearSelection();
         setSearchQuery('');
         setShowColorPicker(false);
         setShowPriorityPicker(false);
+        setShowCheatSheet(false);
+        return;
+      }
+      // ? key — show cheat sheet (only when not typing into a field)
+      if (!isInputFocused && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
+        e.preventDefault();
+        setShowCheatSheet((v) => !v);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // Quick-add: pressing Enter in the top bar adds a task and clears the input.
+  const submitQuickAdd = () => {
+    const t = quickAddText.trim();
+    if (!t) return;
+    const id = addItem();
+    if (id) {
+      useNoteStore.getState().updateItem(id, { text: t });
+      setQuickAddText('');
+    }
+  };
 
   const close = () => {
     // Simply request a close — onCloseRequested handles saving + destroy().
@@ -257,10 +283,19 @@ export function NoteWindow({ noteId }: Props) {
 
   const sq = searchQuery.toLowerCase().trim();
   const visibleItems = items.filter((i) => {
+    if (showArchived ? !i.archived : i.archived) return false;
     if (isHidden(i)) return false;
     if (sq && !i.text.toLowerCase().includes(sq)) return false;
     return true;
   });
+  const archivedCount = items.filter((i) => i.archived).length;
+  const checkedNonArchived = items.filter((i) => i.checked && !i.archived);
+
+  const archiveCheckedAll = () => {
+    if (checkedNonArchived.length === 0) return;
+    const ids = new Set(checkedNonArchived.map((i) => i.id));
+    ids.forEach((id) => useNoteStore.getState().updateItem(id, { archived: true }));
+  };
 
   const noteColor = note?.color ?? '#fef08a';
   const titleText = note?.title ?? '';
@@ -288,6 +323,12 @@ export function NoteWindow({ noteId }: Props) {
         setShowPriorityPicker(false);
       }}
     >
+      {/* Category color stripe on the left edge */}
+      {(() => {
+        const cat = categories.find((c) => c.id === note?.category_id);
+        return cat ? <div className="note-category-stripe" style={{ background: cat.color }} /> : null;
+      })()}
+
       {/* ── Closing overlay — blocks close until save finishes ── */}
       {closingOverlay && (
         <div className="closing-overlay">
@@ -449,6 +490,21 @@ export function NoteWindow({ noteId }: Props) {
           onClick={() => useNoteStore.getState().checkSelected(false)}
           title="選択のチェックを外す"
         >☐</button>
+
+        {/* Bulk archive checked */}
+        <button
+          className="type-btn"
+          onClick={archiveCheckedAll}
+          disabled={checkedNonArchived.length === 0}
+          title={`チェック済を一括アーカイブ (${checkedNonArchived.length}件)`}
+        >📥</button>
+
+        {/* Toggle archived view */}
+        <button
+          className={`type-btn${showArchived ? ' active-feature' : ''}`}
+          onClick={() => setShowArchived((v) => !v)}
+          title={showArchived ? `通常表示に戻る` : `アーカイブを表示 (${archivedCount}件)`}
+        >🗄️{archivedCount > 0 && <sup style={{ fontSize: 8 }}>{archivedCount}</sup>}</button>
       </div>
 
       {/* ── Search bar ── */}
@@ -482,6 +538,23 @@ export function NoteWindow({ noteId }: Props) {
         )}
       </div>
 
+      {/* ── Quick-add bar — Enter で1秒で追加 ── */}
+      {!showArchived && (
+        <div className="quick-add-bar">
+          <input
+            className="quick-add-input"
+            placeholder="✏️ 新しいタスクを入力して Enter で追加…"
+            value={quickAddText}
+            onChange={(e) => setQuickAddText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submitQuickAdd(); }
+              if (e.key === 'Escape') setQuickAddText('');
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
       {/* ── Item list ── */}
       <div className="note-items" onClick={() => clearSelection()}>
         {visibleItems.length === 0 && (
@@ -501,6 +574,37 @@ export function NoteWindow({ noteId }: Props) {
           />
         ))}
       </div>
+
+      {/* ── Cheat sheet (? key) ── */}
+      {showCheatSheet && (
+        <div className="cheat-sheet-backdrop" onClick={() => setShowCheatSheet(false)}>
+          <div className="cheat-sheet" onClick={(e) => e.stopPropagation()}>
+            <h4>キーボードショートカット</h4>
+            {[
+              ['元に戻す', 'Ctrl+Z'],
+              ['やり直し', 'Ctrl+Y'],
+              ['全選択', 'Ctrl+A'],
+              ['検索', 'Ctrl+F'],
+              ['インデント', 'Tab'],
+              ['アウトデント', 'Shift+Tab'],
+              ['太字', 'Ctrl+B'],
+              ['複製', 'Ctrl+D'],
+              ['ロック', 'Ctrl+L'],
+              ['コメント', 'Ctrl+M'],
+              ['複数選択', 'Shift+↑/↓'],
+              ['行を移動', 'Ctrl+Shift+↑/↓'],
+              ['削除', 'Delete'],
+              ['キャンセル / 閉じる', 'Esc'],
+              ['この一覧を表示', '?'],
+            ].map(([label, key]) => (
+              <div key={key} className="cheat-sheet-row">
+                <span>{label}</span>
+                <span className="cheat-sheet-key">{key}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
