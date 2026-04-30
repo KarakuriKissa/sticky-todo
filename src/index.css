@@ -507,6 +507,7 @@ ul { list-style: none; }
 
 /* ── Todo item ───────────────────────────────────────────────────────────── */
 .todo-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 3px;
@@ -578,11 +579,18 @@ ul { list-style: none; }
 .todo-text[readonly] { cursor: default; color: rgba(30,30,46,.6); }
 .todo-text::placeholder { color: rgba(30,30,46,.28); }
 
+/* Absolutely positioned so badges OVERLAY the text only when filled.
+   Empty rows let the text use the full row width. */
 .todo-badges {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   gap: 2px;
   align-items: center;
   flex-shrink: 0;
+  pointer-events: auto;
 }
 /* Fixed-width badge columns for alignment across rows */
 .badge-col {
@@ -592,9 +600,7 @@ ul { list-style: none; }
   flex-shrink: 0;
   overflow: hidden;
 }
-.badge-col-assignee { width: 52px; }
-.badge-col-status   { width: 58px; }
-.badge-col-date     { width: 82px; }
+.badge-col-assignee, .badge-col-status, .badge-col-date { width: auto; }
 
 /* Hover action buttons inside todo item */
 .todo-item-hover-actions {

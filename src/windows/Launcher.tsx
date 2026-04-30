@@ -400,23 +400,73 @@ function SettingsModal({
 
               <h3 style={{ marginTop: 20 }}>データベース</h3>
               <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
-                すべてのデータはローカルのSQLiteデータベースに保存されています。
+                すべてのデータはローカルの SQLite データベースに保存されています。<br />
+                エクスポートでバックアップを作成、インポートで別のデータベースに置き換えできます。
               </p>
-              <div className="db-path-box">
-                <code className="db-path-text">%APPDATA%\com.stickytodo.app\sticky-todo.db</code>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   className="btn-secondary"
-                  style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}
-                  onClick={() => {
-                    const path = `${String.fromCharCode(37)}APPDATA${String.fromCharCode(37)}\\com.stickytodo.app\\sticky-todo.db`;
-                    navigator.clipboard.writeText(path).catch(() => {});
+                  style={{ fontSize: 12, padding: '5px 12px' }}
+                  onClick={async () => {
+                    const { save } = await import('@tauri-apps/plugin-dialog');
+                    const ts = new Date().toISOString().slice(0, 10);
+                    const path = await save({
+                      title: 'データベースをエクスポート',
+                      defaultPath: `sticky-todo-${ts}.db`,
+                      filters: [{ name: 'SQLite Database', extensions: ['db'] }],
+                    });
+                    if (!path) return;
+                    try {
+                      await invoke('export_database', { destPath: path });
+                      alert('エクスポートが完了しました');
+                    } catch (e) {
+                      alert('エクスポート失敗: ' + e);
+                    }
                   }}
-                  title="パスをコピー"
-                >📋 コピー</button>
+                >📤 エクスポート</button>
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: 12, padding: '5px 12px' }}
+                  onClick={async () => {
+                    const { open, confirm } = await import('@tauri-apps/plugin-dialog');
+                    const path = await open({
+                      title: 'データベースをインポート',
+                      multiple: false,
+                      directory: false,
+                      filters: [{ name: 'SQLite Database', extensions: ['db'] }],
+                    });
+                    if (!path || typeof path !== 'string') return;
+                    const ok = await confirm(
+                      '現在のデータをインポートしたデータで完全に置き換えます。\nこの操作は取り消せません。続行しますか？',
+                      { title: 'インポートの確認', kind: 'warning' },
+                    );
+                    if (!ok) return;
+                    try {
+                      await invoke('import_database', { srcPath: path });
+                      // app.restart() will reload the app
+                    } catch (e) {
+                      alert('インポート失敗: ' + e);
+                    }
+                  }}
+                >📥 インポート</button>
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }}
+                  onClick={async () => {
+                    const { confirm } = await import('@tauri-apps/plugin-dialog');
+                    const ok = await confirm(
+                      'すべてのリスト・タスク・設定が完全に削除されます。\nこの操作は取り消せません。本当に削除しますか？',
+                      { title: 'データベース削除の確認', kind: 'warning' },
+                    );
+                    if (!ok) return;
+                    try {
+                      await invoke('delete_database');
+                    } catch (e) {
+                      alert('削除失敗: ' + e);
+                    }
+                  }}
+                >🗑️ データベースを削除</button>
               </div>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10, lineHeight: 1.6 }}>
-                データを完全にリセットするにはこのファイルを削除してください。
-              </p>
             </section>
           )}
 

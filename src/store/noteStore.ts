@@ -99,11 +99,13 @@ function makeItem(noteId: string, partial: Partial<TodoItem> = {}): TodoItem {
   };
 }
 
-// Text/memo debounce timer.
+// Brute-force save design:
+//   - No dirty flag tracking. Every action saves the whole item list.
+//   - Filter by item.note_id (NOT get().note?.id) — the note state may not be
+//     loaded yet on a fresh window. The item itself always knows its note.
+//   - Text / memo input is the only thing that gets a 300 ms debounce.
+//   - flush() awaits one final save so close-to-destroy is safe.
 let textSaveTimer: ReturnType<typeof setTimeout> | null = null;
-// Sequential promise chain — saves are enqueued so they never run concurrently.
-// This lets flush() simply await savingPromise to know all saves are done.
-let savingPromise: Promise<void> = Promise.resolve();
 
 export const useNoteStore = create<NoteStore>((set, get) => {
   const pushHistory = (items: TodoItem[]) => {
@@ -114,46 +116,24 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     set({ history: newHistory, historyIdx: newHistory.length - 1 });
   };
 
-  // ── Core save helper ──────────────────────────────────────────────────────
-  // KEY DESIGN DECISIONS:
-  //   1. Uses item.note_id (NOT get().note?.id) so saves work even when the
-  //      note state hasn't loaded yet (async race on window open).
-  //   2. Enqueued via savingPromise chain so saves never run concurrently and
-  //      flush() can simply `await savingPromise` to know all saves are done.
-  const doSave = async () => {
-    // Filter by each item's OWN note_id — never trust get().note?.id here
-    // because it may be null if setNote() hasn't resolved yet.
-    const dirty = get().items.filter((i) => i.dirty && i.note_id);
-    if (dirty.length === 0) return;
-    try {
-      await invoke('save_items', { items: dirty });
-      const savedIds = new Set(dirty.map((i) => i.id));
-      set((s) => ({
-        items: s.items.map((i) => (savedIds.has(i.id) ? { ...i, dirty: false } : i)),
-      }));
-    } catch (e) {
-      console.error('[noteStore] doSave failed:', e);
-    }
+  // Save everything (filtered by valid note_id) — fire-and-forget.
+  const saveAll = () => {
+    const items = get().items.filter((i) => i.note_id);
+    if (items.length === 0) return;
+    invoke('save_items', { items }).catch((e) => {
+      console.error('[noteStore] save_items failed:', e);
+    });
   };
 
-  // Enqueue an immediate save (cancels any pending text-debounce first).
-  const saveNow = () => {
-    if (textSaveTimer) { clearTimeout(textSaveTimer); textSaveTimer = null; }
-    savingPromise = savingPromise.then(doSave);
-  };
-
-  // Enqueue a debounced save — for text / memo typing only (300 ms of idle).
-  const saveDebounced = () => {
+  // Debounced version for text / memo typing (so we don't IPC every keystroke).
+  const saveAllDebounced = () => {
     if (textSaveTimer) clearTimeout(textSaveTimer);
     textSaveTimer = setTimeout(() => {
       textSaveTimer = null;
-      savingPromise = savingPromise.then(doSave);
+      saveAll();
     }, 300);
   };
 
-  // mutate with an explicit save mode.
-  // mode='immediate' (default) → every non-text action saved right away
-  // mode='debounced'           → text / memo input, coalesced at 300 ms
   const mutate = (
     updater: (items: TodoItem[]) => TodoItem[],
     mode: 'immediate' | 'debounced' = 'immediate',
@@ -162,8 +142,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     const ordered = next.map((item, i) => ({ ...item, sort_order: i }));
     pushHistory(ordered);
     set({ items: ordered });
-    if (mode === 'immediate') saveNow();
-    else saveDebounced();
+    if (mode === 'debounced') saveAllDebounced();
+    else saveAll();
   };
 
   return {
@@ -513,7 +493,7 @@ export const useNoteStore = create<NoteStore>((set, get) => {
       // Mark all items dirty so the restored state is persisted immediately.
       const items = history[idx].items.map((i) => ({ ...i, dirty: true }));
       set({ items, historyIdx: idx });
-      saveNow();
+      saveAll();
     },
 
     redo: () => {
@@ -522,26 +502,17 @@ export const useNoteStore = create<NoteStore>((set, get) => {
       const idx = historyIdx + 1;
       const items = history[idx].items.map((i) => ({ ...i, dirty: true }));
       set({ items, historyIdx: idx });
-      saveNow();
+      saveAll();
     },
 
     flush: async () => {
-      // 1. Cancel any pending text-debounce timer.
       if (textSaveTimer) { clearTimeout(textSaveTimer); textSaveTimer = null; }
-
-      // 2. Wait for every in-flight save in the chain to complete.
-      await savingPromise;
-
-      // 3. Force-save ALL items that have a valid note_id — safety net on close.
-      //    Uses item.note_id (NOT get().note?.id) for the same reason as doSave.
       const items = get().items.filter((i) => i.note_id);
-      if (items.length > 0) {
-        try {
-          await invoke('save_items', { items });
-          set((s) => ({ items: s.items.map((i) => ({ ...i, dirty: false })) }));
-        } catch (e) {
-          console.error('[noteStore] flush save_items failed:', e);
-        }
+      if (items.length === 0) return;
+      try {
+        await invoke('save_items', { items });
+      } catch (e) {
+        console.error('[noteStore] flush save_items failed:', e);
       }
     },
   };

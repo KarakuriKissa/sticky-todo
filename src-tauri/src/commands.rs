@@ -306,3 +306,44 @@ pub fn generate_id() -> String {
 pub fn current_timestamp() -> String {
     now()
 }
+
+// ── Database management ────────────────────────────────────────────────────
+
+fn db_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("sticky-todo.db"))
+}
+
+#[tauri::command]
+pub fn export_database(
+    app: AppHandle,
+    dest_path: String,
+    db: State<'_, Database>,
+) -> Result<(), String> {
+    // Force a WAL checkpoint so all data is written into the main DB file.
+    {
+        let conn = db.conn.lock().map_err(|e| e.to_string())?;
+        let _ = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)", []);
+    }
+    let src = db_file_path(&app)?;
+    std::fs::copy(&src, &dest_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn import_database(app: AppHandle, src_path: String) -> Result<(), String> {
+    let dest = db_file_path(&app)?;
+    std::fs::copy(&src_path, &dest).map_err(|e| e.to_string())?;
+    // Stale WAL/SHM from the old DB would corrupt reads — remove them.
+    let _ = std::fs::remove_file(dest.with_file_name("sticky-todo.db-wal"));
+    let _ = std::fs::remove_file(dest.with_file_name("sticky-todo.db-shm"));
+    app.restart();
+}
+
+#[tauri::command]
+pub fn delete_database(app: AppHandle) -> Result<(), String> {
+    let dest = db_file_path(&app)?;
+    let _ = std::fs::remove_file(&dest);
+    let _ = std::fs::remove_file(dest.with_file_name("sticky-todo.db-wal"));
+    let _ = std::fs::remove_file(dest.with_file_name("sticky-todo.db-shm"));
+    app.restart();
+}
