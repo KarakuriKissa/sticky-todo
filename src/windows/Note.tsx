@@ -200,14 +200,19 @@ export function NoteWindow({ noteId }: Props) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Quick-add: pressing Enter in the top bar adds a task and clears the input.
+  // Quick-add: extra indent levels added via Tab (and removed via Shift+Tab) before submit.
+  const [quickAddIndent, setQuickAddIndent] = useState(0);
   const submitQuickAdd = () => {
     const t = quickAddText.trim();
     if (!t) return;
-    const id = addItem();
+    // Pass an explicit indent override = (last item's indent) + quickAddIndent
+    const last = items[items.length - 1];
+    const baseIndent = last ? last.indent : 0;
+    const id = addItem(undefined, Math.max(0, Math.min(6, baseIndent + quickAddIndent)));
     if (id) {
       useNoteStore.getState().updateItem(id, { text: t });
       setQuickAddText('');
+      setQuickAddIndent(0);
     }
   };
 
@@ -543,12 +548,17 @@ export function NoteWindow({ noteId }: Props) {
         <div className="quick-add-bar">
           <input
             className="quick-add-input"
-            placeholder="✏️ 新しいタスクを入力して Enter で追加…"
+            placeholder={`✏️ 新しいタスクを入力して Enter で追加…${quickAddIndent > 0 ? `  (インデント+${quickAddIndent})` : ''}`}
             value={quickAddText}
             onChange={(e) => setQuickAddText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); submitQuickAdd(); }
-              if (e.key === 'Escape') setQuickAddText('');
+              if (e.key === 'Escape') { setQuickAddText(''); setQuickAddIndent(0); }
+              if (e.key === 'Tab') {
+                e.preventDefault();
+                if (e.shiftKey) setQuickAddIndent((n) => Math.max(0, n - 1));
+                else setQuickAddIndent((n) => Math.min(6, n + 1));
+              }
             }}
             onClick={(e) => e.stopPropagation()}
           />

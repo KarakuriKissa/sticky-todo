@@ -110,8 +110,9 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     {
       label: '上に項目を追加',
       icon: '↑',
+      shortcut: 'Ctrl+Shift+Enter',
       action: () => {
-        const newId = addItem(item.id, item.indent, 'before');
+        const newId = addItem(item.id, undefined, 'before');
         setTimeout(() => {
           document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] [data-text-input]`)?.focus();
         }, 30);
@@ -122,7 +123,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
       icon: '↓',
       shortcut: 'Shift+Enter',
       action: () => {
-        const newId = addItem(item.id, item.indent);
+        const newId = addItem(item.id);
         setTimeout(() => {
           document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] [data-text-input]`)?.focus();
         }, 30);
@@ -142,8 +143,8 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
       action: () => { setMemoText(item.memo ?? ''); setShowMemoEdit(true); },
     },
     { label: '', separator: true, action: () => {} },
-    { label: '見出しに変更', icon: 'H', action: () => updateItem(item.id, { item_type: 'heading' }) },
-    { label: '通常に変更', icon: '•', action: () => updateItem(item.id, { item_type: 'normal' }) },
+    { label: '見出しに変更', icon: 'H', shortcut: 'Ctrl+H', action: () => updateItem(item.id, { item_type: 'heading' }) },
+    { label: '通常に変更', icon: '•', shortcut: 'Ctrl+Shift+H', action: () => updateItem(item.id, { item_type: 'normal' }) },
     { label: '', separator: true, action: () => {} },
     {
       label: `インデント${selSuffix}`,
@@ -175,6 +176,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     {
       label: item.archived ? `アーカイブから戻す${selSuffix}` : `アーカイブ${selSuffix}`,
       icon: item.archived ? '↩' : '🗄',
+      shortcut: 'Ctrl+E',
       action: () => {
         const next = !item.archived;
         if (isInSel) {
@@ -383,6 +385,32 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
       e.preventDefault();
       setMemoText(item.memo ?? '');
       setShowMemoEdit(true);
+      return;
+    }
+
+    // Ctrl+H = make heading; Ctrl+Shift+H = back to normal
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) {
+      e.preventDefault();
+      updateItem(item.id, { item_type: e.shiftKey ? 'normal' : 'heading' });
+      return;
+    }
+
+    // Ctrl+E = archive / unarchive
+    if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+      e.preventDefault();
+      const next = !item.archived;
+      if (isInSel) [...selectedIds].forEach((id) => updateItem(id, { archived: next }));
+      else updateItem(item.id, { archived: next });
+      return;
+    }
+
+    // Ctrl+Shift+Enter = add new item ABOVE this row (mirrors Shift+Enter for below)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Enter') {
+      e.preventDefault();
+      const newId = addItem(item.id, undefined, 'before');
+      setTimeout(() => {
+        document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] [data-text-input]`)?.focus();
+      }, 30);
       return;
     }
   };

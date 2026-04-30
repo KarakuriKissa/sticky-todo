@@ -122,14 +122,31 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     set({ history: newHistory, historyIdx: newHistory.length - 1 });
   };
 
-  // The actual save — reads the LATEST items and writes them all.
-  // Verbose logging + 1 retry so you can diagnose failures in DevTools console.
+  // localStorage backup — survives even if SQLite save fails.
+  const lsKey = (noteId: string) => `sticky-todo:note-items:${noteId}`;
+  const backupToLocalStorage = (items: TodoItem[]) => {
+    if (items.length === 0) return;
+    const noteId = items[0].note_id;
+    if (!noteId) return;
+    try {
+      localStorage.setItem(lsKey(noteId), JSON.stringify(items));
+    } catch (e) {
+      console.warn('[save] localStorage backup failed:', e);
+    }
+  };
+
+  // The actual save — writes to BOTH localStorage (instant, always works) AND
+  // SQLite (durable, may fail). localStorage is the safety net.
   const doSave = async () => {
     const items = get().items.filter((i) => i.note_id !== '' && i.note_id != null);
     if (items.length === 0) {
       console.log('[save] skip — no items with valid note_id');
       return;
     }
+    // 1. Backup to localStorage immediately (synchronous, never fails for normal data).
+    backupToLocalStorage(items);
+
+    // 2. Try SQLite.
     console.log('[save] start, count=', items.length, 'first note_id=', items[0].note_id);
     set({ saveStatus: 'saving' });
     try {
@@ -140,14 +157,13 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     } catch (e) {
       console.error('[save] FAILED 1st attempt:', e);
     }
-    // Retry once after 400ms.
     await new Promise((r) => setTimeout(r, 400));
     try {
       await invoke('save_items', { items });
       console.log('[save] OK on retry, count=', items.length);
       set({ saveStatus: 'saved', lastSavedAt: Date.now() });
     } catch (e) {
-      console.error('[save] FAILED on retry too:', e);
+      console.error('[save] FAILED on retry too — data is in localStorage backup:', e);
       set({ saveStatus: 'error' });
     }
   };
@@ -193,21 +209,81 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     endDrag: () => set({ dragState: null }),
 
     load: async (noteId: string) => {
-      const items = await invoke<TodoItem[]>('get_note_items', { noteId });
+      let items: TodoItem[] = [];
+      try {
+        items = await invoke<TodoItem[]>('get_note_items', { noteId });
+        console.log('[load] DB returned', items.length, 'items for note', noteId);
+      } catch (e) {
+        console.error('[load] DB read failed:', e);
+      }
+
+      // Fallback to localStorage if DB came back empty.
+      if (items.length === 0) {
+        try {
+          const cached = localStorage.getItem(lsKey(noteId));
+          if (cached) {
+            const parsed = JSON.parse(cached) as TodoItem[];
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log('[load] DB empty — restoring', parsed.length, 'items from localStorage');
+              items = parsed;
+              // Re-save to SQLite so the DB catches up.
+              try { await invoke('save_items', { items }); } catch (e) {
+                console.error('[load] re-save to DB failed:', e);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[load] localStorage read failed:', e);
+        }
+      }
+
       const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order);
-      set({ items: sorted, history: [{ items: sorted }], historyIdx: 0, searchQuery: '' });
+      // Only OVERWRITE if the user hasn't already started editing in this window
+      // (prevents the race where load() resolves AFTER the user has typed).
+      const cur = get().items;
+      if (cur.length > 0) {
+        // Merge: keep user's edits, add DB items the user doesn't yet have.
+        const userIds = new Set(cur.map((i) => i.id));
+        const merged = [...cur, ...sorted.filter((i) => !userIds.has(i.id))];
+        console.log('[load] user already has', cur.length, 'items, merging →', merged.length);
+        set({ items: merged, history: [{ items: merged }], historyIdx: 0 });
+      } else {
+        set({ items: sorted, history: [{ items: sorted }], historyIdx: 0, searchQuery: '' });
+      }
     },
 
     setNote: (note: Note) => set({ note }),
     setSearchQuery: (q: string) => set({ searchQuery: q }),
 
-    addItem: (afterId?: string, indent = 0, position: 'before' | 'after' = 'after') => {
+    addItem: (afterId?: string, indent?: number, position: 'before' | 'after' = 'after') => {
       // Guard: if the note hasn't loaded yet, note_id would be '' which violates the
       // FK constraint and causes save_item / save_items to fail silently.
       const noteId = get().note?.id;
       if (!noteId) return '';
-      const newItem = makeItem(noteId, { indent });
-      let items = get().items;
+      const allItems = get().items;
+
+      // Inheritance:
+      // - if `indent` is explicitly given, use it (caller is overriding)
+      // - else inherit indent from the reference task: afterId if given, otherwise the
+      //   last visible task in the list. New tasks should look like a sibling of the
+      //   task they were added near.
+      let inheritedIndent = 0;
+      if (typeof indent === 'number') {
+        inheritedIndent = indent;
+      } else if (afterId) {
+        const ref = allItems.find((i) => i.id === afterId);
+        if (ref) inheritedIndent = ref.indent;
+      } else if (allItems.length > 0) {
+        inheritedIndent = allItems[allItems.length - 1].indent;
+      }
+
+      // Default deadline = 10 days from now (date only, ISO YYYY-MM-DD).
+      const tenDays = new Date();
+      tenDays.setDate(tenDays.getDate() + 10);
+      const limit_date = tenDays.toISOString().slice(0, 10);
+
+      const newItem = makeItem(noteId, { indent: inheritedIndent, limit_date });
+      let items = allItems;
 
       if (afterId) {
         const idx = items.findIndex((i) => i.id === afterId);

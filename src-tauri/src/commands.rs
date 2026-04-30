@@ -344,6 +344,68 @@ pub fn import_database(app: AppHandle, src_path: String) -> Result<(), String> {
     app.restart();
 }
 
+// Global search across every (non-archived) item in every note.
+#[tauri::command]
+pub fn search_all_items(
+    query: String,
+    db: State<'_, Database>,
+) -> Result<Vec<(TodoItem, String)>, String> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Ok(vec![]);
+    }
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT i.id,i.note_id,i.parent_id,i.text,i.checked,i.indent,i.collapsed,i.locked,
+                    i.status,i.assignees,i.assignee_person_id,i.memo,i.bold,i.priority,
+                    i.start_date,i.end_date,i.limit_date,i.item_type,i.sort_order,i.archived,
+                    i.updated_at,i.dirty,n.title
+             FROM todo_items i JOIN notes n ON n.id = i.note_id
+             WHERE i.archived = 0 AND lower(i.text) LIKE '%' || ?1 || '%'
+             LIMIT 200",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([&q], |r| {
+            Ok((
+                TodoItem {
+                    id: r.get(0)?,
+                    note_id: r.get(1)?,
+                    parent_id: r.get(2)?,
+                    text: r.get(3)?,
+                    checked: r.get::<_, i32>(4)? != 0,
+                    indent: r.get(5)?,
+                    collapsed: r.get::<_, i32>(6)? != 0,
+                    locked: r.get::<_, i32>(7)? != 0,
+                    status: r.get(8)?,
+                    assignees: r.get::<_, Option<String>>(9)?.unwrap_or_else(|| "[]".into()),
+                    assignee_person_id: r.get(10)?,
+                    memo: r.get(11)?,
+                    bold: r.get::<_, i32>(12)? != 0,
+                    priority: r.get(13)?,
+                    start_date: r.get(14)?,
+                    end_date: r.get(15)?,
+                    limit_date: r.get(16)?,
+                    item_type: r.get(17)?,
+                    sort_order: r.get(18)?,
+                    archived: r.get::<_, i32>(19)? != 0,
+                    updated_at: r.get(20)?,
+                    dirty: r.get::<_, i32>(21)? != 0,
+                },
+                r.get::<_, String>(22)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for row in rows {
+        if let Ok(r) = row {
+            out.push(r);
+        }
+    }
+    Ok(out)
+}
+
 #[tauri::command]
 pub fn delete_database(app: AppHandle) -> Result<(), String> {
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;

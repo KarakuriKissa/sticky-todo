@@ -80,6 +80,7 @@ pub fn run() {
             commands::export_database,
             commands::import_database,
             commands::delete_database,
+            commands::search_all_items,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

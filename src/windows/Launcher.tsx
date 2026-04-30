@@ -31,16 +31,49 @@ export function Launcher() {
     });
   }, []);
 
+  // Global search (Ctrl+K) — Spotlight-style overlay across every list and task.
+  const [globalSearch, setGlobalSearch] = useState<{
+    open: boolean;
+    query: string;
+    results: { item: any; noteTitle: string }[];
+  }>({ open: false, query: '', results: [] });
+
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
         searchRef.current?.focus();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setGlobalSearch((s) => ({ ...s, open: true }));
+      }
+      if (e.key === 'Escape') {
+        setGlobalSearch((s) => ({ ...s, open: false }));
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // Run a global item search whenever the query changes.
+  useEffect(() => {
+    if (!globalSearch.open) return;
+    const q = globalSearch.query.trim();
+    if (!q) {
+      setGlobalSearch((s) => ({ ...s, results: [] }));
+      return;
+    }
+    const handle = setTimeout(async () => {
+      try {
+        const rows = await invoke<[any, string][]>('search_all_items', { query: q });
+        setGlobalSearch((s) => ({ ...s, results: rows.map(([item, noteTitle]) => ({ item, noteTitle })) }));
+      } catch {
+        setGlobalSearch((s) => ({ ...s, results: [] }));
+      }
+    }, 150);
+    return () => clearTimeout(handle);
+  }, [globalSearch.query, globalSearch.open]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -148,6 +181,49 @@ export function Launcher() {
           onSave={saveSettings}
           onClose={() => setShowSettings(false)}
         />
+      )}
+
+      {/* ── Global search overlay (Ctrl+K) ─── */}
+      {globalSearch.open && (
+        <div className="global-search-backdrop" onClick={() => setGlobalSearch((s) => ({ ...s, open: false }))}>
+          <div className="global-search-box" onClick={(e) => e.stopPropagation()}>
+            <input
+              autoFocus
+              className="global-search-input"
+              placeholder="🌐 全リストのタスクを検索…"
+              value={globalSearch.query}
+              onChange={(e) => setGlobalSearch((s) => ({ ...s, query: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setGlobalSearch((s) => ({ ...s, open: false }));
+              }}
+            />
+            <div className="global-search-hint">Ctrl+K で開閉 / Esc で閉じる / クリックでそのリストを開く</div>
+            <div className="global-search-results">
+              {globalSearch.query.trim() === '' && (
+                <div className="global-search-empty">検索したいキーワードを入力してください</div>
+              )}
+              {globalSearch.query.trim() !== '' && globalSearch.results.length === 0 && (
+                <div className="global-search-empty">該当するタスクがありません</div>
+              )}
+              {globalSearch.results.map(({ item, noteTitle }) => {
+                const note = useAppStore.getState().notes.find((n) => n.id === item.note_id);
+                return (
+                  <div
+                    key={item.id}
+                    className="global-search-result"
+                    onClick={() => {
+                      if (note) useAppStore.getState().openNote(note);
+                      setGlobalSearch((s) => ({ ...s, open: false }));
+                    }}
+                  >
+                    <div className="global-search-note-title">📋 {noteTitle}</div>
+                    <div className="global-search-task-text">{item.checked ? '☑' : '☐'} {item.text}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
