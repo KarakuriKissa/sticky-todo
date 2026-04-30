@@ -19,6 +19,7 @@ export function NoteWindow({ noteId }: Props) {
   const {
     load, items, note, setNote, addItem, flush, undo, redo,
     selectAll, clearSelection, selectedIds, searchQuery, setSearchQuery,
+    saveStatus, lastSavedAt,
   } = useNoteStore();
   const { notes, updateNote, assigneeGroups, settings, trackWindowClose } = useAppStore();
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
@@ -59,6 +60,13 @@ export function NoteWindow({ noteId }: Props) {
 
   // Keep noteRef in sync so the close handler always has the latest note.
   useEffect(() => { noteRef.current = note; }, [note]);
+
+  // Periodic autosave — final defense if everything else fails.
+  // Calls flush() every 5s. flush() is a no-op when items are empty / nothing changed.
+  useEffect(() => {
+    const id = setInterval(() => { flush().catch(() => {}); }, 5000);
+    return () => clearInterval(id);
+  }, [flush]);
 
   // Sync title/color from appStore when another window changes them
   useEffect(() => {
@@ -292,6 +300,14 @@ export function NoteWindow({ noteId }: Props) {
         )}
 
         <div className="note-titlebar-actions">
+          {/* Save indicator */}
+          <span
+            className={`save-indicator save-${saveStatus}`}
+            title={lastSavedAt ? `最終保存: ${new Date(lastSavedAt).toLocaleTimeString()}` : '未保存'}
+          >
+            {saveStatus === 'saving' ? '💾…' : saveStatus === 'saved' ? '✓' : saveStatus === 'error' ? '⚠' : ''}
+          </span>
+
           {/* Pin button — visually distinct when ON */}
           <button
             className={`pin-btn${alwaysOnTop ? ' pinned' : ''}`}

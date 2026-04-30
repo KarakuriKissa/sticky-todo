@@ -65,6 +65,10 @@ interface NoteStore {
 
   // Flush dirty items to backend
   flush: () => Promise<void>;
+
+  // Live save indicator. 'idle' | 'saving' | 'saved' | 'error'
+  saveStatus: 'idle' | 'saving' | 'saved' | 'error';
+  lastSavedAt: number | null;
 }
 
 function now() {
@@ -99,13 +103,15 @@ function makeItem(noteId: string, partial: Partial<TodoItem> = {}): TodoItem {
   };
 }
 
-// Brute-force save design:
-//   - No dirty flag tracking. Every action saves the whole item list.
-//   - Filter by item.note_id (NOT get().note?.id) — the note state may not be
-//     loaded yet on a fresh window. The item itself always knows its note.
-//   - Text / memo input is the only thing that gets a 300 ms debounce.
-//   - flush() awaits one final save so close-to-destroy is safe.
+// Save design v3 — sequential promise chain for reliability:
+//   - All saves enqueue onto saveChain so they NEVER overlap. SQLite's mutex
+//     order is preserved → no "earlier invoke overwrites later" race.
+//   - flush() does `await saveChain` then a final save_items, so window close
+//     is guaranteed to wait for every pending save.
+//   - Filters by item.note_id (NOT get().note?.id) — saves work even before
+//     the note state has loaded on a fresh window.
 let textSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let saveChain: Promise<void> = Promise.resolve();
 
 export const useNoteStore = create<NoteStore>((set, get) => {
   const pushHistory = (items: TodoItem[]) => {
@@ -116,13 +122,23 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     set({ history: newHistory, historyIdx: newHistory.length - 1 });
   };
 
-  // Save everything (filtered by valid note_id) — fire-and-forget.
-  const saveAll = () => {
+  // The actual save — reads the LATEST items and writes them all.
+  const doSave = async () => {
     const items = get().items.filter((i) => i.note_id);
     if (items.length === 0) return;
-    invoke('save_items', { items }).catch((e) => {
+    set({ saveStatus: 'saving' });
+    try {
+      await invoke('save_items', { items });
+      set({ saveStatus: 'saved', lastSavedAt: Date.now() });
+    } catch (e) {
       console.error('[noteStore] save_items failed:', e);
-    });
+      set({ saveStatus: 'error' });
+    }
+  };
+
+  // Enqueue an immediate save onto the chain.
+  const saveAll = () => {
+    saveChain = saveChain.then(doSave);
   };
 
   // Debounced version for text / memo typing (so we don't IPC every keystroke).
@@ -154,6 +170,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     history: [],
     historyIdx: -1,
     dragState: null,
+    saveStatus: 'idle',
+    lastSavedAt: null,
     startDrag: (fromId) => set({ dragState: { fromId, overItemId: null, overPos: 'after' } }),
     updateDragOver: (overId, pos) => set((s) => s.dragState ? { dragState: { ...s.dragState, overItemId: overId, overPos: pos } } : {}),
     endDrag: () => set({ dragState: null }),
@@ -506,13 +524,24 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
 
     flush: async () => {
-      if (textSaveTimer) { clearTimeout(textSaveTimer); textSaveTimer = null; }
+      // 1. Cancel any pending text-debounce timer and enqueue its save.
+      if (textSaveTimer) {
+        clearTimeout(textSaveTimer);
+        textSaveTimer = null;
+        saveAll();
+      }
+      // 2. Wait for the entire chain to drain.
+      await saveChain;
+      // 3. One final save_items just to be sure (covers any state that
+      //    might have changed between the last queued save and now).
       const items = get().items.filter((i) => i.note_id);
       if (items.length === 0) return;
       try {
         await invoke('save_items', { items });
+        set({ saveStatus: 'saved', lastSavedAt: Date.now() });
       } catch (e) {
         console.error('[noteStore] flush save_items failed:', e);
+        set({ saveStatus: 'error' });
       }
     },
   };

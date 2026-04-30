@@ -566,6 +566,8 @@ ul { list-style: none; }
 
 .todo-text {
   flex: 1;
+  min-width: 0;
+  text-overflow: ellipsis;
   background: transparent;
   border: none;
   outline: none;
@@ -579,18 +581,14 @@ ul { list-style: none; }
 .todo-text[readonly] { cursor: default; color: rgba(30,30,46,.6); }
 .todo-text::placeholder { color: rgba(30,30,46,.28); }
 
-/* Absolutely positioned so badges OVERLAY the text only when filled.
-   Empty rows let the text use the full row width. */
+/* Flex layout — badges with content take their natural width and push the text
+   to ellipsis. Empty inline pickers are display:none until row hover, so empty
+   rows let the text use the full row width. */
 .todo-badges {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
   display: flex;
   gap: 2px;
   align-items: center;
   flex-shrink: 0;
-  pointer-events: auto;
 }
 /* Fixed-width badge columns for alignment across rows */
 .badge-col {
@@ -743,12 +741,31 @@ ul { list-style: none; }
   flex-shrink: 0;
   user-select: none;
   padding: 0 2px;
-  opacity: 0;
+  opacity: 0.18; /* faintly visible at all times so users can find it */
   transition: opacity .1s;
 }
 .todo-item:hover .item-drag-grip,
 .todo-heading:hover .item-drag-grip { opacity: 1; }
 .todo-item.dragging { opacity: 0.4; }
+
+/* Save indicator in the title bar */
+.save-indicator {
+  font-size: 11px;
+  width: 18px;
+  text-align: center;
+  user-select: none;
+  transition: color .15s;
+}
+.save-indicator.save-saving { color: rgba(30,30,46,.5); }
+.save-indicator.save-saved  { color: #16a34a; }
+.save-indicator.save-error  { color: #ef4444; }
+.save-indicator.save-idle   { color: transparent; }
+
+/* Search match highlighting */
+.todo-text-match {
+  background: rgba(250, 204, 21, 0.55);
+  border-radius: 2px;
+}
 
 /* Note card selected state */
 .note-card.selected {
@@ -1091,15 +1108,14 @@ ul { list-style: none; }
   font-size: 9px;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity .1s;
+  display: none; /* hidden by default — empty rows use full width */
   padding: 1px 4px;
   border-radius: 4px;
   border: 1px dashed var(--muted);
   white-space: nowrap;
   user-select: none;
 }
-.todo-item:hover .inline-add-btn { opacity: 0.5; }
+.todo-item:hover .inline-add-btn { display: inline-block; opacity: 0.6; }
 .todo-item:hover .inline-add-btn:hover { opacity: 1; background: rgba(0,0,0,.05); }
 
 /* ── Inline date input ───────────────────────────────────────────────────── */
