@@ -748,6 +748,38 @@ ul { list-style: none; }
 .todo-heading:hover .item-drag-grip { opacity: 1; }
 .todo-item.dragging { opacity: 0.4; }
 
+/* Close-time overlay — blocks the UI until flush() finishes */
+.closing-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+.closing-overlay-box {
+  background: white;
+  color: #1e1e2e;
+  padding: 18px 26px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: center;
+  box-shadow: 0 6px 24px rgba(0,0,0,.25);
+  min-width: 180px;
+}
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(99,102,241,.25);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  margin: 0 auto 10px;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* Save indicator in the title bar */
 .save-indicator {
   font-size: 11px;

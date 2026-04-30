@@ -29,6 +29,7 @@ export function NoteWindow({ noteId }: Props) {
   const [priorityMode, setPriorityMode] = useState<'hml' | 'abc'>('hml');
   const [titleDraft, setTitleDraft] = useState('');
   const [activeGroupId, setActiveGroupId] = useState<string>('');
+  const [closingOverlay, setClosingOverlay] = useState<null | 'saving' | 'failed'>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
   const closingRef = useRef(false);
@@ -83,40 +84,59 @@ export function NoteWindow({ noteId }: Props) {
   useEffect(() => {
     const unlisten = appWin.onCloseRequested(async (event) => {
       if (closingRef.current) return;
-      event.preventDefault();
+      event.preventDefault();          // never let the window close on its own
       closingRef.current = true;
-      try {
-        // ── 1. Flush all dirty items to SQLite ──────────────────────────────
-        await flush();
+      setClosingOverlay('saving');     // show the "保存中…" overlay
 
-        // ── 2. Persist window geometry (best-effort — failures are non-fatal) ──
-        const currentNote = noteRef.current;
-        if (currentNote) {
-          try {
-            const pos = await appWin.outerPosition();
-            const size = await appWin.outerSize();
-            const scale = await appWin.scaleFactor();
-            const updated = {
-              ...currentNote,
-              window_x: pos.x / scale,
-              window_y: pos.y / scale,
-              window_width: size.width / scale,
-              window_height: size.height / scale,
-            };
-            updateNote(updated);
-            await invoke('save_note', { note: updated });
-          } catch (posErr) {
-            console.warn('Could not save window geometry:', posErr);
-            // Items already saved above — geometry failure is non-fatal.
-          }
+      // ── 1. Flush items to SQLite, with up to 3 retries ────────────────────
+      let saved = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await flush();
+          saved = true;
+          break;
+        } catch (e) {
+          console.error(`flush attempt ${attempt + 1} failed:`, e);
+          await new Promise((r) => setTimeout(r, 250));
         }
-
-        await trackWindowClose(noteId);
-      } catch (e) {
-        console.error('onCloseRequested error:', e);
-      } finally {
-        appWin.destroy();
       }
+      if (!saved) {
+        // All retries failed — let the user decide whether to force-close.
+        setClosingOverlay('failed');
+        const ok = window.confirm(
+          '保存に失敗しました。\nこのまま閉じると最後の変更が失われる可能性があります。\nそれでも閉じますか？',
+        );
+        if (!ok) {
+          // User chose to stay → reset state so the window remains usable.
+          closingRef.current = false;
+          setClosingOverlay(null);
+          return;
+        }
+      }
+
+      // ── 2. Persist window geometry (best-effort, never blocks close) ──────
+      const currentNote = noteRef.current;
+      if (currentNote) {
+        try {
+          const pos = await appWin.outerPosition();
+          const size = await appWin.outerSize();
+          const scale = await appWin.scaleFactor();
+          const updated = {
+            ...currentNote,
+            window_x: pos.x / scale,
+            window_y: pos.y / scale,
+            window_width: size.width / scale,
+            window_height: size.height / scale,
+          };
+          updateNote(updated);
+          await invoke('save_note', { note: updated });
+        } catch (posErr) {
+          console.warn('Could not save window geometry:', posErr);
+        }
+      }
+
+      try { await trackWindowClose(noteId); } catch { /* ignore */ }
+      appWin.destroy();
     });
     return () => { unlisten.then((f) => f()); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -268,6 +288,17 @@ export function NoteWindow({ noteId }: Props) {
         setShowPriorityPicker(false);
       }}
     >
+      {/* ── Closing overlay — blocks close until save finishes ── */}
+      {closingOverlay && (
+        <div className="closing-overlay">
+          <div className="closing-overlay-box">
+            {closingOverlay === 'saving'
+              ? <><div className="spinner" />保存中…<br />しばらくお待ちください</>
+              : <>⚠ 保存に失敗しました</>}
+          </div>
+        </div>
+      )}
+
       {/* ── Title bar ── */}
       <div className="note-titlebar" data-tauri-drag-region="">
         {editingTitle ? (
