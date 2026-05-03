@@ -147,6 +147,14 @@ export function NoteList({ onNew }: Props) {
         <div
           key={note.id}
           data-note-id={note.id}
+          // HTML5 drag — allows dropping onto a CategoryList item to change category.
+          // Existing pointer-based reorder still works via the .note-card-grip handle.
+          draggable={true}
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('application/x-sticky-todo-note', note.id);
+            e.dataTransfer.setData('text/plain', note.title);
+          }}
           className={`note-card${noteDrag?.overItemId === note.id ? ` drag-${noteDrag.overPos}` : ''}${noteDrag?.fromId === note.id ? ' dragging' : ''}${selectedNoteId === note.id ? ' selected' : ''}`}
           style={{ borderLeft: `4px solid ${note.color}` }}
           onClick={() => setSelectedNoteId(note.id)}
@@ -265,7 +273,7 @@ export function NoteList({ onNew }: Props) {
       {noteCtx && (
         <div
           className="context-menu"
-          style={{ position: 'fixed', left: noteCtx.x, top: noteCtx.y, zIndex: 1000 }}
+          style={{ position: 'fixed', left: noteCtx.x, top: noteCtx.y, zIndex: 1000, minWidth: 220 }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -275,8 +283,24 @@ export function NoteList({ onNew }: Props) {
               setNoteCtx(null);
             }}
           >
-            <span className="ctx-icon">✕</span> リストを閉じる
+            <span className="ctx-icon">✕</span>
+            <span className="ctx-label">リストを閉じる</span>
           </button>
+          <div className="context-menu-sep" />
+          <div style={{ padding: '4px 12px 2px', fontSize: 10, color: 'var(--muted)' }}>カテゴリを変更</div>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              className="context-menu-item"
+              onClick={() => {
+                updateNote({ ...noteCtx.note, category_id: c.id });
+                setNoteCtx(null);
+              }}
+            >
+              <span className="ctx-icon" style={{ color: c.color }}>●</span>
+              <span className="ctx-label">{c.name}{noteCtx.note.category_id === c.id ? ' ✓' : ''}</span>
+            </button>
+          ))}
           <div className="context-menu-sep" />
           <button
             className="context-menu-item danger"
@@ -285,7 +309,8 @@ export function NoteList({ onNew }: Props) {
               setNoteCtx(null);
             }}
           >
-            <span className="ctx-icon">🗑</span> リストの削除
+            <span className="ctx-icon">🗑</span>
+            <span className="ctx-label">リストの削除</span>
           </button>
         </div>
       )}

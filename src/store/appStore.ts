@@ -322,13 +322,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   filteredNotes: () => {
     const { notes, selectedCategoryId, searchQuery, settings, categories, itemMatchNoteIds } = get();
+    const q = searchQuery.trim().toLowerCase();
     let result = notes;
-    if (selectedCategoryId) {
+    // When global-searching, ignore the category filter so cross-category matches are visible.
+    if (selectedCategoryId && !q) {
       result = result.filter((n) => n.category_id === selectedCategoryId);
     }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      // GLOBAL search: include notes whose title matches OR which have a task matching.
+    if (q) {
       result = result.filter(
         (n) => n.title.toLowerCase().includes(q) || itemMatchNoteIds.has(n.id),
       );
