@@ -14,6 +14,11 @@ interface AppStore {
   searchQuery: string;
   openWindowIds: Set<string>;
 
+  // Global-search results: notes that have at least one matching task.
+  // Updated by Launcher whenever searchQuery changes.
+  itemMatchNoteIds: Set<string>;
+  itemMatches: { item: any; noteTitle: string }[];
+
   load: () => Promise<void>;
   reopenSavedWindows: () => Promise<void>;
 
@@ -111,6 +116,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   selectedCategoryId: null,
   searchQuery: '',
   openWindowIds: new Set(),
+  itemMatchNoteIds: new Set(),
+  itemMatches: [],
 
   load: async () => {
     const [notes, categories, statuses, assigneeGroups, assigneePersons, settings] =
@@ -314,16 +321,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setSearchQuery: (q) => set({ searchQuery: q }),
 
   filteredNotes: () => {
-    const { notes, selectedCategoryId, searchQuery, settings, categories } = get();
+    const { notes, selectedCategoryId, searchQuery, settings, categories, itemMatchNoteIds } = get();
     let result = notes;
     if (selectedCategoryId) {
       result = result.filter((n) => n.category_id === selectedCategoryId);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter((n) => n.title.toLowerCase().includes(q));
+      // GLOBAL search: include notes whose title matches OR which have a task matching.
+      result = result.filter(
+        (n) => n.title.toLowerCase().includes(q) || itemMatchNoteIds.has(n.id),
+      );
     }
-    // Normalize legacy 'name' sort mode to 'name_asc'
     const mode = ((settings.sort_mode as string) === 'name' ? 'name_asc' : settings.sort_mode) as SortMode;
     return sorted(result, mode, categories);
   },

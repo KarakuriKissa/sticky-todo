@@ -9,9 +9,18 @@ interface Props {
 }
 
 export function NoteList({ onNew }: Props) {
-  const { filteredNotes, openNote, deleteNote, duplicateNote, updateNote, categories, reorderNotes } =
+  const { filteredNotes, openNote, deleteNote, duplicateNote, updateNote, categories, reorderNotes, itemMatches, searchQuery } =
     useAppStore();
   const notes = filteredNotes();
+  // Map note_id → first matching task text (for the global-search hint badge).
+  const matchHintByNote = new Map<string, string>();
+  if (searchQuery.trim()) {
+    for (const m of itemMatches) {
+      if (!matchHintByNote.has(m.item.note_id)) {
+        matchHintByNote.set(m.item.note_id, m.item.text);
+      }
+    }
+  }
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Note | null>(null);
@@ -196,6 +205,13 @@ export function NoteList({ onNew }: Props) {
                 {new Date(note.updated_at).toLocaleDateString('ja-JP')}
               </span>
             </div>
+            {/* Global-search match hint: shows the matching task text inside this note */}
+            {matchHintByNote.has(note.id) && (
+              <div className="note-card-match-hint" title="検索一致タスク">
+                🔍 {matchHintByNote.get(note.id)?.slice(0, 60)}
+                {(matchHintByNote.get(note.id)?.length ?? 0) > 60 ? '…' : ''}
+              </div>
+            )}
           </div>
 
           {/* Hover actions */}

@@ -476,6 +476,16 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     endDrag();
   };
 
+  // ── Bulk-aware update — applies the patch to all selected items if this row
+  // is part of a multi-selection, otherwise just to this row.
+  const updateMaybeBulk = (patch: Partial<Item>) => {
+    if (isInSel) {
+      [...selectedIds].forEach((id) => updateItem(id, patch));
+    } else {
+      updateItem(item.id, patch);
+    }
+  };
+
   // ── Memo / Comment ──────────────────────────────────────────────────────────
   const saveMemo = () => {
     updateItem(item.id, { memo: memoText.trim() || null });
@@ -550,7 +560,9 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         onContextMenu={onContextMenu}
         onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
         onKeyDown={(e) => {
-          if (!isEditing && e.key === 'Enter') { e.preventDefault(); enterEdit(); }
+          if (!isEditing && e.key === 'Enter') { e.preventDefault(); enterEdit(); return; }
+          // Forward all other keys (Ctrl+H, Ctrl+B, Ctrl+E, etc.) to the row handler.
+          onRowKeyDown(e);
         }}
         onClick={(e) => {
           e.stopPropagation();
@@ -666,8 +678,8 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         {settings.feature_assignee && (
           <div className="badge-col badge-col-assignee">
             {assigneePerson
-              ? <AssigneeBadge person={assigneePerson} persons={groupPersons} onSelect={(id) => updateItem(item.id, { assignee_person_id: id || null })} />
-              : groupPersons.length > 0 && <InlineAssigneePicker persons={groupPersons} onSelect={(id) => updateItem(item.id, { assignee_person_id: id || null })} />
+              ? <AssigneeBadge person={assigneePerson} persons={groupPersons} onSelect={(id) => updateMaybeBulk({ assignee_person_id: id || null })} />
+              : groupPersons.length > 0 && <InlineAssigneePicker persons={groupPersons} onSelect={(id) => updateMaybeBulk({ assignee_person_id: id || null })} />
             }
           </div>
         )}
@@ -676,8 +688,8 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         {settings.feature_status && (
           <div className="badge-col badge-col-status">
             {statusObj
-              ? <StatusBadge status={statusObj} allStatuses={statuses} onSelect={(id) => updateItem(item.id, { status: id || null })} />
-              : statuses.length > 0 && <InlineStatusPicker statuses={statuses} onSelect={(id) => updateItem(item.id, { status: id || null })} />
+              ? <StatusBadge status={statusObj} allStatuses={statuses} onSelect={(id) => updateMaybeBulk({ status: id || null })} />
+              : statuses.length > 0 && <InlineStatusPicker statuses={statuses} onSelect={(id) => updateMaybeBulk({ status: id || null })} />
             }
           </div>
         )}
@@ -686,8 +698,8 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         {settings.feature_date && (
           <div className="badge-col badge-col-date">
             {item.limit_date
-              ? <DateBadge date={item.limit_date} isWarn={isWarn} isOverdue={isOverdue} onSelect={(d) => updateItem(item.id, { limit_date: d || null })} />
-              : <InlineDatePicker onSelect={(d) => updateItem(item.id, { limit_date: d || null })} />
+              ? <DateBadge date={item.limit_date} isWarn={isWarn} isOverdue={isOverdue} onSelect={(d) => updateMaybeBulk({ limit_date: d || null })} />
+              : <InlineDatePicker onSelect={(d) => updateMaybeBulk({ limit_date: d || null })} />
             }
           </div>
         )}
@@ -696,7 +708,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         {settings.feature_priority && item.priority && (
           <PriorityBadge
             priority={item.priority}
-            onSelect={(p) => updateItem(item.id, { priority: p })}
+            onSelect={(p) => updateMaybeBulk({ priority: p })}
             mode={priorityMode ?? 'hml'}
           />
         )}

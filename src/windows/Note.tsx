@@ -363,8 +363,9 @@ export function NoteWindow({ noteId }: Props) {
         ) : (
           <span
             className="note-title-text"
-            data-tauri-drag-region=""
-            onDoubleClick={startTitleEdit}
+            // NOTE: no data-tauri-drag-region here. With it, Tauri intercepts the
+            // double-click and toggles maximize before our React handler runs.
+            onDoubleClick={(e) => { e.stopPropagation(); startTitleEdit(); }}
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();

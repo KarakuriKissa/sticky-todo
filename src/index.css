@@ -857,6 +857,21 @@ ul { list-style: none; }
   font-size: 11px;
 }
 
+/* Search match hint shown under a note title in the launcher list */
+.note-card-match-hint {
+  margin-top: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(250, 204, 21, 0.18);
+  border-radius: 3px;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Global search overlay (Ctrl+K) */
 .global-search-backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,.45);
