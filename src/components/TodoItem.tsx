@@ -1,4 +1,35 @@
 import { useRef, KeyboardEvent, useState, MouseEvent, useLayoutEffect, useEffect } from 'react';
+import { open as shellOpen } from '@tauri-apps/plugin-shell';
+
+// Render free text, making URLs clickable. URLs open in the user's default
+// browser via the Tauri shell plugin (so they don't navigate the webview).
+function renderTextWithLinks(text: string): React.ReactNode {
+  const urlRe = /(https?:\/\/[^\s]+)/g;
+  const out: React.ReactNode[] = [];
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+  let key = 0;
+  while ((m = urlRe.exec(text)) !== null) {
+    if (m.index > lastIdx) out.push(text.slice(lastIdx, m.index));
+    const url = m[0];
+    out.push(
+      <a
+        key={key++}
+        className="todo-link"
+        href={url}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          shellOpen(url).catch(console.error);
+        }}
+        title={url}
+      >{url}</a>,
+    );
+    lastIdx = m.index + url.length;
+  }
+  if (lastIdx < text.length) out.push(text.slice(lastIdx));
+  return out;
+}
 import { createPortal } from 'react-dom';
 import type { TodoItem as Item, Status } from '../types';
 import { useNoteStore } from '../store/noteStore';
@@ -656,21 +687,33 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         disabled={item.locked}
       />
 
-      {/* Text */}
-      <input
-        ref={inputRef}
-        data-text-input=""
-        className={`todo-text${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}`}
-        value={item.text}
-        readOnly={!isEditing || item.locked}
-        onChange={(e) => isEditing && !item.locked && updateItem(item.id, { text: e.target.value })}
-        onKeyDown={onKeyDown}
-        onBlur={exitEdit}
-        onClick={(e) => { e.stopPropagation(); if (!isEditing) onRowClick(e); }}
-        onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
-        onMouseDown={(e) => e.stopPropagation()}
-        placeholder={isEditing ? 'タスクを入力…' : ''}
-      />
+      {/* Text — input while editing, div with clickable URLs while viewing */}
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          data-text-input=""
+          className={`todo-text${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}`}
+          value={item.text}
+          readOnly={item.locked}
+          onChange={(e) => !item.locked && updateItem(item.id, { text: e.target.value })}
+          onKeyDown={onKeyDown}
+          onBlur={exitEdit}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          placeholder="タスクを入力…"
+        />
+      ) : (
+        <div
+          data-text-input=""
+          className={`todo-text todo-text-view${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}`}
+          onClick={(e) => { e.stopPropagation(); onRowClick(e); }}
+          onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {item.text ? renderTextWithLinks(item.text) : <span className="todo-text-placeholder"></span>}
+        </div>
+      )}
 
       {/* Badges — fixed-width columns: 担当者 | ステータス | 期日 */}
       <div className="todo-badges">

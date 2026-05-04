@@ -166,13 +166,10 @@ export function Launcher() {
           <button className="btn-icon" onClick={() => setShowSettings(true)} title="設定">⚙</button>
         </header>
 
-        {/* While global-searching, show task-level results (overlay-style) inline.
-            Empty search → standard NoteList. */}
-        {searchQuery.trim() ? (
-          <GlobalSearchResults onClose={() => setSearchQuery('')} />
-        ) : (
-          <NoteList onNew={handleNew} />
-        )}
+        {/* The note list always renders. Search results pop up as an overlay
+            anchored to the search bar so users still see their lists behind. */}
+        <NoteList onNew={handleNew} />
+        {searchQuery.trim() && <SearchPopup onClose={() => setSearchQuery('')} />}
       </main>
 
       {showSettings && (
@@ -187,67 +184,58 @@ export function Launcher() {
   );
 }
 
-// ── Global search results (inline, overlay-style) ────────────────────────────
-function GlobalSearchResults({ onClose }: { onClose: () => void }) {
+// ── Search results popup (overlay anchored under the search bar) ─────────────
+function SearchPopup({ onClose }: { onClose: () => void }) {
   const { itemMatches, searchQuery, notes, openNote, filteredNotes } = useAppStore();
-  const matchedNotes = filteredNotes(); // notes that match by title (or item via itemMatchNoteIds)
+  const matchedNotes = filteredNotes();
 
   return (
-    <div className="search-results-panel">
-      <div className="search-results-summary">
-        <strong>「{searchQuery}」</strong> の検索結果：
-        リスト <b>{matchedNotes.length}</b> 件 / タスク <b>{itemMatches.length}</b> 件
-        <button className="btn-secondary" style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 10px' }} onClick={onClose}>
-          検索をクリア (Esc)
-        </button>
-      </div>
-
-      {/* Matching notes (by title or by item) */}
-      {matchedNotes.length > 0 && (
-        <section className="search-results-section">
-          <h4>📋 リスト ({matchedNotes.length})</h4>
-          <div className="search-results-list">
-            {matchedNotes.map((n) => (
-              <div
-                key={n.id}
-                className="search-result-row"
-                onClick={() => openNote(n)}
-                style={{ borderLeft: `3px solid ${n.color || '#fef08a'}` }}
-              >
-                <div className="search-result-title">📋 {n.title || '(無題)'}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Matching tasks across all notes */}
-      {itemMatches.length > 0 && (
-        <section className="search-results-section">
-          <h4>✅ タスク ({itemMatches.length})</h4>
-          <div className="search-results-list">
-            {itemMatches.map(({ item, noteTitle }) => {
-              const note = notes.find((nn) => nn.id === item.note_id);
-              return (
+    <div className="search-popup-backdrop" onClick={onClose}>
+      <div className="search-popup" onClick={(e) => e.stopPropagation()}>
+        <div className="search-popup-header">
+          🔍 <strong>「{searchQuery}」</strong> の検索結果：
+          リスト <b>{matchedNotes.length}</b> / タスク <b>{itemMatches.length}</b>
+          <button className="search-popup-close" onClick={onClose} title="閉じる (Esc)">✕</button>
+        </div>
+        <div className="search-popup-body">
+          {matchedNotes.length > 0 && (
+            <>
+              <div className="search-popup-section-label">📋 リスト</div>
+              {matchedNotes.map((n) => (
                 <div
-                  key={item.id}
-                  className="search-result-row"
-                  onClick={() => note && openNote(note)}
+                  key={n.id}
+                  className="search-popup-row"
+                  style={{ borderLeft: `3px solid ${n.color || '#fef08a'}` }}
+                  onClick={() => { openNote(n); onClose(); }}
                 >
-                  <div className="search-result-meta">📋 {noteTitle}</div>
-                  <div className="search-result-task">
-                    {item.checked ? '☑' : '☐'} {item.text}
-                  </div>
+                  📋 {n.title || '(無題)'}
                 </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {matchedNotes.length === 0 && itemMatches.length === 0 && (
-        <div className="search-results-empty">該当するリスト・タスクがありません</div>
-      )}
+              ))}
+            </>
+          )}
+          {itemMatches.length > 0 && (
+            <>
+              <div className="search-popup-section-label">✅ タスク</div>
+              {itemMatches.map(({ item, noteTitle }) => {
+                const note = notes.find((nn) => nn.id === item.note_id);
+                return (
+                  <div
+                    key={item.id}
+                    className="search-popup-row"
+                    onClick={() => { if (note) openNote(note); onClose(); }}
+                  >
+                    <div className="search-popup-meta">📋 {noteTitle}</div>
+                    <div>{item.checked ? '☑' : '☐'} {item.text}</div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+          {matchedNotes.length === 0 && itemMatches.length === 0 && (
+            <div className="search-popup-empty">該当するリスト・タスクがありません</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

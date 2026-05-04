@@ -33,6 +33,9 @@ export function NoteWindow({ noteId }: Props) {
   const [quickAddText, setQuickAddText] = useState('');
   const [showCheatSheet, setShowCheatSheet] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  // Search overlay (Ctrl+F). The fixed search bar is hidden; the input lives
+  // inside this overlay and shares the same Zustand searchQuery state.
+  const [showSearch, setShowSearch] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
   const closingRef = useRef(false);
@@ -71,6 +74,44 @@ export function NoteWindow({ noteId }: Props) {
     const id = setInterval(() => { flush().catch(() => {}); }, 5000);
     return () => clearInterval(id);
   }, [flush]);
+
+  // Desktop notification on note open: warn about overdue / soon-due tasks.
+  // Runs once after items finish loading.
+  const notifiedRef = useRef(false);
+  useEffect(() => {
+    if (notifiedRef.current) return;
+    if (items.length === 0) return;
+    notifiedRef.current = true;
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const overdue = items.filter((i) => !i.archived && !i.checked && i.limit_date && new Date(i.limit_date) < today);
+    const dueSoon = items.filter((i) => {
+      if (i.archived || i.checked || !i.limit_date) return false;
+      const d = new Date(i.limit_date);
+      const diff = (d.getTime() - today.getTime()) / 86400000;
+      return diff >= 0 && diff <= warnDays;
+    });
+    if (overdue.length === 0 && dueSoon.length === 0) return;
+
+    (async () => {
+      try {
+        const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification');
+        let allowed = await isPermissionGranted();
+        if (!allowed) {
+          const p = await requestPermission();
+          allowed = p === 'granted';
+        }
+        if (!allowed) return;
+        const title = note?.title ?? 'リスト';
+        const lines: string[] = [];
+        if (overdue.length > 0) lines.push(`⚠ 期限切れ ${overdue.length}件`);
+        if (dueSoon.length > 0) lines.push(`📅 ${warnDays}日以内 ${dueSoon.length}件`);
+        sendNotification({ title: `📋 ${title}`, body: lines.join(' / ') });
+      } catch (e) {
+        console.warn('[notify] failed:', e);
+      }
+    })();
+  }, [items.length]); // fire once after items first appear
 
   // Sync title/color from appStore when another window changes them
   useEffect(() => {
@@ -181,8 +222,15 @@ export function NoteWindow({ noteId }: Props) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); selectAll(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); document.querySelector<HTMLInputElement>('.note-search-input')?.focus(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        setShowSearch(true);
+        // Focus the overlay input on the next tick.
+        setTimeout(() => document.querySelector<HTMLInputElement>('.search-overlay-input')?.focus(), 30);
+        return;
+      }
       if (e.key === 'Escape') {
+        if (showSearch) { setShowSearch(false); setSearchQuery(''); return; }
         clearSelection();
         setSearchQuery('');
         setShowColorPicker(false);
@@ -363,15 +411,15 @@ export function NoteWindow({ noteId }: Props) {
         ) : (
           <span
             className="note-title-text"
-            // NOTE: no data-tauri-drag-region here. With it, Tauri intercepts the
-            // double-click and toggles maximize before our React handler runs.
-            onDoubleClick={(e) => { e.stopPropagation(); startTitleEdit(); }}
+            // No data-tauri-drag-region here, so right-click reaches our handler
+            // (the parent's drag region would otherwise intercept double-click as
+            // "maximize"). Edit is opened via right-click only.
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
               startTitleEdit();
             }}
-            title="ダブルクリックまたは右クリックで編集"
+            title="右クリックで編集"
           >
             {titleText || 'タイトルなし'}
           </span>
@@ -513,40 +561,19 @@ export function NoteWindow({ noteId }: Props) {
         >🗄️{archivedCount > 0 && <sup style={{ fontSize: 8 }}>{archivedCount}</sup>}</button>
       </div>
 
-      {/* ── Search bar ── */}
-      <div className="note-search-bar">
+      {/* Hidden search bar — kept in DOM to preserve any existing CSS / focus
+          targeting code; just visually hidden. The overlay below is the new UI. */}
+      <div className="note-search-bar" style={{ display: 'none' }}>
         <input
           className="note-search-input"
-          placeholder="🔍 検索…"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
         />
-        {searchQuery && (
-          <button className="note-search-clear" onClick={() => setSearchQuery('')}>✕</button>
-        )}
-        {/* Per-note deadline warn days */}
-        {settings.feature_date && (
-          <span className="warn-days-setting" title="期日警告の日数（このリストの設定）">
-            ⚠
-            <input
-              type="number"
-              className="warn-days-input"
-              value={warnDays}
-              min={0}
-              max={30}
-              onChange={(e) => setNoteWarnDays(Number(e.target.value))}
-              onClick={(e) => e.stopPropagation()}
-              title="期日の何日前から警告するか"
-            />
-            日前
-          </span>
-        )}
       </div>
 
-      {/* ── Quick-add bar — Enter で1秒で追加 ── */}
+      {/* ── Quick-add bar (now in the search bar slot) ─────────────────────── */}
       {!showArchived && (
-        <div className="quick-add-bar">
+        <div className="quick-add-bar quick-add-bar-top">
           <input
             className="quick-add-input"
             placeholder={`✏️ 新しいタスクを入力して Enter で追加…${quickAddIndent > 0 ? `  (インデント+${quickAddIndent})` : ''}`}
@@ -563,6 +590,43 @@ export function NoteWindow({ noteId }: Props) {
             }}
             onClick={(e) => e.stopPropagation()}
           />
+          {/* Per-note deadline warn days kept here so it is still reachable. */}
+          {settings.feature_date && (
+            <span className="warn-days-setting" title="期日警告の日数（このリストの設定）">
+              ⚠
+              <input
+                type="number"
+                className="warn-days-input"
+                value={warnDays}
+                min={0}
+                max={30}
+                onChange={(e) => setNoteWarnDays(Number(e.target.value))}
+                onClick={(e) => e.stopPropagation()}
+                title="期日の何日前から警告するか"
+              />
+              日前
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Search overlay (Ctrl+F) ─────────────────────────────────────────── */}
+      {showSearch && (
+        <div className="search-overlay-backdrop" onClick={() => { setShowSearch(false); setSearchQuery(''); }}>
+          <div className="search-overlay" onClick={(e) => e.stopPropagation()}>
+            <input
+              className="search-overlay-input"
+              placeholder="🔍 このリスト内のタスクを検索…  (Esc で閉じる)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            <button
+              className="search-overlay-close"
+              onClick={() => { setShowSearch(false); setSearchQuery(''); }}
+              title="閉じる"
+            >✕</button>
+          </div>
         </div>
       )}
 

@@ -19,6 +19,10 @@ interface AppStore {
   itemMatchNoteIds: Set<string>;
   itemMatches: { item: any; noteTitle: string }[];
 
+  // Cross-component drag state (NoteList drags note → CategoryList highlights).
+  draggingNoteId: string | null;
+  noteDropOverCatId: string | null;
+
   load: () => Promise<void>;
   reopenSavedWindows: () => Promise<void>;
 
@@ -117,6 +121,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   searchQuery: '',
   openWindowIds: new Set(),
   itemMatchNoteIds: new Set(),
+  draggingNoteId: null,
+  noteDropOverCatId: null,
   itemMatches: [],
 
   load: async () => {

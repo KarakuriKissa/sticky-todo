@@ -7,10 +7,8 @@ export function CategoryList() {
   const {
     categories, selectedCategoryId, setSelectedCategory,
     saveCategory, deleteCategory, reorderCategories,
-    notes, updateNote,
+    draggingNoteId, noteDropOverCatId,
   } = useAppStore();
-  // Visual highlight when dragging a note over a category drop target.
-  const [dropOverCatId, setDropOverCatId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
@@ -106,28 +104,9 @@ export function CategoryList() {
           <li
             key={cat.id}
             data-cat-id={cat.id}
-            className={`${selectedCategoryId === cat.id ? 'active' : ''}${catDrag?.overItemId === cat.id ? ` drag-${catDrag.overPos}` : ''}${dropOverCatId === cat.id ? ' note-drop-target' : ''}`}
+            className={`${selectedCategoryId === cat.id ? 'active' : ''}${catDrag?.overItemId === cat.id ? ` drag-${catDrag.overPos}` : ''}${noteDropOverCatId === cat.id ? ' note-drop-target' : ''}${draggingNoteId ? ' drop-zone-hint' : ''}`}
             onClick={() => setSelectedCategory(cat.id)}
             onDoubleClick={() => startEdit(cat)}
-            // Drag-and-drop target for notes coming from NoteList.
-            onDragOver={(e) => {
-              if (e.dataTransfer.types.includes('application/x-sticky-todo-note')) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                if (dropOverCatId !== cat.id) setDropOverCatId(cat.id);
-              }
-            }}
-            onDragLeave={() => setDropOverCatId(null)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDropOverCatId(null);
-              const noteId = e.dataTransfer.getData('application/x-sticky-todo-note');
-              if (!noteId) return;
-              const note = notes.find((n) => n.id === noteId);
-              if (note && note.category_id !== cat.id) {
-                updateNote({ ...note, category_id: cat.id });
-              }
-            }}
           >
             <span
               className="cat-grip"

@@ -58,11 +58,26 @@ export function NoteList({ onNew }: Props) {
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     e.stopPropagation();
     setNoteDrag({ fromId: note.id, overItemId: null, overPos: 'after' });
+    // Tell CategoryList "a note is being dragged" so it can highlight as a drop zone.
+    useAppStore.setState({ draggingNoteId: note.id, noteDropOverCatId: null });
   };
 
   const onGripPointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (!noteDrag) return;
     const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+
+    // 1) Hovering over a category in the sidebar → mark it as the drop target.
+    const catEl = el?.closest('[data-cat-id]') as HTMLElement | null;
+    if (catEl?.dataset.catId) {
+      useAppStore.setState({ noteDropOverCatId: catEl.dataset.catId });
+      setNoteDrag((d) => d ? { ...d, overItemId: null } : d);
+      return;
+    }
+    if (useAppStore.getState().noteDropOverCatId) {
+      useAppStore.setState({ noteDropOverCatId: null });
+    }
+
+    // 2) Otherwise, in-list reorder.
     const cardEl = el?.closest('[data-note-id]') as HTMLElement | null;
     if (cardEl?.dataset.noteId && cardEl.dataset.noteId !== noteDrag.fromId) {
       const rect = cardEl.getBoundingClientRect();
@@ -72,7 +87,16 @@ export function NoteList({ onNew }: Props) {
   };
 
   const onGripPointerUp = () => {
-    if (noteDrag?.overItemId) {
+    const { noteDropOverCatId } = useAppStore.getState();
+    // Priority 1: dropped on a category → change category.
+    if (noteDropOverCatId && noteDrag) {
+      const dragged = notes.find((n) => n.id === noteDrag.fromId);
+      if (dragged && dragged.category_id !== noteDropOverCatId) {
+        updateNote({ ...dragged, category_id: noteDropOverCatId });
+      }
+    }
+    // Priority 2: dropped on another note → reorder.
+    else if (noteDrag?.overItemId) {
       const ids = notes.map(n => n.id);
       const fromIdx = ids.indexOf(noteDrag.fromId);
       const newIds = [...ids];
@@ -83,6 +107,7 @@ export function NoteList({ onNew }: Props) {
       reorderNotes(newIds);
     }
     setNoteDrag(null);
+    useAppStore.setState({ draggingNoteId: null, noteDropOverCatId: null });
   };
 
   // Click-away handler for context menu
@@ -147,14 +172,6 @@ export function NoteList({ onNew }: Props) {
         <div
           key={note.id}
           data-note-id={note.id}
-          // HTML5 drag — allows dropping onto a CategoryList item to change category.
-          // Existing pointer-based reorder still works via the .note-card-grip handle.
-          draggable={true}
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('application/x-sticky-todo-note', note.id);
-            e.dataTransfer.setData('text/plain', note.title);
-          }}
           className={`note-card${noteDrag?.overItemId === note.id ? ` drag-${noteDrag.overPos}` : ''}${noteDrag?.fromId === note.id ? ' dragging' : ''}${selectedNoteId === note.id ? ' selected' : ''}`}
           style={{ borderLeft: `4px solid ${note.color}` }}
           onClick={() => setSelectedNoteId(note.id)}
