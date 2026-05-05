@@ -41,6 +41,10 @@ export function Launcher() {
         e.preventDefault();
         searchRef.current?.focus();
       }
+      // Escape from anywhere closes the search popup.
+      if (e.key === 'Escape' && useAppStore.getState().searchQuery) {
+        useAppStore.getState().setSearchQuery('');
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -232,7 +236,7 @@ function SearchPopup({ onClose }: { onClose: () => void }) {
                   key={n.id}
                   className="search-popup-row"
                   style={{ borderLeft: `3px solid ${n.color || '#fef08a'}` }}
-                  onClick={() => { openNote(n); onClose(); }}
+                  onClick={() => openNote(n)}    /* keep popup open after click */
                 >
                   📋 {n.title || '(無題)'}
                 </div>
@@ -251,8 +255,9 @@ function SearchPopup({ onClose }: { onClose: () => void }) {
                     onClick={async () => {
                       if (!note) return;
                       await openNote(note);
-                      // Wait briefly for the note window to mount its listener,
-                      // then ask it to highlight this exact task.
+                      // Highlight the task in the opened window. The popup
+                      // STAYS OPEN — user closes it with Esc, the ✕ button,
+                      // or by clicking outside.
                       setTimeout(async () => {
                         try {
                           const { emitTo } = await import('@tauri-apps/api/event');
@@ -262,7 +267,6 @@ function SearchPopup({ onClose }: { onClose: () => void }) {
                           });
                         } catch (e) { console.error('[search] emit failed:', e); }
                       }, 600);
-                      onClose();
                     }}
                   >
                     <div className="search-popup-meta">📋 {noteTitle}</div>

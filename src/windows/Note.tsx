@@ -450,7 +450,15 @@ export function NoteWindow({ noteId }: Props) {
       )}
 
       {/* ── Title bar ── */}
-      <div className="note-titlebar" data-tauri-drag-region="">
+      {/* Titlebar layout (left → right):
+            ┌──────────────────────────────────────────────────────────────┐
+            │ [Title text]  [drag-spacer (window move)]  [save/pin/color/✕]│
+            └──────────────────────────────────────────────────────────────┘
+          - Title is content-width and accepts right-click to edit.
+          - Drag spacer expands to fill remaining space → window-move cursor.
+          - Actions are right-aligned. When the title is long enough to
+            collide with the actions, it visually flows under them. */}
+      <div className="note-titlebar">
         {editingTitle ? (
           <input
             ref={titleInputRef}
@@ -467,9 +475,6 @@ export function NoteWindow({ noteId }: Props) {
         ) : (
           <span
             className="note-title-text"
-            // No data-tauri-drag-region here, so right-click reaches our handler
-            // (the parent's drag region would otherwise intercept double-click as
-            // "maximize"). Edit is opened via right-click only.
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -480,6 +485,9 @@ export function NoteWindow({ noteId }: Props) {
             {titleText || 'タイトルなし'}
           </span>
         )}
+
+        {/* Window-drag region — fills remaining horizontal space. */}
+        <div className="note-titlebar-drag" data-tauri-drag-region="" />
 
         <div className="note-titlebar-actions">
           {/* Save indicator */}

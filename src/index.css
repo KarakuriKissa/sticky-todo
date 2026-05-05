@@ -278,36 +278,36 @@ ul { list-style: none; }
 
 /* ── Title bar ── */
 .note-titlebar {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 5px 7px;
-  gap: 6px;
+  gap: 4px;
   background: rgba(0,0,0,.12);
-  cursor: move;
   min-height: 34px;
+  overflow: hidden;          /* clip very long titles cleanly */
 }
 
-/* Static title text (drag region) */
+/* Static title text — content-width, NOT a drag region (so right-click works) */
 .note-title-text {
-  flex: 0 1 auto;            /* width = content; remaining space stays as drag area */
-  max-width: 70%;
+  flex: 0 0 auto;
   font-weight: 700;
   font-size: 14px;
   color: #1e1e2e;
-  cursor: text;              /* indicates this area is for editing (right-click) */
+  cursor: text;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   user-select: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 2px 4px;
+  padding: 2px 6px;
   border-radius: 3px;
 }
-.note-title-text:hover {
-  background: rgba(0,0,0,.06);
-  cursor: text;
+.note-title-text:hover { background: rgba(0,0,0,.06); }
+
+/* Window-move spacer between title and actions */
+.note-titlebar-drag {
+  flex: 1 1 0;
+  min-width: 8px;
+  align-self: stretch;
+  cursor: move;
 }
 
 /* Editing mode input */
@@ -325,10 +325,21 @@ ul { list-style: none; }
 }
 
 .note-titlebar-actions {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   gap: 3px;
   align-items: center;
   flex-shrink: 0;
+  z-index: 2;
+  /* Slight backdrop so a long title flowing under us stays legible-ish but
+     the buttons remain clearly readable. */
+  background: rgba(0,0,0,.08);
+  padding: 2px 4px;
+  border-radius: 4px;
+  backdrop-filter: blur(2px);
 }
 
 /* Pin button */
