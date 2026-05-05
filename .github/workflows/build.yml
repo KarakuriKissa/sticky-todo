@@ -3,6 +3,10 @@ name: 🚀 StickyTodo をビルド
 on:
   workflow_dispatch: # GitHub上のボタンから手動実行
 
+# Releases を作るには contents:write が必須 (デフォルトの GITHUB_TOKEN は read-only)
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
