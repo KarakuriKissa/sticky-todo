@@ -31,6 +31,30 @@ export function Launcher() {
     });
   }, []);
 
+  // Background update check on launcher open. Compares the latest GitHub
+  // Actions build run number against the one we last seen and shows a banner
+  // if a newer build is available.
+  const [updateBanner, setUpdateBanner] = useState<{ runNumber: number; url: string } | null>(null);
+  useEffect(() => {
+    const seenKey = 'sticky-todo:last-seen-build';
+    const lastSeen = Number(localStorage.getItem(seenKey) ?? '0');
+    fetch('https://api.github.com/repos/TomTomYukkie/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success')
+      .then((r) => r.json())
+      .then((j) => {
+        const run = j.workflow_runs?.[0];
+        if (run && run.run_number > lastSeen + 0) {
+          // Show banner only if a strictly NEW run appeared after first launch.
+          if (lastSeen === 0) {
+            // First time we see a build → just remember, don't bug the user.
+            localStorage.setItem(seenKey, String(run.run_number));
+          } else if (run.run_number > lastSeen) {
+            setUpdateBanner({ runNumber: run.run_number, url: run.html_url });
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // The launcher search is GLOBAL: it filters notes by title AND by task content.
   // This Set of note IDs is populated by an async invoke to search_all_items
   // whenever the search query changes. NoteList reads this from appStore to
@@ -159,6 +183,30 @@ export function Launcher() {
 
   return (
     <div className="launcher">
+      {/* Update banner — appears when a newer GitHub build is available. */}
+      {updateBanner && (
+        <div className="update-banner" role="alert">
+          🆙 新しいビルド <b>#{updateBanner.runNumber}</b> が利用可能です
+          <button
+            className="btn-secondary"
+            style={{ marginLeft: 10, fontSize: 11, padding: '3px 10px' }}
+            onClick={async () => {
+              (await import('@tauri-apps/plugin-shell')).open(updateBanner.url);
+              localStorage.setItem('sticky-todo:last-seen-build', String(updateBanner.runNumber));
+              setUpdateBanner(null);
+            }}
+          >ダウンロードページを開く</button>
+          <button
+            className="btn-secondary"
+            style={{ marginLeft: 6, fontSize: 11, padding: '3px 8px' }}
+            onClick={() => {
+              localStorage.setItem('sticky-todo:last-seen-build', String(updateBanner.runNumber));
+              setUpdateBanner(null);
+            }}
+          >閉じる</button>
+        </div>
+      )}
+
       <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
         <CategoryList />
       </div>
@@ -285,8 +333,122 @@ function SearchPopup({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Help / About / Privacy ────────────────────────────────────────────────────
+function HelpSection() {
+  const [latestRun, setLatestRun] = useState<{ ok: boolean; current: string; remote?: string; url?: string } | null>(null);
+  const checkUpdate = async () => {
+    try {
+      const res = await fetch('https://api.github.com/repos/TomTomYukkie/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success');
+      const json = await res.json();
+      const run = json.workflow_runs?.[0];
+      if (run) {
+        const remote = `#${run.run_number} (${new Date(run.run_started_at).toLocaleDateString('ja-JP')})`;
+        setLatestRun({ ok: true, current: 'インストール済み', remote, url: run.html_url });
+      } else {
+        setLatestRun({ ok: false, current: 'インストール済み' });
+      }
+    } catch {
+      setLatestRun({ ok: false, current: 'インストール済み' });
+    }
+  };
+  return (
+    <section>
+      <h3>ヘルプ</h3>
+      <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
+        操作に迷ったらここを参照してください。
+      </p>
+
+      <h4 style={{ marginTop: 14 }}>📋 基本操作</h4>
+      <ul className="help-list">
+        <li><b>＋ボタン</b>：新しいリスト（タスクウィンドウ）を作成</li>
+        <li>リストの<b>ダブルクリック</b>：開く</li>
+        <li>リストの<b>右クリック</b>：閉じる / 削除 / カテゴリ変更</li>
+        <li>リストを<b>左サイドバーのカテゴリにドラッグ</b>：カテゴリ移動</li>
+      </ul>
+
+      <h4 style={{ marginTop: 14 }}>📝 タスクウィンドウ</h4>
+      <ul className="help-list">
+        <li>上部の入力欄に文字を入れて <kbd>Enter</kbd>：タスク追加</li>
+        <li>入力欄で <kbd>Tab</kbd>：インデントを1段深く（最大6段）</li>
+        <li>タスクの<b>右クリック</b>：太字 / 複製 / アーカイブ / 削除など</li>
+        <li>タスクの左の<b>⠿マークをドラッグ</b>：並び替え</li>
+        <li>タスクテキスト内の URL は<b>クリック可能</b>（既定ブラウザで開く）</li>
+        <li>タイトルバーの<b>右クリック</b>：タイトル編集</li>
+      </ul>
+
+      <h4 style={{ marginTop: 14 }}>⌨ ショートカット（タスクウィンドウ）</h4>
+      <table className="help-shortcut-table">
+        <tbody>
+          <tr><td>Ctrl+Z / Ctrl+Y</td><td>元に戻す / やり直し</td></tr>
+          <tr><td>Ctrl+A</td><td>全選択</td></tr>
+          <tr><td>Ctrl+F</td><td>このリスト内を検索</td></tr>
+          <tr><td>Tab / Shift+Tab</td><td>インデント / アウトデント</td></tr>
+          <tr><td>Ctrl+B</td><td>太字</td></tr>
+          <tr><td>Ctrl+D</td><td>複製</td></tr>
+          <tr><td>Ctrl+L</td><td>ロック / 解除</td></tr>
+          <tr><td>Ctrl+M</td><td>コメント編集</td></tr>
+          <tr><td>Ctrl+H / Ctrl+Shift+H</td><td>見出し化 / 通常に戻す</td></tr>
+          <tr><td>Ctrl+E</td><td>アーカイブ</td></tr>
+          <tr><td>Shift+Enter</td><td>下に新規行追加</td></tr>
+          <tr><td>Ctrl+Shift+Enter</td><td>上に新規行追加</td></tr>
+          <tr><td>?</td><td>ショートカット一覧表示</td></tr>
+        </tbody>
+      </table>
+
+      <h4 style={{ marginTop: 14 }}>🔍 グローバル検索</h4>
+      <ul className="help-list">
+        <li>ランチャー上部の検索欄にキーワード入力</li>
+        <li>すべてのリスト・閉じてるリストのタスクも横断検索</li>
+        <li>結果クリックでそのタスクへジャンプ</li>
+        <li>ポップアップは <kbd>Esc</kbd> または ✕ で閉じる</li>
+      </ul>
+
+      <h4 style={{ marginTop: 14 }}>💾 データの保存場所</h4>
+      <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
+        <code>%APPDATA%\com.stickytodo.app\sticky-todo.db</code>（SQLite）<br />
+        ＋ ブラウザの localStorage（バックアップ）
+      </p>
+
+      <h4 style={{ marginTop: 14 }}>🔒 プライバシー</h4>
+      <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
+        StickyTodo は<b>すべてローカル</b>で動作します。インターネットには
+        <b>更新確認時のみ</b>接続します（GitHub の公開 API）。
+        タスクの内容・個人情報は外部サーバーに送信しません。
+      </p>
+
+      <h4 style={{ marginTop: 14 }}>🔄 アップデート</h4>
+      <div style={{ fontSize: 12, lineHeight: 1.8 }}>
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={checkUpdate}>
+          🔄 最新ビルドを確認
+        </button>
+        {latestRun && (
+          <div style={{ marginTop: 10, padding: 10, background: 'rgba(99,102,241,.08)', borderRadius: 6 }}>
+            {latestRun.ok ? (
+              <>
+                最新ビルド: <b>{latestRun.remote}</b><br />
+                <a href="#" onClick={async (e) => {
+                  e.preventDefault();
+                  if (latestRun.url) (await import('@tauri-apps/plugin-shell')).open(latestRun.url);
+                }} style={{ color: '#6366f1' }}>
+                  GitHub Actions で開く →
+                </a>
+              </>
+            ) : <span style={{ color: 'var(--muted)' }}>確認できませんでした（オフライン？）</span>}
+          </div>
+        )}
+      </div>
+
+      <h4 style={{ marginTop: 14 }}>📄 ライセンス</h4>
+      <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
+        StickyTodo（β版）<br />
+        個人・小規模利用可。商用利用についてはお問い合わせください。
+      </p>
+    </section>
+  );
+}
+
 // ── Settings Modal ────────────────────────────────────────────────────────────
-type SettingsTab = 'statuses' | 'assignees' | 'advanced';
+type SettingsTab = 'statuses' | 'assignees' | 'advanced' | 'help';
 
 function SettingsModal({
   settings,
@@ -355,6 +517,7 @@ function SettingsModal({
     { id: 'statuses',  label: 'ステータス' },
     { id: 'assignees', label: '担当者' },
     { id: 'advanced',  label: '詳細設定' },
+    { id: 'help',      label: 'ヘルプ' },
   ];
 
   return (
@@ -618,6 +781,9 @@ function SettingsModal({
               </div>
             </section>
           )}
+
+          {/* ── Help / About ── */}
+          {tab === 'help' && <HelpSection />}
 
         </div>{/* /settings-body */}
 

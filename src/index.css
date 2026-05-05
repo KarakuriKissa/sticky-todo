@@ -794,6 +794,56 @@ ul { list-style: none; }
 .todo-heading:hover .item-drag-grip { opacity: 1; }
 .todo-item.dragging { opacity: 0.4; }
 
+/* Update banner */
+.update-banner {
+  position: fixed;
+  bottom: 14px;
+  right: 14px;
+  z-index: 90;
+  background: #1f2937;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(99,102,241,.45);
+}
+
+/* Help section in Settings */
+.help-list {
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 4px 0 0 18px;
+  padding: 0;
+  color: var(--text);
+}
+.help-list li { margin: 2px 0; }
+.help-shortcut-table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+.help-shortcut-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.help-shortcut-table td:first-child {
+  width: 40%;
+  font-family: ui-monospace, Consolas, monospace;
+  color: #a5b4fc;
+}
+kbd {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+}
+
 /* In-note search bar (Ctrl+F) — pinned to the top right of the note window
    like a browser's find bar. Stays visible while typing. */
 .search-overlay-bar {
