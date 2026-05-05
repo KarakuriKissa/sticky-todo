@@ -1,6 +1,30 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useNoteStore } from '../src/store/noteStore';
-import type { Note } from '../src/types';
+import { describe, it, expect, beforeEach, mock } from 'bun:test';
+
+// Stub Tauri APIs so the store loads under the bun test runtime.
+mock.module('@tauri-apps/api/core', () => ({
+  invoke: async () => undefined,
+}));
+mock.module('@tauri-apps/api/event', () => ({
+  emit: async () => undefined,
+  emitTo: async () => undefined,
+  listen: async () => () => {},
+}));
+
+// Provide a minimal localStorage so the noteStore's backup writes don't error.
+if (typeof globalThis.localStorage === 'undefined') {
+  const _store = new Map<string, string>();
+  (globalThis as any).localStorage = {
+    getItem: (k: string) => _store.get(k) ?? null,
+    setItem: (k: string, v: string) => { _store.set(k, v); },
+    removeItem: (k: string) => { _store.delete(k); },
+    clear: () => { _store.clear(); },
+    key: (i: number) => Array.from(_store.keys())[i] ?? null,
+    get length() { return _store.size; },
+  };
+}
+
+const { useNoteStore } = await import('../src/store/noteStore');
+type Note = import('../src/types').Note;
 
 const mkNote = (id = 'n1'): Note => ({
   id,

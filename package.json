@@ -6,8 +6,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "tauri": "tauri",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "bun test tests/",
+    "test:watch": "bun test --watch tests/",
+    "icons": "powershell -ExecutionPolicy Bypass -File ./scripts/generate-icons.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -25,8 +26,6 @@
     "@vitejs/plugin-react": "^4",
     "typescript": "^5",
     "vite": "^5",
-    "vitest": "^2",
-    "@testing-library/react": "^16",
-    "jsdom": "^25"
+    "@types/bun": "^1"
   }
 }

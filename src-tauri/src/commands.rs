@@ -341,7 +341,11 @@ pub fn import_database(app: AppHandle, src_path: String) -> Result<(), String> {
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let marker = data_dir.join(".import-pending");
     std::fs::write(&marker, &src_path).map_err(|e| e.to_string())?;
+    // app.restart() returns ! in current Tauri 2.x — the Ok below is dead but
+    // keeps the function signature obvious for any future signature change.
     app.restart();
+    #[allow(unreachable_code)]
+    Ok(())
 }
 
 // Global search across every (non-archived) item in every note.
@@ -412,4 +416,6 @@ pub fn delete_database(app: AppHandle) -> Result<(), String> {
     let marker = data_dir.join(".delete-pending");
     std::fs::write(&marker, "").map_err(|e| e.to_string())?;
     app.restart();
+    #[allow(unreachable_code)]
+    Ok(())
 }
