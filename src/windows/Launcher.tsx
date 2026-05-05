@@ -55,16 +55,42 @@ export function Launcher() {
       return;
     }
     const handle = setTimeout(async () => {
+      const ql = q.toLowerCase();
+      // 1) Primary source: SQLite via Rust (covers all closed lists too).
+      let rows: [any, string][] = [];
       try {
-        const rows = await invoke<[any, string][]>('search_all_items', { query: q });
-        const ids = new Set(rows.map(([item]) => item.note_id));
-        useAppStore.setState({
-          itemMatchNoteIds: ids,
-          itemMatches: rows.map(([item, noteTitle]) => ({ item, noteTitle })),
-        });
-      } catch {
-        useAppStore.setState({ itemMatchNoteIds: new Set(), itemMatches: [] });
-      }
+        rows = await invoke<[any, string][]>('search_all_items', { query: q });
+      } catch (e) { console.error('[search] DB query failed:', e); }
+      const merged = new Map<string, { item: any; noteTitle: string }>();
+      rows.forEach(([item, noteTitle]) => merged.set(item.id, { item, noteTitle }));
+
+      // 2) Fallback / supplement: localStorage backups (in case any save failed).
+      try {
+        const allNotes = useAppStore.getState().notes;
+        const titleByNoteId = new Map(allNotes.map((n) => [n.id, n.title]));
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k || !k.startsWith('sticky-todo:note-items:')) continue;
+          const noteId = k.split(':')[2];
+          try {
+            const arr = JSON.parse(localStorage.getItem(k) || '[]');
+            if (!Array.isArray(arr)) continue;
+            arr.forEach((item: any) => {
+              if (!item.text || !String(item.text).toLowerCase().includes(ql)) return;
+              if (item.archived) return;
+              if (!merged.has(item.id)) {
+                merged.set(item.id, { item, noteTitle: titleByNoteId.get(noteId) ?? '(不明なリスト)' });
+              }
+            });
+          } catch {}
+        }
+      } catch {}
+
+      const all = Array.from(merged.values());
+      useAppStore.setState({
+        itemMatchNoteIds: new Set(all.map((r) => r.item.note_id)),
+        itemMatches: all,
+      });
     }, 150);
     return () => clearTimeout(handle);
   }, [searchQuery]);
@@ -222,7 +248,22 @@ function SearchPopup({ onClose }: { onClose: () => void }) {
                   <div
                     key={item.id}
                     className="search-popup-row"
-                    onClick={() => { if (note) openNote(note); onClose(); }}
+                    onClick={async () => {
+                      if (!note) return;
+                      await openNote(note);
+                      // Wait briefly for the note window to mount its listener,
+                      // then ask it to highlight this exact task.
+                      setTimeout(async () => {
+                        try {
+                          const { emitTo } = await import('@tauri-apps/api/event');
+                          await emitTo(`note-${note.id}`, 'jump-to-task', {
+                            taskId: item.id,
+                            query: searchQuery,
+                          });
+                        } catch (e) { console.error('[search] emit failed:', e); }
+                      }, 600);
+                      onClose();
+                    }}
                   >
                     <div className="search-popup-meta">📋 {noteTitle}</div>
                     <div>{item.checked ? '☑' : '☐'} {item.text}</div>
@@ -463,6 +504,23 @@ function SettingsModal({
                   style={{ width: 48, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', outline: 'none' }}
                 />
                 日前から警告色を表示
+              </label>
+
+              <h3 style={{ marginTop: 20 }}>デスクトップ通知</h3>
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.6 }}>
+                リストを開いている間、期限切れ・期日が近いタスクを Windows 通知で知らせます。<br />
+                <strong>0 にすると通知を無効化</strong>します。
+              </p>
+              <label className="toggle-row" style={{ gap: 6 }}>
+                チェック間隔
+                <input
+                  type="number"
+                  min={0} max={1440}
+                  value={draft.reminder_interval_min ?? 30}
+                  onChange={(e) => setDraft((d) => ({ ...d, reminder_interval_min: Number(e.target.value) }))}
+                  style={{ width: 64, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', outline: 'none' }}
+                />
+                分ごと（0 で無効）
               </label>
 
               <h3 style={{ marginTop: 20 }}>言語 / Language</h3>

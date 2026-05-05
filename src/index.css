@@ -289,11 +289,15 @@ ul { list-style: none; }
 
 /* Static title text (drag region) */
 .note-title-text {
-  flex: 1;
+  flex: 0 1 auto;            /* width = content; remaining space stays as drag area */
+  max-width: 70%;
   font-weight: 700;
   font-size: 14px;
   color: #1e1e2e;
-  cursor: move;
+  cursor: text;              /* indicates this area is for editing (right-click) */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   user-select: none;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -779,44 +783,62 @@ ul { list-style: none; }
 .todo-heading:hover .item-drag-grip { opacity: 1; }
 .todo-item.dragging { opacity: 0.4; }
 
-/* In-note search overlay (Ctrl+F) */
-.search-overlay-backdrop {
+/* In-note search bar (Ctrl+F) — pinned to the top right of the note window
+   like a browser's find bar. Stays visible while typing. */
+.search-overlay-bar {
   position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,.18);
-  z-index: 9500;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 60px;
-}
-.search-overlay {
+  top: 38px;
+  right: 6px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: white;
-  color: #1e1e2e;
+  gap: 4px;
+  background: #2d2d40;
+  color: white;
   border-radius: 6px;
-  padding: 8px 10px;
-  box-shadow: 0 6px 24px rgba(0,0,0,.25);
-  width: 86%;
+  padding: 4px 6px;
+  z-index: 9500;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
 }
 .search-overlay-input {
-  flex: 1;
-  border: none;
+  width: 200px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: rgba(255,255,255,.08);
+  color: white;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 4px;
   outline: none;
-  font-size: 13px;
-  background: transparent;
 }
-.search-overlay-close {
+.search-overlay-input::placeholder { color: rgba(255,255,255,.45); }
+.search-overlay-count { font-size: 11px; color: rgba(255,255,255,.7); padding: 0 6px; min-width: 60px; text-align: center; }
+.search-overlay-nav, .search-overlay-close {
   background: transparent;
   border: none;
-  font-size: 13px;
-  color: rgba(30,30,46,.5);
+  color: rgba(255,255,255,.7);
   cursor: pointer;
   padding: 2px 6px;
+  font-size: 13px;
+  border-radius: 3px;
 }
-.search-overlay-close:hover { color: #1e1e2e; }
+.search-overlay-nav:hover, .search-overlay-close:hover { background: rgba(255,255,255,.12); color: white; }
+.search-overlay-nav:disabled { opacity: .3; cursor: default; }
+
+/* Search match highlight inside task text */
+.todo-text-match {
+  background: #fde047;       /* yellow */
+  color: #1e1e2e;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+/* Current match — a stronger highlight on the row itself */
+.todo-item.current-match {
+  background: rgba(253, 224, 71, 0.35) !important;
+  outline: 2px solid #f59e0b;
+  outline-offset: -2px;
+}
+.todo-item.current-match .todo-text-match {
+  background: #f59e0b;       /* orange — current match stands out among yellow matches */
+}
 
 /* Quick-add bar moved to where the search bar was */
 .quick-add-bar.quick-add-bar-top {

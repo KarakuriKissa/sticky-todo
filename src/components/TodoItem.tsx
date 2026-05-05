@@ -1,34 +1,50 @@
 import { useRef, KeyboardEvent, useState, MouseEvent, useLayoutEffect, useEffect } from 'react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
-// Render free text, making URLs clickable. URLs open in the user's default
-// browser via the Tauri shell plugin (so they don't navigate the webview).
-function renderTextWithLinks(text: string): React.ReactNode {
+// Render free text with URLs as clickable links and (optionally) wrap a search
+// term in <mark> tags so the user can see what they searched for.
+function renderTextWithLinks(text: string, searchTerm?: string): React.ReactNode {
   const urlRe = /(https?:\/\/[^\s]+)/g;
-  const out: React.ReactNode[] = [];
+  // First split the text into URL and non-URL parts.
+  const parts: { text: string; isUrl: boolean }[] = [];
   let lastIdx = 0;
   let m: RegExpExecArray | null;
-  let key = 0;
   while ((m = urlRe.exec(text)) !== null) {
-    if (m.index > lastIdx) out.push(text.slice(lastIdx, m.index));
-    const url = m[0];
-    out.push(
-      <a
-        key={key++}
-        className="todo-link"
-        href={url}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          shellOpen(url).catch(console.error);
-        }}
-        title={url}
-      >{url}</a>,
-    );
-    lastIdx = m.index + url.length;
+    if (m.index > lastIdx) parts.push({ text: text.slice(lastIdx, m.index), isUrl: false });
+    parts.push({ text: m[0], isUrl: true });
+    lastIdx = m.index + m[0].length;
   }
-  if (lastIdx < text.length) out.push(text.slice(lastIdx));
-  return out;
+  if (lastIdx < text.length) parts.push({ text: text.slice(lastIdx), isUrl: false });
+
+  // Now within each non-URL part, split out search-term matches.
+  const term = (searchTerm ?? '').trim().toLowerCase();
+  let key = 0;
+  const result: React.ReactNode[] = [];
+  for (const p of parts) {
+    if (p.isUrl) {
+      result.push(
+        <a
+          key={key++}
+          className="todo-link"
+          href={p.text}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); shellOpen(p.text).catch(console.error); }}
+          title={p.text}
+        >{p.text}</a>,
+      );
+      continue;
+    }
+    if (!term) { result.push(<span key={key++}>{p.text}</span>); continue; }
+    const lower = p.text.toLowerCase();
+    let i = 0;
+    while (i < p.text.length) {
+      const at = lower.indexOf(term, i);
+      if (at < 0) { result.push(<span key={key++}>{p.text.slice(i)}</span>); break; }
+      if (at > i) result.push(<span key={key++}>{p.text.slice(i, at)}</span>);
+      result.push(<mark key={key++} className="todo-text-match">{p.text.slice(at, at + term.length)}</mark>);
+      i = at + term.length;
+    }
+  }
+  return result;
 }
 import { createPortal } from 'react-dom';
 import type { TodoItem as Item, Status } from '../types';
@@ -97,9 +113,11 @@ interface Props {
   warnDays: number;
   priorityMode?: 'hml' | 'abc';
   activeGroupId?: string;
+  searchTerm?: string;       // when set, render <mark> around matches
+  isCurrentMatch?: boolean;  // highlight the row as the active match
 }
 
-export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMode, activeGroupId }: Props) {
+export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMode, activeGroupId, searchTerm, isCurrentMatch }: Props) {
   const {
     updateItem, deleteItem, toggleCheck, toggleBold, toggleLock, toggleCollapse,
     indent, dedent, addItem, selectedIds, toggleSelected, moveItem,
@@ -636,7 +654,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
   return (
     <div
       ref={rowRef}
-      className={`todo-item${isSelected ? ' selected' : ''}${dragOverPos ? ` drag-${dragOverPos}` : ''}${isDragging ? ' dragging' : ''}${item.locked ? ' locked-item' : ''}${isOverdue ? ' overdue-item' : isWarn ? ' warn-item' : ''}`}
+      className={`todo-item${isSelected ? ' selected' : ''}${dragOverPos ? ` drag-${dragOverPos}` : ''}${isDragging ? ' dragging' : ''}${item.locked ? ' locked-item' : ''}${isOverdue ? ' overdue-item' : isWarn ? ' warn-item' : ''}${isCurrentMatch ? ' current-match' : ''}`}
       style={{ paddingLeft: item.indent * 20 + 4 }}
       data-item-id={item.id}
       tabIndex={isSelected && !isEditing ? 0 : -1}
@@ -711,7 +729,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          {item.text ? renderTextWithLinks(item.text) : <span className="todo-text-placeholder"></span>}
+          {item.text ? renderTextWithLinks(item.text, searchTerm) : <span className="todo-text-placeholder"></span>}
         </div>
       )}
 

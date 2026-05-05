@@ -33,9 +33,10 @@ export function NoteWindow({ noteId }: Props) {
   const [quickAddText, setQuickAddText] = useState('');
   const [showCheatSheet, setShowCheatSheet] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  // Search overlay (Ctrl+F). The fixed search bar is hidden; the input lives
-  // inside this overlay and shares the same Zustand searchQuery state.
+  // Search overlay (Ctrl+F). Browser-style find: highlights matches in the
+  // visible task list and supports up/down navigation between hits.
   const [showSearch, setShowSearch] = useState(false);
+  const [searchMatchIdx, setSearchMatchIdx] = useState(0);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
   const closingRef = useRef(false);
@@ -75,25 +76,32 @@ export function NoteWindow({ noteId }: Props) {
     return () => clearInterval(id);
   }, [flush]);
 
-  // Desktop notification on note open: warn about overdue / soon-due tasks.
-  // Runs once after items finish loading.
-  const notifiedRef = useRef(false);
+  // Desktop reminders for overdue / soon-due tasks.
+  // Strategy:
+  //   - Once when this note window loads its items.
+  //   - Then every 30 minutes while the window is open.
+  //   - Only the SUMMARY counts are notified — no spam per-task.
+  // To enable / disable, the user can grant or deny the OS permission
+  // (Windows handles permission prompt via tauri-plugin-notification).
+  const lastNotifiedKey = useRef('');
   useEffect(() => {
-    if (notifiedRef.current) return;
-    if (items.length === 0) return;
-    notifiedRef.current = true;
-
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const overdue = items.filter((i) => !i.archived && !i.checked && i.limit_date && new Date(i.limit_date) < today);
-    const dueSoon = items.filter((i) => {
-      if (i.archived || i.checked || !i.limit_date) return false;
-      const d = new Date(i.limit_date);
-      const diff = (d.getTime() - today.getTime()) / 86400000;
-      return diff >= 0 && diff <= warnDays;
-    });
-    if (overdue.length === 0 && dueSoon.length === 0) return;
-
-    (async () => {
+    let cancelled = false;
+    const check = async () => {
+      if (cancelled || items.length === 0) return;
+      const wd = note?.warn_days ?? settings.deadline_warn_days ?? 3;
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const overdue = items.filter((i) => !i.archived && !i.checked && i.limit_date && new Date(i.limit_date) < today);
+      const dueSoon = items.filter((i) => {
+        if (i.archived || i.checked || !i.limit_date) return false;
+        const d = new Date(i.limit_date);
+        const diff = (d.getTime() - today.getTime()) / 86400000;
+        return diff >= 0 && diff <= wd;
+      });
+      if (overdue.length === 0 && dueSoon.length === 0) return;
+      // Skip the toast if nothing changed since the last one — prevents spam.
+      const sig = `${overdue.length}/${dueSoon.length}`;
+      if (sig === lastNotifiedKey.current) return;
+      lastNotifiedKey.current = sig;
       try {
         const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification');
         let allowed = await isPermissionGranted();
@@ -105,13 +113,18 @@ export function NoteWindow({ noteId }: Props) {
         const title = note?.title ?? 'リスト';
         const lines: string[] = [];
         if (overdue.length > 0) lines.push(`⚠ 期限切れ ${overdue.length}件`);
-        if (dueSoon.length > 0) lines.push(`📅 ${warnDays}日以内 ${dueSoon.length}件`);
+        if (dueSoon.length > 0) lines.push(`📅 ${wd}日以内 ${dueSoon.length}件`);
         sendNotification({ title: `📋 ${title}`, body: lines.join(' / ') });
-      } catch (e) {
-        console.warn('[notify] failed:', e);
-      }
-    })();
-  }, [items.length]); // fire once after items first appear
+      } catch (e) { console.warn('[notify] failed:', e); }
+    };
+    // User-tunable interval: settings.reminder_interval_min.
+    // 0 disables both the initial and the periodic check entirely.
+    const intervalMin = settings.reminder_interval_min ?? 30;
+    if (intervalMin <= 0) return () => { cancelled = true; };
+    const t1 = setTimeout(check, 1500);
+    const t2 = setInterval(check, intervalMin * 60 * 1000);
+    return () => { cancelled = true; clearTimeout(t1); clearInterval(t2); };
+  }, [items.length, note?.warn_days, settings.deadline_warn_days, settings.reminder_interval_min, note?.title]);
 
   // Sync title/color from appStore when another window changes them
   useEffect(() => {
@@ -224,8 +237,8 @@ export function NoteWindow({ noteId }: Props) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); selectAll(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
+        e.stopImmediatePropagation();           // suppress WebView2's native find
         setShowSearch(true);
-        // Focus the overlay input on the next tick.
         setTimeout(() => document.querySelector<HTMLInputElement>('.search-overlay-input')?.focus(), 30);
         return;
       }
@@ -244,8 +257,35 @@ export function NoteWindow({ noteId }: Props) {
         setShowCheatSheet((v) => !v);
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    // capture: true so we beat WebView2's built-in Ctrl+F handler.
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [showSearch]);
+
+  const gotoMatch = (delta: number) => {
+    if (matchedIds.length === 0) return;
+    setSearchMatchIdx((i) => (i + delta + matchedIds.length) % matchedIds.length);
+  };
+
+  // Listen for "jump-to-task" events emitted by the launcher's global search.
+  // Highlights the requested task in this note window.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen<{ taskId: string; query: string }>('jump-to-task', (event) => {
+        if (!event.payload) return;
+        setSearchQuery(event.payload.query);
+        setShowSearch(true);
+        setTimeout(() => {
+          const ids = useNoteStore.getState().items
+            .filter((i) => i.text.toLowerCase().includes(event.payload.query.toLowerCase()))
+            .map((i) => i.id);
+          const idx = ids.indexOf(event.payload.taskId);
+          if (idx >= 0) setSearchMatchIdx(idx);
+        }, 200);
+      }).then((fn) => { unlisten = fn; }).catch(() => {});
+    });
+    return () => { unlisten?.(); };
   }, []);
 
   // Quick-add: extra indent levels added via Tab (and removed via Shift+Tab) before submit.
@@ -335,12 +375,28 @@ export function NoteWindow({ noteId }: Props) {
   };
 
   const sq = searchQuery.toLowerCase().trim();
+  // While the find overlay is open we KEEP all rows visible and just highlight
+  // the matches — that's the browser-Ctrl+F behaviour the user expects.
+  const findMode = showSearch && sq.length > 0;
   const visibleItems = items.filter((i) => {
     if (showArchived ? !i.archived : i.archived) return false;
     if (isHidden(i)) return false;
-    if (sq && !i.text.toLowerCase().includes(sq)) return false;
+    if (!findMode && sq && !i.text.toLowerCase().includes(sq)) return false;
     return true;
   });
+  // Matched item IDs (for highlighting + nav). Only used when findMode.
+  const matchedIds = findMode
+    ? visibleItems.filter((i) => i.text.toLowerCase().includes(sq)).map((i) => i.id)
+    : [];
+  const currentMatchId = matchedIds[searchMatchIdx] ?? null;
+
+  // Reset match index on query change; auto-scroll the current match into view.
+  useEffect(() => { setSearchMatchIdx(0); }, [searchQuery]);
+  useEffect(() => {
+    if (!currentMatchId) return;
+    const el = document.querySelector(`[data-item-id="${currentMatchId}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [currentMatchId]);
   const archivedCount = items.filter((i) => i.archived).length;
   const checkedNonArchived = items.filter((i) => i.checked && !i.archived);
 
@@ -610,23 +666,26 @@ export function NoteWindow({ noteId }: Props) {
         </div>
       )}
 
-      {/* ── Search overlay (Ctrl+F) ─────────────────────────────────────────── */}
+      {/* ── Search overlay (Ctrl+F) — browser-style find ─────────────────── */}
       {showSearch && (
-        <div className="search-overlay-backdrop" onClick={() => { setShowSearch(false); setSearchQuery(''); }}>
-          <div className="search-overlay" onClick={(e) => e.stopPropagation()}>
-            <input
-              className="search-overlay-input"
-              placeholder="🔍 このリスト内のタスクを検索…  (Esc で閉じる)"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              autoFocus
-            />
-            <button
-              className="search-overlay-close"
-              onClick={() => { setShowSearch(false); setSearchQuery(''); }}
-              title="閉じる"
-            >✕</button>
-          </div>
+        <div className="search-overlay-bar" onClick={(e) => e.stopPropagation()}>
+          <input
+            className="search-overlay-input"
+            placeholder="🔍 このリスト内を検索"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); gotoMatch(e.shiftKey ? -1 : 1); }
+              if (e.key === 'Escape') { setShowSearch(false); setSearchQuery(''); }
+            }}
+            autoFocus
+          />
+          <span className="search-overlay-count">
+            {findMode ? (matchedIds.length > 0 ? `${searchMatchIdx + 1} / ${matchedIds.length}` : '0 件') : ''}
+          </span>
+          <button className="search-overlay-nav" onClick={() => gotoMatch(-1)} title="前の一致 (Shift+Enter)" disabled={matchedIds.length === 0}>↑</button>
+          <button className="search-overlay-nav" onClick={() => gotoMatch(1)} title="次の一致 (Enter)" disabled={matchedIds.length === 0}>↓</button>
+          <button className="search-overlay-close" onClick={() => { setShowSearch(false); setSearchQuery(''); }} title="閉じる (Esc)">✕</button>
         </div>
       )}
 
@@ -646,6 +705,8 @@ export function NoteWindow({ noteId }: Props) {
             warnDays={warnDays}
             priorityMode={priorityMode}
             activeGroupId={activeGroupId}
+            searchTerm={findMode ? sq : ''}
+            isCurrentMatch={item.id === currentMatchId}
           />
         ))}
       </div>

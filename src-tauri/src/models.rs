@@ -108,7 +108,11 @@ pub struct AppSettings {
     pub deadline_warn_days: i64,
     #[serde(default = "default_priority_mode")]
     pub priority_mode: String,
+    #[serde(default = "default_reminder_interval")]
+    pub reminder_interval_min: i64,
 }
+
+fn default_reminder_interval() -> i64 { 30 }
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -122,6 +126,7 @@ impl Default for AppSettings {
             active_group_id: None,
             deadline_warn_days: 3,
             priority_mode: "hml".to_string(),
+            reminder_interval_min: 30,
         }
     }
 }

@@ -83,4 +83,5 @@ export interface AppSettings {
   active_group_id: string | null;
   deadline_warn_days: number;
   priority_mode: 'hml' | 'abc'; // 'hml' = 高中低, 'abc' = ABC
+  reminder_interval_min?: number; // minutes between desktop reminder checks (0 = disabled)
 }
