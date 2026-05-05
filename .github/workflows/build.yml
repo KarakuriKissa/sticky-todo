@@ -101,3 +101,27 @@ jobs:
           name: StickyTodo-EXE単体
           retention-days: 90
           path: src-tauri/target/release/sticky-todo.exe
+
+      # ── 11. GitHub Releases に自動公開（ビルド番号タグ付き） ──────────
+      - name: 📦 GitHub Release を作成
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: StickyTodo build #${{ github.run_number }}
+          body: |
+            自動生成されたビルドです。
+            - コミット: ${{ github.sha }}
+            - ビルド番号: #${{ github.run_number }}
+            - ビルド日時: ${{ github.event.head_commit.timestamp }}
+
+            ⚠ β版・無署名のため、初回起動時に Windows SmartScreen 警告が表示されます。
+            「詳細情報」→「実行」で続行してください。
+          draft: false
+          prerelease: true
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/sticky-todo.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

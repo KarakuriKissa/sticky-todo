@@ -213,7 +213,7 @@ impl Database {
                     assignees,assignee_person_id,memo,bold,priority,
                     start_date,end_date,limit_date,item_type,
                     sort_order,archived,updated_at,dirty
-             FROM todo_items WHERE note_id=?1 AND archived=0 ORDER BY sort_order",
+             FROM todo_items WHERE note_id=?1 ORDER BY sort_order",
         )?;
         let mut rows = stmt.query([note_id])?;
         let mut out = Vec::new();
