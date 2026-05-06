@@ -438,11 +438,31 @@ function HelpSection() {
         )}
       </div>
 
-      <h4 style={{ marginTop: 14 }}>📄 ライセンス</h4>
+      <h4 style={{ marginTop: 14 }}>📄 ライセンス・規約</h4>
       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
-        StickyTodo（β版）<br />
-        個人・小規模利用可。商用利用についてはお問い合わせください。
+        StickyTodo（β版） — <strong>MIT License</strong> で公開しています。<br />
+        以下のドキュメントは GitHub リポジトリで公開しています。
       </p>
+      <ul className="help-list">
+        <li>
+          <a href="#" onClick={async (e) => {
+            e.preventDefault();
+            (await import('@tauri-apps/plugin-shell')).open('https://github.com/TomTomYukkie/sticky-todo/blob/main/LICENSE');
+          }} style={{ color: '#a5b4fc' }}>📜 ライセンス全文 (LICENSE)</a>
+        </li>
+        <li>
+          <a href="#" onClick={async (e) => {
+            e.preventDefault();
+            (await import('@tauri-apps/plugin-shell')).open('https://github.com/TomTomYukkie/sticky-todo/blob/main/PRIVACY.md');
+          }} style={{ color: '#a5b4fc' }}>🔒 プライバシーポリシー</a>
+        </li>
+        <li>
+          <a href="#" onClick={async (e) => {
+            e.preventDefault();
+            (await import('@tauri-apps/plugin-shell')).open('https://github.com/TomTomYukkie/sticky-todo/blob/main/UPDATE_AND_SIGNING.md');
+          }} style={{ color: '#a5b4fc' }}>🔄 自動アップデートとコード署名について</a>
+        </li>
+      </ul>
     </section>
   );
 }

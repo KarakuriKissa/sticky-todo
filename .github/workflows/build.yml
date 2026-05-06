@@ -76,9 +76,17 @@ jobs:
           $bmp.Dispose()
           Write-Host "✅ アイコン元画像を生成しました"
 
-      # ── 6. npm 依存パッケージをインストール ───────────────────────────
-      - name: npm パッケージをインストール
-        run: npm install
+      # ── 6. 依存パッケージをインストール ───────────────────────────────
+      - name: 依存パッケージをインストール
+        run: npm install --force
+
+      # ── 6b. ユニットテスト (bun test) ─────────────────────────────────
+      - name: Bun セットアップ
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: テストを実行
+        run: bun test tests/
 
       # ── 7. Tauri 用アイコンを全サイズ生成 ─────────────────────────────
       - name: Tauri アイコンを生成
