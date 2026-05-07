@@ -1,12 +1,16 @@
 // Extracted from Launcher.tsx — settings modal with statuses, assignees,
 // advanced (deadline, sync placeholder, DB management) and help tabs.
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { useAppStore } from '../../store/appStore';
 import type { AppSettings, AssigneeGroup, AssigneePerson, Status } from '../../types';
 import { AdvancedTab } from './AdvancedTab';
 
 export function HelpSection() {
+  const [appVersion, setAppVersion] = useState<string>('');
+  useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
+
   // 'idle' | 'checking' | 'latest' | 'update' | 'error'
   const [updateState, setUpdateState] = useState<
     | { kind: 'idle' }
@@ -131,8 +135,11 @@ export function HelpSection() {
       </div>
 
       <h4 style={{ marginTop: 18 }}>📄 このアプリについて</h4>
-      <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
+      <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.9 }}>
         StickyTodo は<b>完全無料</b>で使えるデスクトップ向けタスク管理アプリです。<br />
+        {appVersion && (
+          <span>バージョン: <strong style={{ color: 'var(--text)' }}>v{appVersion}</strong><br /></span>
+        )}
         <a href="#" onClick={async (e) => {
           e.preventDefault();
           (await import('@tauri-apps/plugin-shell')).open('https://github.com/KarakuriKissa/sticky-todo');
