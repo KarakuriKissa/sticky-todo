@@ -15,9 +15,9 @@
         "label": "launcher",
         "title": "Sticky ToDo",
         "width": 960,
-        "height": 640,
+        "height": 720,
         "minWidth": 600,
-        "minHeight": 400,
+        "minHeight": 480,
         "url": "/",
         "decorations": true,
         "visible": true
