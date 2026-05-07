@@ -101,26 +101,6 @@ export function AdvancedTab({ draft, setDraft }: Props) {
         分ごと（0 で無効）
       </label>
 
-      <h3 style={{ marginTop: 20 }}>言語 / Language</h3>
-      <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.8 }}>
-        現在の言語: <strong style={{ color: 'var(--text)' }}>日本語</strong>
-      </p>
-      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.6 }}>
-        多言語対応は今後のバージョンで追加予定です。<br />
-        Language support (English etc.) will be added in a future update.
-      </p>
-
-      <h3 style={{ marginTop: 20 }}>同期</h3>
-      <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.8 }}>
-        現在、同期機能は利用できません。
-      </p>
-      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.6 }}>
-        将来的に以下の同期機能を追加予定:<br />
-        • クラウドストレージへの自動バックアップ<br />
-        • 複数デバイス間でのリスト共有<br />
-        • チームメンバーとのリアルタイム同期
-      </p>
-
       <h3 style={{ marginTop: 20 }}>データベース</h3>
       <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
         すべてのデータはローカルの SQLite データベースに保存されています。<br />
