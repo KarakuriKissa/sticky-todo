@@ -35,9 +35,10 @@ export function NoteList({ onNew }: Props) {
     overPos: 'before' | 'after';
   } | null>(null);
 
-  const catName = (id: string | null) => {
-    if (!id) return '';
-    return categories.find((c) => c.id === id)?.name ?? '';
+  // Returns the category name, or null for "no category" (rendered separately).
+  const catInfo = (id: string | null): { name: string; noCat: boolean } => {
+    if (!id) return { name: 'カテゴリー無し', noCat: true };
+    return { name: categories.find((c) => c.id === id)?.name ?? '', noCat: false };
   };
 
   const startEdit = (note: Note, e: React.MouseEvent) => {
@@ -224,9 +225,15 @@ export function NoteList({ onNew }: Props) {
               </div>
             )}
             <div className="note-card-meta">
-              {catName(note.category_id) && (
-                <span className="note-card-cat">{catName(note.category_id)}</span>
-              )}
+              {(() => {
+                const { name, noCat } = catInfo(note.category_id);
+                return name ? (
+                  <span
+                    className="note-card-cat"
+                    style={noCat ? { color: '#9ca3af', borderColor: '#9ca3af', opacity: 0.8 } : {}}
+                  >{name}</span>
+                ) : null;
+              })()}
               <span className="note-card-date">
                 {new Date(note.updated_at).toLocaleDateString('ja-JP')}
               </span>

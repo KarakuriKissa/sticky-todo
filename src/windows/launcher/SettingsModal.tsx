@@ -7,45 +7,61 @@ import type { AppSettings, AssigneeGroup, AssigneePerson, Status } from '../../t
 import { AdvancedTab } from './AdvancedTab';
 
 export function HelpSection() {
-  const [latestRun, setLatestRun] = useState<{ ok: boolean; current: string; remote?: string; url?: string } | null>(null);
+  // 'idle' | 'checking' | 'latest' | 'update' | 'error'
+  const [updateState, setUpdateState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'checking' }
+    | { kind: 'latest' }
+    | { kind: 'update'; runNumber: number; url: string }
+    | { kind: 'error' }
+  >({ kind: 'idle' });
+
   const checkUpdate = async () => {
+    setUpdateState({ kind: 'checking' });
     try {
-      const res = await fetch('https://api.github.com/repos/TomTomYukkie/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success');
+      const seenKey = 'sticky-todo:last-seen-build';
+      const lastSeen = Number(localStorage.getItem(seenKey) ?? '0');
+      const res = await fetch(
+        'https://api.github.com/repos/TomTomYukkie/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success',
+      );
       const json = await res.json();
       const run = json.workflow_runs?.[0];
-      if (run) {
-        const remote = `#${run.run_number} (${new Date(run.run_started_at).toLocaleDateString('ja-JP')})`;
-        setLatestRun({ ok: true, current: 'インストール済み', remote, url: run.html_url });
+      if (!run) { setUpdateState({ kind: 'error' }); return; }
+      // Record this run as "seen" on first check.
+      if (lastSeen === 0) localStorage.setItem(seenKey, String(run.run_number));
+      if (run.run_number > lastSeen && lastSeen > 0) {
+        setUpdateState({ kind: 'update', runNumber: run.run_number, url: run.html_url });
       } else {
-        setLatestRun({ ok: false, current: 'インストール済み' });
+        setUpdateState({ kind: 'latest' });
       }
     } catch {
-      setLatestRun({ ok: false, current: 'インストール済み' });
+      setUpdateState({ kind: 'error' });
     }
   };
+
   return (
     <section>
       <h3>ヘルプ</h3>
       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
-        操作に迷ったらここを参照してください。
+        使い方でわからないことがあればここを確認してください。
       </p>
 
-      <h4 style={{ marginTop: 14 }}>📋 基本操作</h4>
+      <h4 style={{ marginTop: 14 }}>📋 基本的な使い方</h4>
       <ul className="help-list">
-        <li><b>＋ボタン</b>：新しいリスト（タスクウィンドウ）を作成</li>
-        <li>リストの<b>ダブルクリック</b>：開く</li>
-        <li>リストの<b>右クリック</b>：閉じる / 削除 / カテゴリ変更</li>
-        <li>リストを<b>左サイドバーのカテゴリにドラッグ</b>：カテゴリ移動</li>
+        <li><b>＋ボタン</b>：新しいリストを作成します</li>
+        <li>リストを<b>ダブルクリック</b>：タスクウィンドウを開きます</li>
+        <li>リストを<b>右クリック</b>：閉じる・削除・カテゴリ変更</li>
+        <li>リストを<b>左のカテゴリへドラッグ</b>：カテゴリを変更します</li>
       </ul>
 
       <h4 style={{ marginTop: 14 }}>📝 タスクウィンドウ</h4>
       <ul className="help-list">
-        <li>上部の入力欄に文字を入れて <kbd>Enter</kbd>：タスク追加</li>
-        <li>入力欄で <kbd>Tab</kbd>：インデントを1段深く（最大6段）</li>
-        <li>タスクの<b>右クリック</b>：太字 / 複製 / アーカイブ / 削除など</li>
-        <li>タスクの左の<b>⠿マークをドラッグ</b>：並び替え</li>
-        <li>タスクテキスト内の URL は<b>クリック可能</b>（既定ブラウザで開く）</li>
-        <li>タイトルバーの<b>右クリック</b>：タイトル編集</li>
+        <li>上の入力欄に文字を入れて <kbd>Enter</kbd>：タスクを追加</li>
+        <li><kbd>Tab</kbd> キー：インデントを1段深く（最大6段）</li>
+        <li>タスクを<b>右クリック</b>：太字・複製・アーカイブ・削除など</li>
+        <li>左の<b>⠿マークをドラッグ</b>：タスクを並び替え</li>
+        <li>テキスト内の URL は<b>クリックで開けます</b></li>
+        <li>タイトルバーを<b>右クリック</b>：リスト名を編集</li>
       </ul>
 
       <h4 style={{ marginTop: 14 }}>⌨ ショートカット（タスクウィンドウ）</h4>
@@ -67,74 +83,61 @@ export function HelpSection() {
         </tbody>
       </table>
 
-      <h4 style={{ marginTop: 14 }}>🔍 グローバル検索</h4>
+      <h4 style={{ marginTop: 14 }}>🔍 横断検索</h4>
       <ul className="help-list">
-        <li>ランチャー上部の検索欄にキーワード入力</li>
-        <li>すべてのリスト・閉じてるリストのタスクも横断検索</li>
-        <li>結果クリックでそのタスクへジャンプ</li>
-        <li>ポップアップは <kbd>Esc</kbd> または ✕ で閉じる</li>
+        <li>画面上部の検索欄にキーワードを入力するとすべてのリストを同時に検索できます</li>
+        <li>閉じているリストのタスクも検索対象になります</li>
+        <li>結果をクリックするとそのタスクへ直接ジャンプします</li>
+        <li><kbd>Esc</kbd> または ✕ で検索を閉じます</li>
       </ul>
-
-      <h4 style={{ marginTop: 14 }}>💾 データの保存場所</h4>
-      <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
-        <code>%APPDATA%\com.stickytodo.app\sticky-todo.db</code>（SQLite）<br />
-        ＋ ブラウザの localStorage（バックアップ）
-      </p>
 
       <h4 style={{ marginTop: 14 }}>🔒 プライバシー</h4>
       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
-        StickyTodo は<b>すべてローカル</b>で動作します。インターネットには
-        <b>更新確認時のみ</b>接続します（GitHub の公開 API）。
-        タスクの内容・個人情報は外部サーバーに送信しません。
+        入力したタスクや個人情報はすべて<b>このパソコンの中だけ</b>に保存されます。
+        外部のサーバーには一切送信しません。<br />
+        インターネットへの接続はアップデート確認ボタンを押したときだけです。
       </p>
 
-      <h4 style={{ marginTop: 14 }}>🔄 アップデート</h4>
+      <h4 style={{ marginTop: 14 }}>🔄 アップデート確認</h4>
       <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={checkUpdate}>
-          🔄 最新ビルドを確認
+        <button
+          className="btn-secondary"
+          style={{ fontSize: 12, padding: '5px 12px' }}
+          onClick={checkUpdate}
+          disabled={updateState.kind === 'checking'}
+        >
+          {updateState.kind === 'checking' ? '確認中…' : '🔄 最新バージョンを確認'}
         </button>
-        {latestRun && (
-          <div style={{ marginTop: 10, padding: 10, background: 'rgba(99,102,241,.08)', borderRadius: 6 }}>
-            {latestRun.ok ? (
-              <>
-                最新ビルド: <b>{latestRun.remote}</b><br />
-                <a href="#" onClick={async (e) => {
-                  e.preventDefault();
-                  if (latestRun.url) (await import('@tauri-apps/plugin-shell')).open(latestRun.url);
-                }} style={{ color: '#6366f1' }}>
-                  GitHub Actions で開く →
-                </a>
-              </>
-            ) : <span style={{ color: 'var(--muted)' }}>確認できませんでした（オフライン？）</span>}
+        {updateState.kind === 'latest' && (
+          <span style={{ marginLeft: 12, color: '#4ade80', fontWeight: 600 }}>✓ 最新バージョンです</span>
+        )}
+        {updateState.kind === 'update' && (
+          <div style={{ marginTop: 10, padding: 10, background: 'rgba(251,191,36,.12)', borderRadius: 6, borderLeft: '3px solid #fbbf24' }}>
+            <b>⬆ 新しいバージョンがあります（#{updateState.runNumber}）</b><br />
+            <button
+              className="btn-secondary"
+              style={{ fontSize: 12, padding: '4px 10px', marginTop: 6 }}
+              onClick={async () => {
+                (await import('@tauri-apps/plugin-shell')).open(updateState.url);
+                localStorage.setItem('sticky-todo:last-seen-build', String(updateState.runNumber));
+                setUpdateState({ kind: 'latest' });
+              }}
+            >ダウンロードページを開く →</button>
           </div>
+        )}
+        {updateState.kind === 'error' && (
+          <span style={{ marginLeft: 12, color: 'var(--muted)', fontSize: 11 }}>確認できませんでした（オフライン？）</span>
         )}
       </div>
 
-      <h4 style={{ marginTop: 14 }}>📄 ライセンス・規約</h4>
+      <h4 style={{ marginTop: 18 }}>📄 このアプリについて</h4>
       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
-        StickyTodo（β版） — <strong>MIT License</strong> で公開しています。<br />
-        以下のドキュメントは GitHub リポジトリで公開しています。
+        StickyTodo は<b>完全無料</b>で使えるデスクトップ向けタスク管理アプリです。<br />
+        <a href="#" onClick={async (e) => {
+          e.preventDefault();
+          (await import('@tauri-apps/plugin-shell')).open('https://github.com/TomTomYukkie/sticky-todo');
+        }} style={{ color: '#a5b4fc' }}>GitHub でソースコードを見る →</a>
       </p>
-      <ul className="help-list">
-        <li>
-          <a href="#" onClick={async (e) => {
-            e.preventDefault();
-            (await import('@tauri-apps/plugin-shell')).open('https://github.com/TomTomYukkie/sticky-todo/blob/main/LICENSE');
-          }} style={{ color: '#a5b4fc' }}>📜 ライセンス全文 (LICENSE)</a>
-        </li>
-        <li>
-          <a href="#" onClick={async (e) => {
-            e.preventDefault();
-            (await import('@tauri-apps/plugin-shell')).open('https://github.com/TomTomYukkie/sticky-todo/blob/main/PRIVACY.md');
-          }} style={{ color: '#a5b4fc' }}>🔒 プライバシーポリシー</a>
-        </li>
-        <li>
-          <a href="#" onClick={async (e) => {
-            e.preventDefault();
-            (await import('@tauri-apps/plugin-shell')).open('https://github.com/TomTomYukkie/sticky-todo/blob/main/UPDATE_AND_SIGNING.md');
-          }} style={{ color: '#a5b4fc' }}>🔄 自動アップデートとコード署名について</a>
-        </li>
-      </ul>
     </section>
   );
 }

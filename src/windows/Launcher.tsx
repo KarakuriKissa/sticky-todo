@@ -21,7 +21,6 @@ export function Launcher() {
   const {
     load, reopenSavedWindows, createNote,
     searchQuery, setSearchQuery, settings, saveSettings,
-    selectedCategoryId, categories, saveCategory, setSelectedCategory,
   } = useAppStore();
   const [showSettings, setShowSettings] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(180);
@@ -139,19 +138,7 @@ export function Launcher() {
   }, []);
 
   const handleNew = async () => {
-    let catId = selectedCategoryId;
-    if (!catId) {
-      if (categories.length === 0) {
-        // No categories at all — create a default one
-        const id = await invoke<string>('generate_id');
-        await saveCategory({ id, name: '新しいカテゴリ', color: '#6366f1', sort_order: 0 });
-        setSelectedCategory(id);
-        catId = id;
-      } else {
-        alert('カテゴリを選択してからリストを作成してください。');
-        return;
-      }
-    }
+    // カテゴリーが選択されていない場合は「カテゴリー無し」として作成する
     await createNote();
   };
 
@@ -228,8 +215,7 @@ export function Launcher() {
           <button
             className="btn-new"
             onClick={handleNew}
-            title={selectedCategoryId ? '新規リスト作成' : 'カテゴリを選択してから作成'}
-            style={{ opacity: selectedCategoryId ? 1 : 0.5 }}
+            title="新規リスト作成"
           >＋</button>
 
           <select

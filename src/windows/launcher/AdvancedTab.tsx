@@ -55,6 +55,25 @@ export function AdvancedTab({ draft, setDraft }: Props) {
     catch (e) { alert('削除失敗: ' + e); }
   };
 
+  const onResetTutorial = async () => {
+    const { confirm } = await import('@tauri-apps/plugin-dialog');
+    const ok = await confirm(
+      '現在のすべてのデータを削除してチュートリアルの初期データに戻します。\nこの操作は取り消せません。続行しますか？',
+      { title: 'チュートリアルに戻す', kind: 'warning' },
+    );
+    if (!ok) return;
+    try {
+      await invoke('delete_database');
+      // Clear the tutorial-seeded flag so appStore re-runs seedTutorial on next load.
+      localStorage.removeItem('sticky-todo:tutorial-seeded');
+      localStorage.removeItem('sticky-todo:last-seen-build');
+      // Reload the app window to reinitialize everything from scratch.
+      window.location.reload();
+    } catch (e) {
+      alert('リセット失敗: ' + e);
+    }
+  };
+
   const numberInput = { width: 48, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', outline: 'none' as const };
   const para = { fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.6 };
 
@@ -117,6 +136,19 @@ export function AdvancedTab({ draft, setDraft }: Props) {
         <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onImport}>📥 インポート</button>
         <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }} onClick={onDelete}>🗑️ データベースを削除</button>
       </div>
+
+      <h3 style={{ marginTop: 20 }}>チュートリアルに戻す</h3>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
+        現在のデータをすべて削除して、初回起動時のチュートリアルデータに戻します。<br />
+        使い方を確認したいときや、データをきれいにリセットしたいときに使ってください。
+      </p>
+      <button
+        className="btn-secondary"
+        style={{ fontSize: 12, padding: '5px 12px', color: '#f59e0b', borderColor: '#f59e0b' }}
+        onClick={onResetTutorial}
+      >
+        🔄 チュートリアルに戻す
+      </button>
     </section>
   );
 }
