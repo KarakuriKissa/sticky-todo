@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../../store/appStore';
 import type { AppSettings, AssigneeGroup, AssigneePerson, Status } from '../../types';
+import { AdvancedTab } from './AdvancedTab';
 
 export function HelpSection() {
   const [latestRun, setLatestRun] = useState<{ ok: boolean; current: string; remote?: string; url?: string } | null>(null);
@@ -346,132 +347,7 @@ export function SettingsModal({
           )}
 
           {/* ── Advanced tab (deadline + language + sync + db) ── */}
-          {tab === 'advanced' && (
-            <section>
-              <h3>期日警告</h3>
-              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.6 }}>
-                期日が近いタスクに警告色を表示します。各リストで個別に上書き可能です。
-              </p>
-              <label className="toggle-row" style={{ gap: 6, marginBottom: 4 }}>
-                期限の
-                <input
-                  type="number"
-                  min={0} max={30}
-                  value={draft.deadline_warn_days}
-                  onChange={(e) => setDraft((d) => ({ ...d, deadline_warn_days: Number(e.target.value) }))}
-                  style={{ width: 48, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', outline: 'none' }}
-                />
-                日前から警告色を表示
-              </label>
-
-              <h3 style={{ marginTop: 20 }}>デスクトップ通知</h3>
-              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.6 }}>
-                リストを開いている間、期限切れ・期日が近いタスクを Windows 通知で知らせます。<br />
-                <strong>0 にすると通知を無効化</strong>します。
-              </p>
-              <label className="toggle-row" style={{ gap: 6 }}>
-                チェック間隔
-                <input
-                  type="number"
-                  min={0} max={1440}
-                  value={draft.reminder_interval_min ?? 30}
-                  onChange={(e) => setDraft((d) => ({ ...d, reminder_interval_min: Number(e.target.value) }))}
-                  style={{ width: 64, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', outline: 'none' }}
-                />
-                分ごと（0 で無効）
-              </label>
-
-              <h3 style={{ marginTop: 20 }}>言語 / Language</h3>
-              <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.8 }}>
-                現在の言語: <strong style={{ color: 'var(--text)' }}>日本語</strong>
-              </p>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.6 }}>
-                多言語対応は今後のバージョンで追加予定です。<br />
-                Language support (English etc.) will be added in a future update.
-              </p>
-
-              <h3 style={{ marginTop: 20 }}>同期</h3>
-              <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.8 }}>
-                現在、同期機能は利用できません。
-              </p>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.6 }}>
-                将来的に以下の同期機能を追加予定:<br />
-                • クラウドストレージへの自動バックアップ<br />
-                • 複数デバイス間でのリスト共有<br />
-                • チームメンバーとのリアルタイム同期
-              </p>
-
-              <h3 style={{ marginTop: 20 }}>データベース</h3>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
-                すべてのデータはローカルの SQLite データベースに保存されています。<br />
-                エクスポートでバックアップを作成、インポートで別のデータベースに置き換えできます。
-              </p>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  className="btn-secondary"
-                  style={{ fontSize: 12, padding: '5px 12px' }}
-                  onClick={async () => {
-                    const { save } = await import('@tauri-apps/plugin-dialog');
-                    const ts = new Date().toISOString().slice(0, 10);
-                    const path = await save({
-                      title: 'データベースをエクスポート',
-                      defaultPath: `sticky-todo-${ts}.db`,
-                      filters: [{ name: 'SQLite Database', extensions: ['db'] }],
-                    });
-                    if (!path) return;
-                    try {
-                      await invoke('export_database', { destPath: path });
-                      alert('エクスポートが完了しました');
-                    } catch (e) {
-                      alert('エクスポート失敗: ' + e);
-                    }
-                  }}
-                >📤 エクスポート</button>
-                <button
-                  className="btn-secondary"
-                  style={{ fontSize: 12, padding: '5px 12px' }}
-                  onClick={async () => {
-                    const { open, confirm } = await import('@tauri-apps/plugin-dialog');
-                    const path = await open({
-                      title: 'データベースをインポート',
-                      multiple: false,
-                      directory: false,
-                      filters: [{ name: 'SQLite Database', extensions: ['db'] }],
-                    });
-                    if (!path || typeof path !== 'string') return;
-                    const ok = await confirm(
-                      '現在のデータをインポートしたデータで完全に置き換えます。\nこの操作は取り消せません。続行しますか？',
-                      { title: 'インポートの確認', kind: 'warning' },
-                    );
-                    if (!ok) return;
-                    try {
-                      await invoke('import_database', { srcPath: path });
-                      // app.restart() will reload the app
-                    } catch (e) {
-                      alert('インポート失敗: ' + e);
-                    }
-                  }}
-                >📥 インポート</button>
-                <button
-                  className="btn-secondary"
-                  style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }}
-                  onClick={async () => {
-                    const { confirm } = await import('@tauri-apps/plugin-dialog');
-                    const ok = await confirm(
-                      'すべてのリスト・タスク・設定が完全に削除されます。\nこの操作は取り消せません。本当に削除しますか？',
-                      { title: 'データベース削除の確認', kind: 'warning' },
-                    );
-                    if (!ok) return;
-                    try {
-                      await invoke('delete_database');
-                    } catch (e) {
-                      alert('削除失敗: ' + e);
-                    }
-                  }}
-                >🗑️ データベースを削除</button>
-              </div>
-            </section>
-          )}
+          {tab === 'advanced' && <AdvancedTab draft={draft} setDraft={setDraft} />}
 
           {/* ── Help / About ── */}
           {tab === 'help' && <HelpSection />}

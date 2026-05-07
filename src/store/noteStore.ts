@@ -2,6 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { create } from 'zustand';
 import type { ItemType, Note, TodoItem } from '../types';
 import { log } from '../utils/log';
+import { createSaveQueue, readLocalStorage } from './saveQueue';
+import { buildBulkActions } from './bulkActions';
 
 interface Snapshot {
   items: TodoItem[];
@@ -104,16 +106,8 @@ function makeItem(noteId: string, partial: Partial<TodoItem> = {}): TodoItem {
   };
 }
 
-// Save design v3 — sequential promise chain for reliability:
-//   - All saves enqueue onto saveChain so they NEVER overlap. SQLite's mutex
-//     order is preserved → no "earlier invoke overwrites later" race.
-//   - flush() does `await saveChain` then a final save_items, so window close
-//     is guaranteed to wait for every pending save.
-//   - Filters by item.note_id (NOT get().note?.id) — saves work even before
-//     the note state has loaded on a fresh window.
-let textSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let saveChain: Promise<void> = Promise.resolve();
-
+// Save layer is owned by ./saveQueue — it handles localStorage backup, the
+// sequential SQLite chain, retry, and flush(). This module just wires it up.
 export const useNoteStore = create<NoteStore>((set, get) => {
   const pushHistory = (items: TodoItem[]) => {
     const { history, historyIdx } = get();
@@ -123,65 +117,11 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     set({ history: newHistory, historyIdx: newHistory.length - 1 });
   };
 
-  // localStorage backup — survives even if SQLite save fails.
-  const lsKey = (noteId: string) => `sticky-todo:note-items:${noteId}`;
-  const backupToLocalStorage = (items: TodoItem[]) => {
-    if (items.length === 0) return;
-    const noteId = items[0].note_id;
-    if (!noteId) return;
-    try {
-      localStorage.setItem(lsKey(noteId), JSON.stringify(items));
-    } catch (e) {
-      log.warn('[save] localStorage backup failed:', e);
-    }
-  };
-
-  // The actual save — writes to BOTH localStorage (instant, always works) AND
-  // SQLite (durable, may fail). localStorage is the safety net.
-  const doSave = async () => {
-    const items = get().items.filter((i) => i.note_id !== '' && i.note_id != null);
-    if (items.length === 0) {
-      log.debug('[save] skip — no items with valid note_id');
-      return;
-    }
-    // 1. Backup to localStorage immediately (synchronous, never fails for normal data).
-    backupToLocalStorage(items);
-
-    // 2. Try SQLite.
-    log.debug('[save] start, count=', items.length, 'first note_id=', items[0].note_id);
-    set({ saveStatus: 'saving' });
-    try {
-      await invoke('save_items', { items });
-      log.debug('[save] OK count=', items.length);
-      set({ saveStatus: 'saved', lastSavedAt: Date.now() });
-      return;
-    } catch (e) {
-      log.error('[save] FAILED 1st attempt:', e);
-    }
-    await new Promise((r) => setTimeout(r, 400));
-    try {
-      await invoke('save_items', { items });
-      log.debug('[save] OK on retry, count=', items.length);
-      set({ saveStatus: 'saved', lastSavedAt: Date.now() });
-    } catch (e) {
-      log.error('[save] FAILED on retry too — data is in localStorage backup:', e);
-      set({ saveStatus: 'error' });
-    }
-  };
-
-  // Enqueue an immediate save onto the chain.
-  const saveAll = () => {
-    saveChain = saveChain.then(doSave);
-  };
-
-  // Debounced version for text / memo typing (so we don't IPC every keystroke).
-  const saveAllDebounced = () => {
-    if (textSaveTimer) clearTimeout(textSaveTimer);
-    textSaveTimer = setTimeout(() => {
-      textSaveTimer = null;
-      saveAll();
-    }, 300);
-  };
+  const queue = createSaveQueue({
+    getItems: () => get().items,
+    setStatus: (status, at) => set(at !== undefined ? { saveStatus: status, lastSavedAt: at } : { saveStatus: status }),
+  });
+  const { saveAll, saveAllDebounced } = queue;
 
   const mutate = (
     updater: (items: TodoItem[]) => TodoItem[],
@@ -194,6 +134,13 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     if (mode === 'debounced') saveAllDebounced();
     else saveAll();
   };
+
+  // Bulk actions on the current selection — extracted to ./bulkActions.
+  const bulk = buildBulkActions({
+    get: () => ({ selectedIds: get().selectedIds, items: get().items }),
+    set: (s) => set(s),
+    mutate: (u) => mutate(u),
+  });
 
   return {
     note: null,
@@ -220,21 +167,13 @@ export const useNoteStore = create<NoteStore>((set, get) => {
 
       // Fallback to localStorage if DB came back empty.
       if (items.length === 0) {
-        try {
-          const cached = localStorage.getItem(lsKey(noteId));
-          if (cached) {
-            const parsed = JSON.parse(cached) as TodoItem[];
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              log.debug('[load] DB empty — restoring', parsed.length, 'items from localStorage');
-              items = parsed;
-              // Re-save to SQLite so the DB catches up.
-              try { await invoke('save_items', { items }); } catch (e) {
-                log.error('[load] re-save to DB failed:', e);
-              }
-            }
+        const cached = readLocalStorage(noteId);
+        if (cached && cached.length > 0) {
+          log.debug('[load] DB empty — restoring', cached.length, 'items from localStorage');
+          items = cached;
+          try { await invoke('save_items', { items }); } catch (e) {
+            log.error('[load] re-save to DB failed:', e);
           }
-        } catch (e) {
-          log.warn('[load] localStorage read failed:', e);
         }
       }
 
@@ -325,7 +264,7 @@ export const useNoteStore = create<NoteStore>((set, get) => {
         };
         idsToRemove.add(id);
         collectChildren(id);
-        idsToRemove.forEach((rmId) => invoke('delete_item', { id: rmId }).catch(console.error));
+        idsToRemove.forEach((rmId) => invoke('delete_item', { id: rmId }).catch((e) => log.error('[deleteItem]', e)));
         return items.filter((i) => !idsToRemove.has(i.id));
       });
     },
@@ -417,117 +356,14 @@ export const useNoteStore = create<NoteStore>((set, get) => {
       });
     },
 
-    moveSelectedItems: (toId: string, position: 'before' | 'after') => {
-      const { selectedIds } = get();
-      if (selectedIds.size <= 1) return;
-      mutate((items) => {
-        // Cannot insert into a target that is itself selected
-        if (selectedIds.has(toId)) return items;
-        // Bail if any selected item is locked
-        if (items.filter((i) => selectedIds.has(i.id)).some((i) => i.locked)) return items;
-        // Selected items in their current order
-        const selected = items.filter((i) => selectedIds.has(i.id));
-        // Remaining (non-selected) items
-        const rest = items.filter((i) => !selectedIds.has(i.id));
-        const toIdx = rest.findIndex((i) => i.id === toId);
-        if (toIdx === -1) return items;
-        const insertAt = position === 'before' ? toIdx : toIdx + 1;
-        return [
-          ...rest.slice(0, insertAt),
-          ...selected.map((i) => ({ ...i, dirty: true })),
-          ...rest.slice(insertAt),
-        ];
-      });
-    },
-
-    deleteSelected: () => {
-      const { selectedIds } = get();
-      if (selectedIds.size === 0) return;
-      mutate((items) => {
-        const idsToRemove = new Set<string>(selectedIds);
-        const collectChildren = (parentId: string) => {
-          items.forEach((i) => {
-            if (i.parent_id === parentId && !idsToRemove.has(i.id)) {
-              idsToRemove.add(i.id);
-              collectChildren(i.id);
-            }
-          });
-        };
-        selectedIds.forEach((id) => collectChildren(id));
-        idsToRemove.forEach((id) => invoke('delete_item', { id }).catch(console.error));
-        return items.filter((i) => !idsToRemove.has(i.id));
-      });
-      set({ selectedIds: new Set() });
-    },
-
-    duplicateSelected: () => {
-      const { selectedIds } = get();
-      if (selectedIds.size === 0) return;
-      mutate((items) => {
-        // Process in descending index order so earlier inserts don't shift later indices
-        const indices = [...selectedIds]
-          .map((id) => items.findIndex((i) => i.id === id))
-          .filter((idx) => idx !== -1)
-          .sort((a, b) => b - a);
-        const result = [...items];
-        for (const idx of indices) {
-          const orig = result[idx];
-          const copy = { ...orig, id: crypto.randomUUID(), locked: false, dirty: true, updated_at: now() };
-          result.splice(idx + 1, 0, copy);
-        }
-        return result;
-      });
-    },
-
-    lockSelected: (locked: boolean) => {
-      const { selectedIds } = get();
-      if (selectedIds.size === 0) return;
-      mutate((items) =>
-        items.map((i) =>
-          selectedIds.has(i.id) ? { ...i, locked, updated_at: now(), dirty: true } : i,
-        ),
-      );
-    },
-
-    indentSelected: () => {
-      const { selectedIds } = get();
-      if (selectedIds.size === 0) return;
-      mutate((items) =>
-        items.map((i) =>
-          selectedIds.has(i.id) && !i.locked && i.indent < 6
-            ? { ...i, indent: i.indent + 1, updated_at: now(), dirty: true }
-            : i,
-        ),
-      );
-    },
-
-    dedentSelected: () => {
-      const { selectedIds } = get();
-      if (selectedIds.size === 0) return;
-      mutate((items) =>
-        items.map((i) =>
-          selectedIds.has(i.id) && !i.locked && i.indent > 0
-            ? { ...i, indent: i.indent - 1, updated_at: now(), dirty: true }
-            : i,
-        ),
-      );
-    },
-
-    checkSelected: (checked: boolean) => {
-      const { selectedIds } = get();
-      if (selectedIds.size === 0) return;
-      mutate((items) =>
-        items.map((i) =>
-          selectedIds.has(i.id) ? { ...i, checked, updated_at: now(), dirty: true } : i,
-        ),
-      );
-    },
-
-    checkAll: (checked: boolean) => {
-      mutate((items) =>
-        items.map((i) => ({ ...i, checked, updated_at: now(), dirty: true })),
-      );
-    },
+    moveSelectedItems: bulk.moveSelectedItems,
+    deleteSelected:    bulk.deleteSelected,
+    duplicateSelected: bulk.duplicateSelected,
+    lockSelected:      bulk.lockSelected,
+    indentSelected:    bulk.indentSelected,
+    dedentSelected:    bulk.dedentSelected,
+    checkSelected:     bulk.checkSelected,
+    checkAll:          bulk.checkAll,
 
     duplicateItem: (id: string) => {
       mutate((items) => {
@@ -561,41 +397,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
 
     clearSelection: () => set({ selectedIds: new Set() }),
 
-    moveSelectedUp: () => {
-      const { selectedIds } = get();
-      if (selectedIds.size === 0) return;
-      mutate((items) => {
-        const sorted = [...selectedIds].sort((a, b) => items.findIndex(i => i.id === a) - items.findIndex(i => i.id === b));
-        const firstIdx = items.findIndex(i => i.id === sorted[0]);
-        if (firstIdx === 0) return items;
-        const newItems = [...items];
-        for (const id of sorted) {
-          const idx = newItems.findIndex(i => i.id === id);
-          if (idx > 0 && !selectedIds.has(newItems[idx - 1].id)) {
-            [newItems[idx - 1], newItems[idx]] = [newItems[idx], newItems[idx - 1]];
-          }
-        }
-        return newItems.map(i => ({ ...i, dirty: true }));
-      });
-    },
-
-    moveSelectedDown: () => {
-      const { selectedIds } = get();
-      if (selectedIds.size === 0) return;
-      mutate((items) => {
-        const sorted = [...selectedIds].sort((a, b) => items.findIndex(i => i.id === b) - items.findIndex(i => i.id === a));
-        const lastIdx = items.findIndex(i => i.id === sorted[0]);
-        if (lastIdx === items.length - 1) return items;
-        const newItems = [...items];
-        for (const id of sorted) {
-          const idx = newItems.findIndex(i => i.id === id);
-          if (idx < newItems.length - 1 && !selectedIds.has(newItems[idx + 1].id)) {
-            [newItems[idx], newItems[idx + 1]] = [newItems[idx + 1], newItems[idx]];
-          }
-        }
-        return newItems.map(i => ({ ...i, dirty: true }));
-      });
-    },
+    moveSelectedUp:   bulk.moveSelectedUp,
+    moveSelectedDown: bulk.moveSelectedDown,
 
     undo: () => {
       const { history, historyIdx } = get();
@@ -617,25 +420,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     },
 
     flush: async () => {
-      // 1. Cancel any pending text-debounce timer and enqueue its save.
-      if (textSaveTimer) {
-        clearTimeout(textSaveTimer);
-        textSaveTimer = null;
-        saveAll();
-      }
-      // 2. Wait for the entire chain to drain.
-      await saveChain;
-      // 3. One final save_items just to be sure (covers any state that
-      //    might have changed between the last queued save and now).
-      const items = get().items.filter((i) => i.note_id);
-      if (items.length === 0) return;
-      try {
-        await invoke('save_items', { items });
-        set({ saveStatus: 'saved', lastSavedAt: Date.now() });
-      } catch (e) {
-        log.error('[noteStore] flush save_items failed:', e);
-        set({ saveStatus: 'error' });
-      }
+      await queue.flush();
+      set({ saveStatus: 'saved', lastSavedAt: Date.now() });
     },
   };
 });

@@ -6,6 +6,8 @@ import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { renderTextWithLinks } from './todo/textRender';
 import { StatusBadge, PriorityBadge, AssigneeBadge, DateBadge } from './todo/badges';
 import { InlineStatusPicker, InlineAssigneePicker, InlineDatePicker } from './todo/inlinePickers';
+import { buildContextMenu } from './todo/contextMenu';
+import { makeRowKeyDown } from './todo/rowKeyboard';
 
 interface Props {
   item: Item;
@@ -56,94 +58,23 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
   const isInSel = selectedIds.has(item.id) && selectedIds.size > 1;
   const selSuffix = isInSel ? ` (${selectedIds.size}件)` : '';
 
-  const ctxItems: ContextMenuItem[] = [
-    {
-      label: '上に項目を追加',
-      icon: '↑',
-      shortcut: 'Ctrl+Shift+Enter',
-      action: () => {
-        const newId = addItem(item.id, undefined, 'before');
-        setTimeout(() => {
-          document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] [data-text-input]`)?.focus();
-        }, 30);
-      },
-    },
-    {
-      label: '下に項目を追加',
-      icon: '↓',
-      shortcut: 'Shift+Enter',
-      action: () => {
-        const newId = addItem(item.id);
-        setTimeout(() => {
-          document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] [data-text-input]`)?.focus();
-        }, 30);
-      },
-    },
-    { label: '', separator: true, action: () => {} },
-    {
-      label: `${item.bold ? '太字を解除' : '太字'}${selSuffix}`,
-      icon: 'B',
-      shortcut: 'Ctrl+B',
-      action: () => toggleBold(item.id), // toggleBold already handles selectedIds internally
-    },
-    {
-      label: 'コメント',
-      icon: '💬',
-      shortcut: 'Ctrl+M',
-      action: () => { setMemoText(item.memo ?? ''); setShowMemoEdit(true); },
-    },
-    { label: '', separator: true, action: () => {} },
-    { label: '見出しに変更', icon: 'H', shortcut: 'Ctrl+H', action: () => updateItem(item.id, { item_type: 'heading' }) },
-    { label: '通常に変更', icon: '•', shortcut: 'Ctrl+Shift+H', action: () => updateItem(item.id, { item_type: 'normal' }) },
-    { label: '', separator: true, action: () => {} },
-    {
-      label: `インデント${selSuffix}`,
-      icon: '→',
-      shortcut: 'Tab',
-      action: () => isInSel ? indentSelected() : indent(item.id),
-      disabled: !isInSel && (item.indent >= 6 || item.locked),
-    },
-    {
-      label: `アウトデント${selSuffix}`,
-      icon: '←',
-      shortcut: 'Shift+Tab',
-      action: () => isInSel ? dedentSelected() : dedent(item.id),
-      disabled: !isInSel && (item.indent <= 0 || item.locked),
-    },
-    { label: '', separator: true, action: () => {} },
-    {
-      label: `${item.locked ? 'ロック解除' : 'ロック'}${selSuffix}`,
-      icon: item.locked ? '🔓' : '🔒',
-      shortcut: 'Ctrl+L',
-      action: () => isInSel ? lockSelected(!item.locked) : toggleLock(item.id),
-    },
-    {
-      label: `複製${selSuffix}`,
-      icon: '📋',
-      shortcut: 'Ctrl+D',
-      action: () => isInSel ? duplicateSelected() : duplicateItem(item.id),
-    },
-    {
-      label: item.archived ? `アーカイブから戻す${selSuffix}` : `アーカイブ${selSuffix}`,
-      icon: item.archived ? '↩' : '🗄',
-      shortcut: 'Ctrl+E',
-      action: () => {
-        const next = !item.archived;
-        if (isInSel) {
-          [...selectedIds].forEach((id) => updateItem(id, { archived: next }));
-        } else {
-          updateItem(item.id, { archived: next });
-        }
-      },
-    },
-    {
-      label: `削除${selSuffix}`,
-      icon: '🗑',
-      shortcut: 'Del',
-      action: () => isInSel ? deleteSelected() : deleteItem(item.id),
-      danger: true,
-    },
-  ];
+  const ctxItems: ContextMenuItem[] = buildContextMenu({
+    item, isInSel, selSuffix, selectedIds,
+    addItem, updateItem, toggleBold, toggleLock,
+    indent, dedent, duplicateItem, deleteItem,
+    indentSelected, dedentSelected, lockSelected,
+    duplicateSelected, deleteSelected,
+    openMemoEditor: () => { setMemoText(item.memo ?? ''); setShowMemoEdit(true); },
+  });
+
+  // Edit-mode helpers used by every keyboard handler below.
+  const enterEdit = () => {
+    if (!item.locked) {
+      setIsEditing(true);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  };
+  const exitEdit = () => setIsEditing(false);
 
   // ── Keyboard ────────────────────────────────────────────────────────────────
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -231,139 +162,16 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     }
   };
 
-  // ── Row keyboard handler (when not editing) ──────────────────────────────────
-  const onRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (isEditing) return; // let input handle it
-
-    // Shift+Arrow = multi-select
-    if (e.shiftKey && !e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-      e.preventDefault();
-      const idx = visibleItems.findIndex((i) => i.id === item.id);
-      const target = e.key === 'ArrowUp' ? visibleItems[idx - 1] : visibleItems[idx + 1];
-      if (target) {
-        const newSel = new Set([...selectedIds, target.id]);
-        setSelected(newSel);
-        setTimeout(() => {
-          document.querySelector<HTMLDivElement>(`[data-item-id="${target.id}"].todo-item, [data-item-id="${target.id}"].todo-heading`)?.focus();
-        }, 0);
-      }
-      return;
-    }
-
-    // Ctrl+Shift+Arrow = move selected items up/down
-    if (e.shiftKey && e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-      e.preventDefault();
-      if (e.key === 'ArrowUp') useNoteStore.getState().moveSelectedUp();
-      else useNoteStore.getState().moveSelectedDown();
-      return;
-    }
-
-    // Enter = enter edit
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      enterEdit();
-      return;
-    }
-
-    // ArrowUp / ArrowDown = move selection
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      const idx = visibleItems.findIndex((i) => i.id === item.id);
-      const prev = visibleItems[idx - 1];
-      if (prev) {
-        useNoteStore.getState().setSelected(new Set([prev.id]));
-        setTimeout(() => {
-          document.querySelector<HTMLDivElement>(`[data-item-id="${prev.id}"].todo-item`)?.focus();
-        }, 0);
-      }
-      return;
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      const idx = visibleItems.findIndex((i) => i.id === item.id);
-      const next = visibleItems[idx + 1];
-      if (next) {
-        useNoteStore.getState().setSelected(new Set([next.id]));
-        setTimeout(() => {
-          document.querySelector<HTMLDivElement>(`[data-item-id="${next.id}"].todo-item`)?.focus();
-        }, 0);
-      }
-      return;
-    }
-
-    // Tab / Shift+Tab = indent / dedent
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      if (e.shiftKey) {
-        isInSel ? dedentSelected() : dedent(item.id);
-      } else {
-        isInSel ? indentSelected() : indent(item.id);
-      }
-      return;
-    }
-
-    // Del = delete
-    if (e.key === 'Delete') {
-      e.preventDefault();
-      isInSel ? deleteSelected() : deleteItem(item.id);
-      return;
-    }
-
-    // Ctrl+B = bold
-    if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
-      e.preventDefault();
-      toggleBold(item.id); // toggleBold already applies to selection
-      return;
-    }
-
-    // Ctrl+D = duplicate
-    if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
-      e.preventDefault();
-      isInSel ? duplicateSelected() : duplicateItem(item.id);
-      return;
-    }
-
-    // Ctrl+L = lock / unlock
-    if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
-      e.preventDefault();
-      isInSel ? lockSelected(!item.locked) : toggleLock(item.id);
-      return;
-    }
-
-    // Ctrl+M = open comment
-    if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
-      e.preventDefault();
-      setMemoText(item.memo ?? '');
-      setShowMemoEdit(true);
-      return;
-    }
-
-    // Ctrl+H = make heading; Ctrl+Shift+H = back to normal
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) {
-      e.preventDefault();
-      updateItem(item.id, { item_type: e.shiftKey ? 'normal' : 'heading' });
-      return;
-    }
-
-    // Ctrl+E = archive / unarchive
-    if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
-      e.preventDefault();
-      const next = !item.archived;
-      if (isInSel) [...selectedIds].forEach((id) => updateItem(id, { archived: next }));
-      else updateItem(item.id, { archived: next });
-      return;
-    }
-
-    // Ctrl+Shift+Enter = add new item ABOVE this row (mirrors Shift+Enter for below)
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Enter') {
-      e.preventDefault();
-      const newId = addItem(item.id, undefined, 'before');
-      setTimeout(() => {
-        document.querySelector<HTMLInputElement>(`[data-item-id="${newId}"] [data-text-input]`)?.focus();
-      }, 30);
-      return;
-    }
-  };
+  // ── Row keyboard handler (extracted) ────────────────────────────────────────
+  const onRowKeyDown = makeRowKeyDown({
+    item, isEditing, isInSel, selectedIds, visibleItems,
+    enterEdit, setSelected,
+    addItem, updateItem, toggleBold, toggleLock,
+    indent, dedent, duplicateItem, deleteItem,
+    indentSelected, dedentSelected, lockSelected,
+    duplicateSelected, deleteSelected,
+    setMemoText, setShowMemoEdit,
+  });
 
   // ── Click / Selection ────────────────────────────────────────────────────────
   const onRowClick = (e: MouseEvent) => {
@@ -452,15 +260,6 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     setMemoText(item.memo ?? '');
     setShowMemoEdit(true);
   };
-
-  // ── Edit mode ────────────────────────────────────────────────────────────────
-  const enterEdit = () => {
-    if (!item.locked) {
-      setIsEditing(true);
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
-  };
-  const exitEdit = () => setIsEditing(false);
 
   // ── Assignee ────────────────────────────────────────────────────────────────
   const assigneePerson = item.assignee_person_id

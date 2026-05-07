@@ -1,2 +1,22 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Force LF line endings + UTF-8 for source/text files. Prevents Windows
+# clones from converting CRLF and confusing tools that read raw bytes.
+* text=auto eol=lf
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binary assets — never normalised.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.ico       binary
+*.icns      binary
+*.db        binary
+*.exe       binary
+*.msi       binary
+*.dll       binary
+
+# Mark Japanese-heavy doc files explicitly so editors / reviewers know.
+*.md        text working-tree-encoding=UTF-8 eol=lf
+*.json      text working-tree-encoding=UTF-8 eol=lf
+*.yml       text working-tree-encoding=UTF-8 eol=lf
+*.yaml      text working-tree-encoding=UTF-8 eol=lf

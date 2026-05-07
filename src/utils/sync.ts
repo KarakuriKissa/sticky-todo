@@ -5,6 +5,7 @@
  */
 import { invoke } from '@tauri-apps/api/core';
 import type { Note, TodoItem } from '../types';
+import { log } from './log';
 
 export interface SyncPayload {
   notes: Note[];
@@ -49,7 +50,7 @@ let syncTimer: ReturnType<typeof setInterval> | null = null;
 export function startAutoSync(config: SyncConfig, intervalMs = 30_000): () => void {
   if (syncTimer) clearInterval(syncTimer);
   syncTimer = setInterval(() => {
-    syncNow(config).catch(console.error);
+    syncNow(config).catch((e) => log.error('[sync]', e));
   }, intervalMs);
   return () => {
     if (syncTimer) clearInterval(syncTimer);

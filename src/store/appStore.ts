@@ -390,7 +390,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           return { ...n, sort_order: i, dirty: true };
         })
         .filter(Boolean) as Note[];
-      reordered.forEach((n) => invoke('save_note', { note: n }).catch(console.error));
+      reordered.forEach((n) => invoke('save_note', { note: n }).catch((e) => log.error(e)));
       return { notes: reordered };
     });
   },
@@ -422,7 +422,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           return { ...c, sort_order: i };
         })
         .filter(Boolean) as Category[];
-      reordered.forEach((c) => invoke('save_category', { category: c }).catch(console.error));
+      reordered.forEach((c) => invoke('save_category', { category: c }).catch((e) => log.error(e)));
       return { categories: reordered };
     });
   },
@@ -516,7 +516,7 @@ function debouncedSaveNote(note: Note) {
   saveTimers.set(
     note.id,
     setTimeout(() => {
-      invoke('save_note', { note }).catch(console.error);
+      invoke('save_note', { note }).catch((e) => log.error(e));
       saveTimers.delete(note.id);
     }, 500),
   );

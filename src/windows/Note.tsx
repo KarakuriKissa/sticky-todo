@@ -5,8 +5,10 @@ import { TodoItemRow } from '../components/TodoItem';
 import { useNoteStore } from '../store/noteStore';
 import { useAppStore } from '../store/appStore';
 import type { ItemType, Note, TodoItem } from '../types';
-import { log } from '../utils/log';
 import { ClosingOverlay, SearchOverlay, CheatSheet } from './note/overlays';
+import { useReminders } from './note/useReminders';
+import { useCloseHandler } from './note/useCloseHandler';
+import { NoteToolbar } from './note/Toolbar';
 
 interface Props {
   noteId: string;
@@ -78,55 +80,8 @@ export function NoteWindow({ noteId }: Props) {
     return () => clearInterval(id);
   }, [flush]);
 
-  // Desktop reminders for overdue / soon-due tasks.
-  // Strategy:
-  //   - Once when this note window loads its items.
-  //   - Then every 30 minutes while the window is open.
-  //   - Only the SUMMARY counts are notified — no spam per-task.
-  // To enable / disable, the user can grant or deny the OS permission
-  // (Windows handles permission prompt via tauri-plugin-notification).
-  const lastNotifiedKey = useRef('');
-  useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      if (cancelled || items.length === 0) return;
-      const wd = note?.warn_days ?? settings.deadline_warn_days ?? 3;
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const overdue = items.filter((i) => !i.archived && !i.checked && i.limit_date && new Date(i.limit_date) < today);
-      const dueSoon = items.filter((i) => {
-        if (i.archived || i.checked || !i.limit_date) return false;
-        const d = new Date(i.limit_date);
-        const diff = (d.getTime() - today.getTime()) / 86400000;
-        return diff >= 0 && diff <= wd;
-      });
-      if (overdue.length === 0 && dueSoon.length === 0) return;
-      // Skip the toast if nothing changed since the last one — prevents spam.
-      const sig = `${overdue.length}/${dueSoon.length}`;
-      if (sig === lastNotifiedKey.current) return;
-      lastNotifiedKey.current = sig;
-      try {
-        const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification');
-        let allowed = await isPermissionGranted();
-        if (!allowed) {
-          const p = await requestPermission();
-          allowed = p === 'granted';
-        }
-        if (!allowed) return;
-        const title = note?.title ?? 'リスト';
-        const lines: string[] = [];
-        if (overdue.length > 0) lines.push(`⚠ 期限切れ ${overdue.length}件`);
-        if (dueSoon.length > 0) lines.push(`📅 ${wd}日以内 ${dueSoon.length}件`);
-        sendNotification({ title: `📋 ${title}`, body: lines.join(' / ') });
-      } catch (e) { log.warn('[notify] failed:', e); }
-    };
-    // User-tunable interval: settings.reminder_interval_min.
-    // 0 disables both the initial and the periodic check entirely.
-    const intervalMin = settings.reminder_interval_min ?? 30;
-    if (intervalMin <= 0) return () => { cancelled = true; };
-    const t1 = setTimeout(check, 1500);
-    const t2 = setInterval(check, intervalMin * 60 * 1000);
-    return () => { cancelled = true; clearTimeout(t1); clearInterval(t2); };
-  }, [items.length, note?.warn_days, settings.deadline_warn_days, settings.reminder_interval_min, note?.title]);
+  // Desktop reminders for overdue / soon-due tasks (extracted hook).
+  useReminders({ items, note, settings });
 
   // Sync title/color from appStore when another window changes them
   useEffect(() => {
@@ -138,67 +93,11 @@ export function NoteWindow({ noteId }: Props) {
     }
   }, [notes]);
 
-  // Register the close handler ONCE (empty deps) so there is never a gap where no
-  // handler is listening.  noteRef gives it access to the current note at any time.
-  useEffect(() => {
-    const unlisten = appWin.onCloseRequested(async (event) => {
-      if (closingRef.current) return;
-      event.preventDefault();          // never let the window close on its own
-      closingRef.current = true;
-      setClosingOverlay('saving');     // show the "保存中…" overlay
-
-      // ── 1. Flush items to SQLite, with up to 3 retries ────────────────────
-      let saved = false;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await flush();
-          saved = true;
-          break;
-        } catch (e) {
-          log.error(`flush attempt ${attempt + 1} failed:`, e);
-          await new Promise((r) => setTimeout(r, 250));
-        }
-      }
-      if (!saved) {
-        // All retries failed — let the user decide whether to force-close.
-        setClosingOverlay('failed');
-        const ok = window.confirm(
-          '保存に失敗しました。\nこのまま閉じると最後の変更が失われる可能性があります。\nそれでも閉じますか？',
-        );
-        if (!ok) {
-          // User chose to stay → reset state so the window remains usable.
-          closingRef.current = false;
-          setClosingOverlay(null);
-          return;
-        }
-      }
-
-      // ── 2. Persist window geometry (best-effort, never blocks close) ──────
-      const currentNote = noteRef.current;
-      if (currentNote) {
-        try {
-          const pos = await appWin.outerPosition();
-          const size = await appWin.outerSize();
-          const scale = await appWin.scaleFactor();
-          const updated = {
-            ...currentNote,
-            window_x: pos.x / scale,
-            window_y: pos.y / scale,
-            window_width: size.width / scale,
-            window_height: size.height / scale,
-          };
-          updateNote(updated);
-          await invoke('save_note', { note: updated });
-        } catch (posErr) {
-          log.warn('Could not save window geometry:', posErr);
-        }
-      }
-
-      try { await trackWindowClose(noteId); } catch { /* ignore */ }
-      appWin.destroy();
-    });
-    return () => { unlisten.then((f) => f()); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Close handler — flushes items + persists geometry, registered once.
+  useCloseHandler({
+    appWin, noteRef, closingRef, noteId,
+    flush, updateNote, trackWindowClose, setClosingOverlay,
+  });
 
   // Listen for note-updated events from other windows
   useEffect(() => {
@@ -416,15 +315,6 @@ export function NoteWindow({ noteId }: Props) {
     useNoteStore.getState().updateItem(id, { item_type: type });
   };
 
-  const selCount = selectedIds.size;
-
-  const PRIORITY_OPTIONS = [
-    { value: null, label: '（なし）' },
-    { value: 'high', label: '高' },
-    { value: 'medium', label: '中' },
-    { value: 'low', label: '低' },
-  ] as const;
-
   return (
     <div
       className="note-window"
@@ -527,97 +417,26 @@ export function NoteWindow({ noteId }: Props) {
         </div>
       </div>
 
-      {/* ── Toolbar ── */}
-      <div className="note-type-bar">
-        <button className="type-btn" onClick={() => addItem()} title="項目追加">＋</button>
-        <button className="type-btn" onClick={() => addTyped('heading')} title="見出し">H</button>
-        <button className="type-btn" onClick={() => addTyped('separator')} title="区切り線">—</button>
-        <button
-          className="type-btn"
-          onClick={() => { if (selCount > 0) [...selectedIds].forEach((id) => useNoteStore.getState().indent(id)); }}
-          title="インデント (Tab)"
-        >→</button>
-        <button
-          className="type-btn"
-          onClick={() => { if (selCount > 0) [...selectedIds].forEach((id) => useNoteStore.getState().dedent(id)); }}
-          title="アウトデント (Shift+Tab)"
-        >←</button>
-
-        {/* Group selector — choose which assignee group is shown in task badges */}
-        {settings.feature_assignee && assigneeGroups.length > 0 && (
-          <select
-            className="group-selector"
-            value={activeGroupId}
-            onChange={(e) => setActiveGroupId(e.target.value)}
-            title="担当者グループ"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {assigneeGroups.map((g) => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-        )}
-
-        {/* Priority for selection */}
-        {settings.feature_priority && selCount > 0 && (
-          <div style={{ position: 'relative' }}>
-            <button className="type-btn active-feature" onClick={(e) => { e.stopPropagation(); setShowPriorityPicker((o) => !o); }}>★</button>
-            {showPriorityPicker && (
-              <div className="status-dropdown" style={{ top: '100%', left: 0, bottom: 'auto' }} onClick={(e) => e.stopPropagation()}>
-                {PRIORITY_OPTIONS.map((p) => (
-                  <div key={String(p.value)} className="status-option"
-                    onClick={() => { applyToSelected({ priority: p.value ?? null }); setShowPriorityPicker(false); }}>
-                    {p.label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="type-bar-spacer" />
-
-        {/* Priority mode toggle */}
-        {settings.feature_priority && (
-          <button
-            className="type-btn"
-            onClick={() => setPriorityMode(m => m === 'hml' ? 'abc' : 'hml')}
-            title={priorityMode === 'hml' ? 'ABC表記に切替' : '高中低表記に切替'}
-            style={{ fontSize: 10 }}
-          >
-            {priorityMode === 'hml' ? '高中低' : 'ABC'}
-          </button>
-        )}
-
-        {selCount > 0 && <span className="sel-count">{selCount}件</span>}
-
-        {/* Check/uncheck selected */}
-        <button
-          className="type-btn"
-          onClick={() => useNoteStore.getState().checkSelected(true)}
-          title="選択をチェック"
-        >☑</button>
-        <button
-          className="type-btn"
-          onClick={() => useNoteStore.getState().checkSelected(false)}
-          title="選択のチェックを外す"
-        >☐</button>
-
-        {/* Bulk archive checked */}
-        <button
-          className="type-btn"
-          onClick={archiveCheckedAll}
-          disabled={checkedNonArchived.length === 0}
-          title={`チェック済を一括アーカイブ (${checkedNonArchived.length}件)`}
-        >📥</button>
-
-        {/* Toggle archived view */}
-        <button
-          className={`type-btn${showArchived ? ' active-feature' : ''}`}
-          onClick={() => setShowArchived((v) => !v)}
-          title={showArchived ? `通常表示に戻る` : `アーカイブを表示 (${archivedCount}件)`}
-        >🗄️{archivedCount > 0 && <sup style={{ fontSize: 8 }}>{archivedCount}</sup>}</button>
-      </div>
+      {/* ── Toolbar (extracted) ── */}
+      <NoteToolbar
+        settings={settings}
+        assigneeGroups={assigneeGroups}
+        activeGroupId={activeGroupId}
+        setActiveGroupId={setActiveGroupId}
+        selectedIds={selectedIds}
+        showPriorityPicker={showPriorityPicker}
+        setShowPriorityPicker={setShowPriorityPicker}
+        applyToSelected={applyToSelected}
+        priorityMode={priorityMode}
+        setPriorityMode={setPriorityMode}
+        archiveCheckedAll={archiveCheckedAll}
+        checkedNonArchived={checkedNonArchived}
+        showArchived={showArchived}
+        setShowArchived={setShowArchived}
+        archivedCount={archivedCount}
+        addItem={addItem}
+        addTyped={addTyped}
+      />
 
       {/* Hidden search bar — kept in DOM to preserve any existing CSS / focus
           targeting code; just visually hidden. The overlay below is the new UI. */}
