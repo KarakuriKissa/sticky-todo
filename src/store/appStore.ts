@@ -103,10 +103,11 @@ function sorted(notes: Note[], mode: SortMode, categories: Category[] = []): Not
 }
 
 // ── Tutorial seed ─────────────────────────────────────────────────────────────
-// Runs ONCE when the app starts on a completely empty DB. Creates two demo
-// lists that show off every major feature (status, deadline, indent, archive,
-// memo, URL, headings…). Users who delete the DB later get the tutorial back.
+// Runs ONCE when the app starts on a completely empty DB.
+let _seedInProgress = false; // guard against double-invoke (React StrictMode etc.)
 async function seedTutorial(categories: Category[], statuses: Status[]) {
+  if (_seedInProgress) return;
+  _seedInProgress = true;
   const personalCat = categories.find((c) => c.name === '個人');
   const workCat = categories.find((c) => c.name === '仕事');
   const statusInProgress = statuses.find((s) => s.name === '作業中');
@@ -247,6 +248,24 @@ async function seedTutorial(categories: Category[], statuses: Status[]) {
     { text: '洗剤' },
   ]);
   await invoke('save_items', { items: shopItems });
+
+  // ── Assignee groups + persons ───────────────────────────────────────────
+  const grp1Id = crypto.randomUUID();
+  const grp2Id = crypto.randomUUID();
+  await invoke('save_assignee_group', { group: { id: grp1Id, name: '開発チーム', sort_order: 0 } });
+  await invoke('save_assignee_group', { group: { id: grp2Id, name: '営業チーム', sort_order: 1 } });
+  const devMembers = [
+    { id: crypto.randomUUID(), group_id: grp1Id, name: '田中', color: '#6366f1', sort_order: 0 },
+    { id: crypto.randomUUID(), group_id: grp1Id, name: '佐藤', color: '#22c55e', sort_order: 1 },
+    { id: crypto.randomUUID(), group_id: grp1Id, name: '鈴木', color: '#f59e0b', sort_order: 2 },
+  ];
+  const salesMembers = [
+    { id: crypto.randomUUID(), group_id: grp2Id, name: '山田', color: '#ec4899', sort_order: 0 },
+    { id: crypto.randomUUID(), group_id: grp2Id, name: '高橋', color: '#14b8a6', sort_order: 1 },
+  ];
+  for (const p of [...devMembers, ...salesMembers]) {
+    await invoke('save_assignee_person', { person: p });
+  }
 }
 
 async function persistOpenWindows(ids: Set<string>) {
@@ -292,9 +311,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
       try {
         await seedTutorial(categories, statuses);
         localStorage.setItem('sticky-todo:tutorial-seeded', 'done');
-        // Refresh the in-memory snapshot so the UI shows the seeded data.
-        const reloadedNotes = await invoke<Note[]>('get_all_notes');
-        set({ notes: reloadedNotes });
+        const [reloadedNotes, reloadedGroups, reloadedPersons] = await Promise.all([
+          invoke<Note[]>('get_all_notes'),
+          invoke<AssigneeGroup[]>('get_assignee_groups'),
+          invoke<AssigneePerson[]>('get_assignee_persons'),
+        ]);
+        set({ notes: reloadedNotes, assigneeGroups: reloadedGroups, assigneePersons: reloadedPersons });
       } catch (e) {
         log.error('[appStore] tutorial seed failed:', e);
       }

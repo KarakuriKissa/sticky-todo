@@ -275,6 +275,11 @@ export function SettingsModal({
           {tab === 'assignees' && (
             <section>
               <h3>担当者グループとメンバー</h3>
+              <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 12 }}>
+                タスクに「誰が担当するか」を設定できる機能です。<br />
+                まず<b>グループ</b>（チームや部署など）を作り、その中に<b>メンバー</b>を追加してください。<br />
+                タスクウィンドウでタスクを右クリック →「担当者」から割り当てられます。
+              </p>
               <div className="assignee-split">
                 {/* LEFT: group list */}
                 <div className="assignee-col">

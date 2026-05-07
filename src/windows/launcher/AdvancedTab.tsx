@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useState } from 'react';
 import type { AppSettings } from '../../types';
 
 interface Props {
@@ -10,8 +9,6 @@ interface Props {
 // Advanced settings — deadline warning, desktop notification interval,
 // language placeholder, sync placeholder, DB export/import/delete actions.
 export function AdvancedTab({ draft, setDraft }: Props) {
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [resetInput, setResetInput] = useState('');
   const onExport = async () => {
     const { save } = await import('@tauri-apps/plugin-dialog');
     const ts = new Date().toISOString().slice(0, 10);
@@ -121,54 +118,17 @@ export function AdvancedTab({ draft, setDraft }: Props) {
       <button
         className="btn-secondary"
         style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }}
-        onClick={() => { setResetInput(''); setShowResetConfirm(true); }}
+        onClick={async () => {
+          const { confirm } = await import('@tauri-apps/plugin-dialog');
+          const ok = await confirm(
+            '作成したリスト・タスクがすべて削除されます。\nこの操作は取り消せません。本当に初期化しますか？',
+            { title: 'アプリの初期化', kind: 'warning' },
+          );
+          if (ok) onResetTutorial();
+        }}
       >
         🗑️ アプリを初期化する
       </button>
-
-      {/* ── 初期化の二段階確認モーダル ── */}
-      {showResetConfirm && (
-        <div className="modal-overlay" onClick={() => setShowResetConfirm(false)}>
-          <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
-            <h3 style={{ color: '#ef4444', marginTop: 0 }}>⚠️ 本当に初期化しますか？</h3>
-            <p style={{ fontSize: 13, lineHeight: 1.7 }}>
-              <strong>作成したリスト・タスクがすべて削除されます。</strong><br />
-              この操作は取り消せません。
-            </p>
-            <p style={{ fontSize: 13, lineHeight: 1.7 }}>
-              続けるには下の入力欄に <strong>「初期化」</strong> と入力してください。
-            </p>
-            <input
-              autoFocus
-              value={resetInput}
-              onChange={(e) => setResetInput(e.target.value)}
-              placeholder="初期化"
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '6px 10px',
-                background: 'var(--bg)', border: '1px solid var(--border)',
-                borderRadius: 4, color: 'var(--text)', fontSize: 14, marginBottom: 14,
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && resetInput === '初期化') onResetTutorial();
-                if (e.key === 'Escape') setShowResetConfirm(false);
-              }}
-            />
-            <div className="modal-actions">
-              <button
-                className="btn-danger"
-                disabled={resetInput !== '初期化'}
-                onClick={onResetTutorial}
-                style={{ opacity: resetInput !== '初期化' ? 0.4 : 1 }}
-              >
-                初期化する
-              </button>
-              <button className="btn-secondary" onClick={() => setShowResetConfirm(false)}>
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
