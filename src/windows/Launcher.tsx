@@ -39,7 +39,7 @@ export function Launcher() {
   useEffect(() => {
     const seenKey = 'sticky-todo:last-seen-build';
     const lastSeen = Number(localStorage.getItem(seenKey) ?? '0');
-    fetch('https://api.github.com/repos/TomTomYukkie/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success')
+    fetch('https://api.github.com/repos/KarakuriKissa/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success')
       .then((r) => r.json())
       .then((j) => {
         const run = j.workflow_runs?.[0];

@@ -43,6 +43,6 @@ GitHub Releases ページが既定ブラウザで開きます。
 5. ⏳ `tauri-plugin-updater` を導入、署名検証付きで自動 DL ＋ 再起動
 
 ## 利用者として今できる安全策
-- ダウンロード元は GitHub Releases ページ（`https://github.com/TomTomYukkie/sticky-todo/releases`）から **のみ** にしてください。
+- ダウンロード元は GitHub Releases ページ（`https://github.com/KarakuriKissa/sticky-todo/releases`）から **のみ** にしてください。
 - 怪しいサイトで配布されている同名ファイルは **絶対に実行しないで** ください。
 - ビルドは GitHub Actions のログ（公開）で全コミットから検証できます。

@@ -71,7 +71,7 @@ CI はローカルとは別に:
 - **`bun test tests/` の結果も確認**
 
 ローカルで再現できない場合は CI ログを確認:
-1. https://github.com/TomTomYukkie/sticky-todo/actions を開く
+1. https://github.com/KarakuriKissa/sticky-todo/actions を開く
 2. 失敗した run をクリック
 3. 各ステップの展開ログ + 「`Download log archive`」で zip を取得
 

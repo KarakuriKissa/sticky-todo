@@ -185,7 +185,7 @@ async function seedTutorial(categories: Category[], statuses: Status[]) {
     { text: '',                                                          item_type: 'separator' },
 
     { text: '🌐 URL もそのまま使える',                                  item_type: 'heading' },
-    { text: 'https://github.com/TomTomYukkie/sticky-todo を貼ってクリック' },
+    { text: 'https://github.com/KarakuriKissa/sticky-todo を貼ってクリック' },
     { text: '',                                                          item_type: 'separator' },
 
     { text: '⌨ ショートカット (? キーで一覧表示)',                       item_type: 'heading' },

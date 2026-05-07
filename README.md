@@ -90,7 +90,7 @@
 **必要なもの:** [Rust](https://rustup.rs/) / [Bun](https://bun.sh/) / Windows 10 or 11
 
 ```bash
-git clone https://github.com/TomTomYukkie/sticky-todo.git
+git clone https://github.com/KarakuriKissa/sticky-todo.git
 cd sticky-todo
 bun install
 bun run tauri dev    # 開発モード（ホットリロード）

@@ -22,7 +22,7 @@ export function HelpSection() {
       const seenKey = 'sticky-todo:last-seen-build';
       const lastSeen = Number(localStorage.getItem(seenKey) ?? '0');
       const res = await fetch(
-        'https://api.github.com/repos/TomTomYukkie/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success',
+        'https://api.github.com/repos/KarakuriKissa/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success',
       );
       const json = await res.json();
       const run = json.workflow_runs?.[0];
@@ -135,7 +135,7 @@ export function HelpSection() {
         StickyTodo は<b>完全無料</b>で使えるデスクトップ向けタスク管理アプリです。<br />
         <a href="#" onClick={async (e) => {
           e.preventDefault();
-          (await import('@tauri-apps/plugin-shell')).open('https://github.com/TomTomYukkie/sticky-todo');
+          (await import('@tauri-apps/plugin-shell')).open('https://github.com/KarakuriKissa/sticky-todo');
         }} style={{ color: '#a5b4fc' }}>GitHub でソースコードを見る →</a>
       </p>
     </section>
