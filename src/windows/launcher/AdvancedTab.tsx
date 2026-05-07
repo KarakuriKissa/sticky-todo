@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { useState } from 'react';
 import type { AppSettings } from '../../types';
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
 // Advanced settings — deadline warning, desktop notification interval,
 // language placeholder, sync placeholder, DB export/import/delete actions.
 export function AdvancedTab({ draft, setDraft }: Props) {
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetInput, setResetInput] = useState('');
   const onExport = async () => {
     const { save } = await import('@tauri-apps/plugin-dialog');
     const ts = new Date().toISOString().slice(0, 10);
@@ -56,21 +59,13 @@ export function AdvancedTab({ draft, setDraft }: Props) {
   };
 
   const onResetTutorial = async () => {
-    const { confirm } = await import('@tauri-apps/plugin-dialog');
-    const ok = await confirm(
-      '現在のすべてのデータを削除してチュートリアルの初期データに戻します。\nこの操作は取り消せません。続行しますか？',
-      { title: 'チュートリアルに戻す', kind: 'warning' },
-    );
-    if (!ok) return;
     try {
       await invoke('delete_database');
-      // Clear the tutorial-seeded flag so appStore re-runs seedTutorial on next load.
       localStorage.removeItem('sticky-todo:tutorial-seeded');
       localStorage.removeItem('sticky-todo:last-seen-build');
-      // Reload the app window to reinitialize everything from scratch.
       window.location.reload();
     } catch (e) {
-      alert('リセット失敗: ' + e);
+      alert('初期化失敗: ' + e);
     }
   };
 
@@ -137,18 +132,63 @@ export function AdvancedTab({ draft, setDraft }: Props) {
         <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }} onClick={onDelete}>🗑️ データベースを削除</button>
       </div>
 
-      <h3 style={{ marginTop: 20 }}>チュートリアルに戻す</h3>
-      <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
-        現在のデータをすべて削除して、初回起動時のチュートリアルデータに戻します。<br />
-        使い方を確認したいときや、データをきれいにリセットしたいときに使ってください。
-      </p>
+      <h3 style={{ marginTop: 20 }}>⚠️ アプリの初期化</h3>
+      <div style={{ fontSize: 12, lineHeight: 1.7, padding: '10px 12px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 6, marginBottom: 10 }}>
+        <strong style={{ color: '#ef4444' }}>作成したリスト・タスクがすべて消えます。</strong><br />
+        初期化すると今まで入力したメモやタスクは復元できません。<br />
+        初期化後はサンプルデータが表示されます（アプリを初めて起動したときと同じ状態）。
+      </div>
       <button
         className="btn-secondary"
-        style={{ fontSize: 12, padding: '5px 12px', color: '#f59e0b', borderColor: '#f59e0b' }}
-        onClick={onResetTutorial}
+        style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }}
+        onClick={() => { setResetInput(''); setShowResetConfirm(true); }}
       >
-        🔄 チュートリアルに戻す
+        🗑️ アプリを初期化する
       </button>
+
+      {/* ── 初期化の二段階確認モーダル ── */}
+      {showResetConfirm && (
+        <div className="modal-overlay" onClick={() => setShowResetConfirm(false)}>
+          <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <h3 style={{ color: '#ef4444', marginTop: 0 }}>⚠️ 本当に初期化しますか？</h3>
+            <p style={{ fontSize: 13, lineHeight: 1.7 }}>
+              <strong>作成したリスト・タスクがすべて削除されます。</strong><br />
+              この操作は取り消せません。
+            </p>
+            <p style={{ fontSize: 13, lineHeight: 1.7 }}>
+              続けるには下の入力欄に <strong>「初期化」</strong> と入力してください。
+            </p>
+            <input
+              autoFocus
+              value={resetInput}
+              onChange={(e) => setResetInput(e.target.value)}
+              placeholder="初期化"
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '6px 10px',
+                background: 'var(--bg)', border: '1px solid var(--border)',
+                borderRadius: 4, color: 'var(--text)', fontSize: 14, marginBottom: 14,
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && resetInput === '初期化') onResetTutorial();
+                if (e.key === 'Escape') setShowResetConfirm(false);
+              }}
+            />
+            <div className="modal-actions">
+              <button
+                className="btn-danger"
+                disabled={resetInput !== '初期化'}
+                onClick={onResetTutorial}
+                style={{ opacity: resetInput !== '初期化' ? 0.4 : 1 }}
+              >
+                初期化する
+              </button>
+              <button className="btn-secondary" onClick={() => setShowResetConfirm(false)}>
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
