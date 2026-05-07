@@ -1,4 +1,5 @@
 import React from 'react';
+import { log } from '../utils/log';
 
 interface State { error: Error | null; info: string | null; }
 
@@ -14,7 +15,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     const stack = info.componentStack ?? '';
-    console.error('[ErrorBoundary] caught:', error, stack);
+    log.error('[ErrorBoundary] caught:', error, stack);
     try {
       localStorage.setItem(
         'sticky-todo:last-crash',

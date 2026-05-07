@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { emitTo } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/appStore';
 import type { Note } from '../types';
+import { log } from '../utils/log';
 
 
 interface Props {
@@ -251,7 +252,7 @@ export function NoteList({ onNew }: Props) {
             <button
               className="btn-icon note-action-btn"
               title="複製"
-              onClick={(e) => { e.stopPropagation(); duplicateNote(note.id).catch(console.error); }}
+              onClick={(e) => { e.stopPropagation(); duplicateNote(note.id).catch(log.error); }}
             >
               📋
             </button>

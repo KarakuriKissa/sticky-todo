@@ -5,6 +5,8 @@ import { TodoItemRow } from '../components/TodoItem';
 import { useNoteStore } from '../store/noteStore';
 import { useAppStore } from '../store/appStore';
 import type { ItemType, Note, TodoItem } from '../types';
+import { log } from '../utils/log';
+import { ClosingOverlay, SearchOverlay, CheatSheet } from './note/overlays';
 
 interface Props {
   noteId: string;
@@ -115,7 +117,7 @@ export function NoteWindow({ noteId }: Props) {
         if (overdue.length > 0) lines.push(`⚠ 期限切れ ${overdue.length}件`);
         if (dueSoon.length > 0) lines.push(`📅 ${wd}日以内 ${dueSoon.length}件`);
         sendNotification({ title: `📋 ${title}`, body: lines.join(' / ') });
-      } catch (e) { console.warn('[notify] failed:', e); }
+      } catch (e) { log.warn('[notify] failed:', e); }
     };
     // User-tunable interval: settings.reminder_interval_min.
     // 0 disables both the initial and the periodic check entirely.
@@ -153,7 +155,7 @@ export function NoteWindow({ noteId }: Props) {
           saved = true;
           break;
         } catch (e) {
-          console.error(`flush attempt ${attempt + 1} failed:`, e);
+          log.error(`flush attempt ${attempt + 1} failed:`, e);
           await new Promise((r) => setTimeout(r, 250));
         }
       }
@@ -188,7 +190,7 @@ export function NoteWindow({ noteId }: Props) {
           updateNote(updated);
           await invoke('save_note', { note: updated });
         } catch (posErr) {
-          console.warn('Could not save window geometry:', posErr);
+          log.warn('Could not save window geometry:', posErr);
         }
       }
 
@@ -439,15 +441,7 @@ export function NoteWindow({ noteId }: Props) {
       })()}
 
       {/* ── Closing overlay — blocks close until save finishes ── */}
-      {closingOverlay && (
-        <div className="closing-overlay">
-          <div className="closing-overlay-box">
-            {closingOverlay === 'saving'
-              ? <><div className="spinner" />保存中…<br />しばらくお待ちください</>
-              : <>⚠ 保存に失敗しました</>}
-          </div>
-        </div>
-      )}
+      <ClosingOverlay state={closingOverlay} />
 
       {/* ── Title bar ── */}
       {/* Titlebar layout (left → right):
@@ -676,25 +670,15 @@ export function NoteWindow({ noteId }: Props) {
 
       {/* ── Search overlay (Ctrl+F) — browser-style find ─────────────────── */}
       {showSearch && (
-        <div className="search-overlay-bar" onClick={(e) => e.stopPropagation()}>
-          <input
-            className="search-overlay-input"
-            placeholder="🔍 このリスト内を検索"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); gotoMatch(e.shiftKey ? -1 : 1); }
-              if (e.key === 'Escape') { setShowSearch(false); setSearchQuery(''); }
-            }}
-            autoFocus
-          />
-          <span className="search-overlay-count">
-            {findMode ? (matchedIds.length > 0 ? `${searchMatchIdx + 1} / ${matchedIds.length}` : '0 件') : ''}
-          </span>
-          <button className="search-overlay-nav" onClick={() => gotoMatch(-1)} title="前の一致 (Shift+Enter)" disabled={matchedIds.length === 0}>↑</button>
-          <button className="search-overlay-nav" onClick={() => gotoMatch(1)} title="次の一致 (Enter)" disabled={matchedIds.length === 0}>↓</button>
-          <button className="search-overlay-close" onClick={() => { setShowSearch(false); setSearchQuery(''); }} title="閉じる (Esc)">✕</button>
-        </div>
+        <SearchOverlay
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          onClose={() => { setShowSearch(false); setSearchQuery(''); }}
+          onNav={gotoMatch}
+          matchCount={matchedIds.length}
+          matchIdx={searchMatchIdx}
+          findMode={findMode}
+        />
       )}
 
       {/* ── Item list ── */}
@@ -720,35 +704,7 @@ export function NoteWindow({ noteId }: Props) {
       </div>
 
       {/* ── Cheat sheet (? key) ── */}
-      {showCheatSheet && (
-        <div className="cheat-sheet-backdrop" onClick={() => setShowCheatSheet(false)}>
-          <div className="cheat-sheet" onClick={(e) => e.stopPropagation()}>
-            <h4>キーボードショートカット</h4>
-            {[
-              ['元に戻す', 'Ctrl+Z'],
-              ['やり直し', 'Ctrl+Y'],
-              ['全選択', 'Ctrl+A'],
-              ['検索', 'Ctrl+F'],
-              ['インデント', 'Tab'],
-              ['アウトデント', 'Shift+Tab'],
-              ['太字', 'Ctrl+B'],
-              ['複製', 'Ctrl+D'],
-              ['ロック', 'Ctrl+L'],
-              ['コメント', 'Ctrl+M'],
-              ['複数選択', 'Shift+↑/↓'],
-              ['行を移動', 'Ctrl+Shift+↑/↓'],
-              ['削除', 'Delete'],
-              ['キャンセル / 閉じる', 'Esc'],
-              ['この一覧を表示', '?'],
-            ].map(([label, key]) => (
-              <div key={key} className="cheat-sheet-row">
-                <span>{label}</span>
-                <span className="cheat-sheet-key">{key}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {showCheatSheet && <CheatSheet onClose={() => setShowCheatSheet(false)} />}
     </div>
   );
 }

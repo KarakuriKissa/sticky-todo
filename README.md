@@ -29,13 +29,33 @@
 ## 🚀 インストール
 
 ### Windows
-1. [Releases](https://github.com/TomTomYukkie/sticky-todo/releases) から最新版の `StickyTodo-x.x.x.exe`（インストーラー）または `sticky-todo.exe`（単体版）をダウンロード
+1. [Releases](https://github.com/TomTomYukkie/sticky-todo/releases) から最新版の **`StickyTodo_x.y.z_x64-setup.exe`**（NSIS インストーラー）、**`StickyTodo_x.y.z_x64_en-US.msi`**（MSI）、または **`sticky-todo.exe`**（単体版）をダウンロード
 2. ダブルクリックで起動
 
-⚠ **「不明な発行元」警告について**
-本アプリは現在 β版で **コード署名証明書を取得していない**ため、初回実行時に Windows SmartScreen 警告が表示されます。
-- インストーラー版：「詳細情報」→「実行」
-- 単体EXE版：右クリック→「プロパティ」→「許可する」にチェック→OK
+### ⚠ 「Windows によって PC が保護されました」警告について
+本アプリは現在 β版で **コード署名証明書を取得していません**。そのため初回実行時に Windows SmartScreen 警告が出ます。
+
+| インストール方法 | SmartScreen 解除手順 |
+|---|---|
+| **NSIS インストーラー (.exe)** | 警告画面の「**詳細情報**」をクリック → 「**実行**」を押す |
+| **MSI インストーラー (.msi)** | 同上 |
+| **単体 EXE** | エクスプローラーで右クリック → 「プロパティ」 → 一番下「**ブロックの解除**」にチェック → OK |
+
+> 安全性の根拠：本リポジトリは GitHub Actions の公開ログでビルド過程をすべて確認できます。
+> 配布物は GitHub の Actions Artifact / Releases から直接取得してください（**第三者サイトでの再配布は使わないこと**）。
+
+### 自動アップデート（現状）
+- 起動時に GitHub Actions API へ問い合わせ、新しい成功ビルドがあれば**画面右下にバナー通知**
+- バナーから **GitHub Releases ページを開いて手動でダウンロード→上書きインストール** する半自動方式
+- 完全な「裏で DL → 自動置換」はコード署名証明書を取得後に実装予定（[UPDATE_AND_SIGNING.md](./UPDATE_AND_SIGNING.md) 参照）
+
+### データ保存先
+| OS | パス |
+|---|---|
+| Windows | `%APPDATA%\com.stickytodo.app\sticky-todo.db` (SQLite) |
+| 全環境（バックアップ） | アプリ内 WebView の localStorage |
+
+詳細は [PRIVACY.md](./PRIVACY.md) と [STORAGE 関連の説明](./PRIVACY.md#2-ローカル保存される情報) を参照。
 
 ---
 

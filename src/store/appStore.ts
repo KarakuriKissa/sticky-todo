@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import type { AppSettings, AssigneeGroup, AssigneePerson, Category, Note, SortMode, Status } from '../types';
+import { log } from '../utils/log';
 
 interface AppStore {
   notes: Note[];
@@ -295,7 +296,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const reloadedNotes = await invoke<Note[]>('get_all_notes');
         set({ notes: reloadedNotes });
       } catch (e) {
-        console.error('[appStore] tutorial seed failed:', e);
+        log.error('[appStore] tutorial seed failed:', e);
       }
     }
   },

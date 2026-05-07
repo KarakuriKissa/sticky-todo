@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { create } from 'zustand';
 import type { ItemType, Note, TodoItem } from '../types';
+import { log } from '../utils/log';
 
 interface Snapshot {
   items: TodoItem[];
@@ -131,7 +132,7 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     try {
       localStorage.setItem(lsKey(noteId), JSON.stringify(items));
     } catch (e) {
-      console.warn('[save] localStorage backup failed:', e);
+      log.warn('[save] localStorage backup failed:', e);
     }
   };
 
@@ -140,30 +141,30 @@ export const useNoteStore = create<NoteStore>((set, get) => {
   const doSave = async () => {
     const items = get().items.filter((i) => i.note_id !== '' && i.note_id != null);
     if (items.length === 0) {
-      console.log('[save] skip — no items with valid note_id');
+      log.debug('[save] skip — no items with valid note_id');
       return;
     }
     // 1. Backup to localStorage immediately (synchronous, never fails for normal data).
     backupToLocalStorage(items);
 
     // 2. Try SQLite.
-    console.log('[save] start, count=', items.length, 'first note_id=', items[0].note_id);
+    log.debug('[save] start, count=', items.length, 'first note_id=', items[0].note_id);
     set({ saveStatus: 'saving' });
     try {
       await invoke('save_items', { items });
-      console.log('[save] OK count=', items.length);
+      log.debug('[save] OK count=', items.length);
       set({ saveStatus: 'saved', lastSavedAt: Date.now() });
       return;
     } catch (e) {
-      console.error('[save] FAILED 1st attempt:', e);
+      log.error('[save] FAILED 1st attempt:', e);
     }
     await new Promise((r) => setTimeout(r, 400));
     try {
       await invoke('save_items', { items });
-      console.log('[save] OK on retry, count=', items.length);
+      log.debug('[save] OK on retry, count=', items.length);
       set({ saveStatus: 'saved', lastSavedAt: Date.now() });
     } catch (e) {
-      console.error('[save] FAILED on retry too — data is in localStorage backup:', e);
+      log.error('[save] FAILED on retry too — data is in localStorage backup:', e);
       set({ saveStatus: 'error' });
     }
   };
@@ -212,9 +213,9 @@ export const useNoteStore = create<NoteStore>((set, get) => {
       let items: TodoItem[] = [];
       try {
         items = await invoke<TodoItem[]>('get_note_items', { noteId });
-        console.log('[load] DB returned', items.length, 'items for note', noteId);
+        log.debug('[load] DB returned', items.length, 'items for note', noteId);
       } catch (e) {
-        console.error('[load] DB read failed:', e);
+        log.error('[load] DB read failed:', e);
       }
 
       // Fallback to localStorage if DB came back empty.
@@ -224,16 +225,16 @@ export const useNoteStore = create<NoteStore>((set, get) => {
           if (cached) {
             const parsed = JSON.parse(cached) as TodoItem[];
             if (Array.isArray(parsed) && parsed.length > 0) {
-              console.log('[load] DB empty — restoring', parsed.length, 'items from localStorage');
+              log.debug('[load] DB empty — restoring', parsed.length, 'items from localStorage');
               items = parsed;
               // Re-save to SQLite so the DB catches up.
               try { await invoke('save_items', { items }); } catch (e) {
-                console.error('[load] re-save to DB failed:', e);
+                log.error('[load] re-save to DB failed:', e);
               }
             }
           }
         } catch (e) {
-          console.warn('[load] localStorage read failed:', e);
+          log.warn('[load] localStorage read failed:', e);
         }
       }
 
@@ -245,7 +246,7 @@ export const useNoteStore = create<NoteStore>((set, get) => {
         // Merge: keep user's edits, add DB items the user doesn't yet have.
         const userIds = new Set(cur.map((i) => i.id));
         const merged = [...cur, ...sorted.filter((i) => !userIds.has(i.id))];
-        console.log('[load] user already has', cur.length, 'items, merging →', merged.length);
+        log.debug('[load] user already has', cur.length, 'items, merging →', merged.length);
         set({ items: merged, history: [{ items: merged }], historyIdx: 0 });
       } else {
         set({ items: sorted, history: [{ items: sorted }], historyIdx: 0, searchQuery: '' });
@@ -632,7 +633,7 @@ export const useNoteStore = create<NoteStore>((set, get) => {
         await invoke('save_items', { items });
         set({ saveStatus: 'saved', lastSavedAt: Date.now() });
       } catch (e) {
-        console.error('[noteStore] flush save_items failed:', e);
+        log.error('[noteStore] flush save_items failed:', e);
         set({ saveStatus: 'error' });
       }
     },
