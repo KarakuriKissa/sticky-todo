@@ -57,10 +57,11 @@ export function AdvancedTab({ draft, setDraft }: Props) {
 
   const onResetTutorial = async () => {
     try {
-      await invoke('delete_database');
+      // localStorage を先にクリア。delete_database は app.restart() を呼ぶため
+      // それ以降の JS は実行されない。
       localStorage.removeItem('sticky-todo:tutorial-seeded');
       localStorage.removeItem('sticky-todo:last-seen-build');
-      window.location.reload();
+      await invoke('delete_database'); // ← アプリが即座に再起動される
     } catch (e) {
       alert('初期化失敗: ' + e);
     }
