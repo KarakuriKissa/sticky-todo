@@ -7,6 +7,90 @@ import { useAppStore } from '../../store/appStore';
 import type { AppSettings, AssigneeGroup, AssigneePerson, Status } from '../../types';
 import { AdvancedTab } from './AdvancedTab';
 
+// ── ステータス エクスポート/インポート ────────────────────────────────────────
+async function exportStatuses(statuses: Status[]) {
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  const path = await save({
+    title: 'ステータスをエクスポート',
+    defaultPath: `statuses-${new Date().toISOString().slice(0, 10)}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (!path) return;
+  await invoke('write_text_file', { path, content: JSON.stringify({ version: 1, statuses }, null, 2) });
+  alert('ステータスをエクスポートしました');
+}
+
+async function importStatuses(
+  existing: Status[],
+  saveStatus: (s: Status) => Promise<void>,
+) {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const path = await open({ title: 'ステータスをインポート', filters: [{ name: 'JSON', extensions: ['json'] }] });
+  if (!path || typeof path !== 'string') return;
+  const text = await invoke<string>('read_text_file', { path });
+  const data = JSON.parse(text);
+  if (!data?.statuses) { alert('形式が正しくありません'); return; }
+  let added = 0, skipped = 0;
+  for (const s of data.statuses as Status[]) {
+    const dup = existing.find(e => e.name === s.name && e.color === s.color);
+    if (dup) { skipped++; continue; }
+    const id = await invoke<string>('generate_id');
+    await saveStatus({ id, name: s.name, color: s.color, sort_order: existing.length + added });
+    added++;
+  }
+  alert(`インポート完了: ${added}件追加, ${skipped}件スキップ（重複）`);
+}
+
+// ── 担当者 エクスポート/インポート ──────────────────────────────────────────
+async function exportAssignees(groups: AssigneeGroup[], persons: AssigneePerson[]) {
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  const path = await save({
+    title: '担当者をエクスポート',
+    defaultPath: `assignees-${new Date().toISOString().slice(0, 10)}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (!path) return;
+  const payload = groups.map(g => ({
+    name: g.name,
+    persons: persons.filter(p => p.group_id === g.id).map(p => ({ name: p.name, color: p.color })),
+  }));
+  await invoke('write_text_file', { path, content: JSON.stringify({ version: 1, groups: payload }, null, 2) });
+  alert('担当者をエクスポートしました');
+}
+
+async function importAssignees(
+  existingGroups: AssigneeGroup[],
+  existingPersons: AssigneePerson[],
+  saveAssigneeGroup: (g: AssigneeGroup) => Promise<void>,
+  saveAssigneePerson: (p: AssigneePerson) => Promise<void>,
+) {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const path = await open({ title: '担当者をインポート', filters: [{ name: 'JSON', extensions: ['json'] }] });
+  if (!path || typeof path !== 'string') return;
+  const text = await invoke<string>('read_text_file', { path });
+  const data = JSON.parse(text);
+  if (!data?.groups) { alert('形式が正しくありません'); return; }
+  let groupAdded = 0, personAdded = 0, personSkipped = 0;
+  for (const g of data.groups as { name: string; persons: { name: string; color: string }[] }[]) {
+    let group = existingGroups.find(eg => eg.name === g.name);
+    if (!group) {
+      const id = await invoke<string>('generate_id');
+      group = { id, name: g.name, sort_order: existingGroups.length + groupAdded };
+      await saveAssigneeGroup(group);
+      groupAdded++;
+    }
+    for (const p of g.persons ?? []) {
+      const dup = existingPersons.find(ep => ep.group_id === group!.id && ep.name === p.name);
+      if (dup) { personSkipped++; continue; }
+      const pid = await invoke<string>('generate_id');
+      const groupPersons = existingPersons.filter(ep => ep.group_id === group!.id);
+      await saveAssigneePerson({ id: pid, group_id: group!.id, name: p.name, color: p.color ?? '#6366f1', sort_order: groupPersons.length + personAdded });
+      personAdded++;
+    }
+  }
+  alert(`インポート完了: グループ${groupAdded}件追加, メンバー${personAdded}件追加, ${personSkipped}件スキップ`);
+}
+
 export function HelpSection() {
   const [appVersion, setAppVersion] = useState<string>('');
   useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
@@ -179,6 +263,7 @@ export function SettingsModal({
   const [newGroupName, setNewGroupName] = useState('');
   const [newPersonName, setNewPersonName] = useState('');
   const [newPersonColor, setNewPersonColor] = useState('#6366f1');
+  const [showBulkPaste, setShowBulkPaste] = useState(false);
 
   const save = async () => {
     await onSave(draft);
@@ -268,6 +353,12 @@ export function SettingsModal({
                 <input type="color" value={newStatusColor} onChange={(e) => setNewStatusColor(e.target.value)} />
                 <button className="btn-primary" onClick={addStatus}>追加</button>
               </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => exportStatuses(statuses)}>📤 エクスポート</button>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => importStatuses(statuses, saveStatus)}>📥 インポート</button>
+              </div>
             </section>
           )}
 
@@ -275,11 +366,28 @@ export function SettingsModal({
           {tab === 'assignees' && (
             <section>
               <h3>担当者グループとメンバー</h3>
-              <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 12 }}>
+              <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 8 }}>
                 タスクに「誰が担当するか」を設定できる機能です。<br />
                 まず<b>グループ</b>（チームや部署など）を作り、その中に<b>メンバー</b>を追加してください。<br />
                 タスクウィンドウでタスクを右クリック →「担当者」から割り当てられます。
               </p>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => exportAssignees(assigneeGroups, assigneePersons)}>📤 エクスポート</button>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => importAssignees(assigneeGroups, assigneePersons, saveAssigneeGroup, saveAssigneePerson)}>📥 インポート</button>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => setShowBulkPaste((v) => !v)}>📋 スプレッドシートから一括入力</button>
+              </div>
+              {showBulkPaste && (
+                <BulkAssigneePaste
+                  existingGroups={assigneeGroups}
+                  existingPersons={assigneePersons}
+                  saveAssigneeGroup={saveAssigneeGroup}
+                  saveAssigneePerson={saveAssigneePerson}
+                  onClose={() => setShowBulkPaste(false)}
+                />
+              )}
               <div className="assignee-split">
                 {/* LEFT: group list */}
                 <div className="assignee-col">
@@ -373,6 +481,98 @@ export function SettingsModal({
           <button className="btn-primary" onClick={save}>保存</button>
           <button className="btn-secondary" onClick={onClose}>キャンセル</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── BulkAssigneePaste ─────────────────────────────────────────────────────────
+// Excel/Sheetsからコピーしたタブ区切りデータを一括インポート
+// フォーマット: グループ名\tメンバー名\t色(#hex, 省略可)
+function BulkAssigneePaste({
+  existingGroups, existingPersons, saveAssigneeGroup, saveAssigneePerson, onClose,
+}: {
+  existingGroups: AssigneeGroup[];
+  existingPersons: AssigneePerson[];
+  saveAssigneeGroup: (g: AssigneeGroup) => Promise<void>;
+  saveAssigneePerson: (p: AssigneePerson) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState('');
+  const [preview, setPreview] = useState<{ group: string; name: string; color: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const parse = (raw: string) => {
+    const rows: { group: string; name: string; color: string }[] = [];
+    for (const line of raw.split('\n')) {
+      const cols = line.split('\t').map(s => s.trim());
+      if (cols.length < 2 || !cols[0] || !cols[1]) continue;
+      const color = cols[2] && /^#[0-9a-fA-F]{3,6}$/.test(cols[2]) ? cols[2] : '#6366f1';
+      rows.push({ group: cols[0], name: cols[1], color });
+    }
+    return rows;
+  };
+
+  const onPaste = (raw: string) => {
+    setText(raw);
+    setPreview(parse(raw));
+  };
+
+  const doImport = async () => {
+    setBusy(true);
+    const rows = parse(text);
+    const localGroups = [...existingGroups];
+    const localPersons = [...existingPersons];
+    let added = 0, skipped = 0;
+    for (const row of rows) {
+      let group = localGroups.find(g => g.name === row.group);
+      if (!group) {
+        const id = await invoke<string>('generate_id');
+        group = { id, name: row.group, sort_order: localGroups.length };
+        await saveAssigneeGroup(group);
+        localGroups.push(group);
+      }
+      const dup = localPersons.find(p => p.group_id === group!.id && p.name === row.name);
+      if (dup) { skipped++; continue; }
+      const pid = await invoke<string>('generate_id');
+      const gp = localPersons.filter(p => p.group_id === group!.id);
+      const person: AssigneePerson = { id: pid, group_id: group!.id, name: row.name, color: row.color, sort_order: gp.length };
+      await saveAssigneePerson(person);
+      localPersons.push(person);
+      added++;
+    }
+    setBusy(false);
+    alert(`インポート完了: ${added}件追加, ${skipped}件スキップ（重複）`);
+    onClose();
+  };
+
+  return (
+    <div style={{ marginBottom: 12, padding: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6 }}>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
+        ExcelやGoogleスプレッドシートからコピーして貼り付けてください。<br />
+        <b>形式：グループ名 [Tab] メンバー名 [Tab] 色(#hex, 省略可)</b> — 1行1人
+      </p>
+      <textarea
+        style={{ width: '100%', height: 120, fontFamily: 'monospace', fontSize: 12, resize: 'vertical',
+          background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: 6 }}
+        placeholder={'開発チーム\t田中\t#6366f1\n開発チーム\t佐藤\t#22c55e\n営業チーム\t山田'}
+        value={text}
+        onChange={e => onPaste(e.target.value)}
+      />
+      {preview.length > 0 && (
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--muted)' }}>
+          プレビュー: {preview.length}件 —
+          {preview.slice(0, 5).map((r, i) => (
+            <span key={i}> <span style={{ color: r.color }}>●</span> {r.group}/{r.name}</span>
+          ))}
+          {preview.length > 5 && <span> …他{preview.length - 5}件</span>}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button className="btn-primary" style={{ fontSize: 12 }} onClick={doImport} disabled={busy || preview.length === 0}>
+          {busy ? '処理中…' : `${preview.length}件をインポート`}
+        </button>
+        <button className="btn-secondary" style={{ fontSize: 12 }} onClick={onClose}>キャンセル</button>
       </div>
     </div>
   );

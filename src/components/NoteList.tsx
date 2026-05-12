@@ -1,8 +1,70 @@
 import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { emitTo } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/appStore';
-import type { Note } from '../types';
+import type { Note, TodoItem } from '../types';
 import { log } from '../utils/log';
+
+// ── リスト エクスポート ───────────────────────────────────────────────────────
+async function exportNote(note: Note) {
+  const items = await invoke<TodoItem[]>('get_note_items', { noteId: note.id });
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  const safe = note.title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+  const path = await save({
+    title: 'リストをエクスポート',
+    defaultPath: `${safe}-${new Date().toISOString().slice(0, 10)}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (!path) return;
+  await invoke('write_text_file', { path, content: JSON.stringify({ version: 1, note, items }, null, 2) });
+  alert('エクスポートしました');
+}
+
+// ── リスト インポート ─────────────────────────────────────────────────────────
+async function importNote(
+  existingNotes: Note[],
+  createNote: (title?: string) => Promise<Note>,
+  updateNote: (n: Note) => void,
+) {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const path = await open({ title: 'リストをインポート', filters: [{ name: 'JSON', extensions: ['json'] }] });
+  if (!path || typeof path !== 'string') return;
+  const text = await invoke<string>('read_text_file', { path });
+  const data = JSON.parse(text);
+  if (!data?.note || !Array.isArray(data?.items)) { alert('形式が正しくありません'); return; }
+
+  const srcNote: Note = data.note;
+  const srcItems: TodoItem[] = data.items;
+
+  // 同名リストの確認
+  const sameName = existingNotes.filter(n => n.title === srcNote.title);
+  let title = srcNote.title;
+  if (sameName.length > 0) {
+    const { confirm } = await import('@tauri-apps/plugin-dialog');
+    const overwrite = await confirm(
+      `「${srcNote.title}」という名前のリストが既に${sameName.length}件あります。\n別名（コピー）として追加しますか？`,
+      { title: 'リストの重複', kind: 'warning', okLabel: 'コピーとして追加', cancelLabel: 'キャンセル' },
+    );
+    if (!overwrite) return;
+    title = `${srcNote.title} のコピー`;
+  }
+
+  // 新規リストとして作成（新IDを発行）
+  const newNote = await createNote(title);
+  updateNote({ ...newNote, color: srcNote.color, warn_days: srcNote.warn_days });
+
+  // アイテムを新しいnote_idで保存
+  if (srcItems.length > 0) {
+    const newItems: TodoItem[] = srcItems.map(item => ({
+      ...item,
+      id: crypto.randomUUID(),
+      note_id: newNote.id,
+      dirty: true,
+    }));
+    await invoke('save_items', { items: newItems });
+  }
+  alert(`「${title}」としてインポートしました`);
+}
 
 
 interface Props {
@@ -10,7 +72,7 @@ interface Props {
 }
 
 export function NoteList({ onNew }: Props) {
-  const { filteredNotes, openNote, deleteNote, duplicateNote, updateNote, categories, reorderNotes, itemMatches, searchQuery } =
+  const { notes: allNotes, filteredNotes, openNote, deleteNote, duplicateNote, updateNote, createNote, categories, reorderNotes, itemMatches, searchQuery } =
     useAppStore();
   const notes = filteredNotes();
   // Map note_id → first matching task text (for the global-search hint badge).
@@ -168,6 +230,15 @@ export function NoteList({ onNew }: Props) {
         <div className="note-list-empty">
           <p>リストがありません</p>
           <button className="btn-primary" onClick={onNew}>＋ 新規作成</button>
+          <button className="btn-secondary" style={{ marginTop: 8, fontSize: 12 }}
+            onClick={() => importNote(allNotes, createNote, updateNote)}>📥 インポート</button>
+        </div>
+      )}
+      {notes.length > 0 && (
+        <div style={{ padding: '4px 8px 0', display: 'flex', justifyContent: 'flex-end' }}>
+          <button className="btn-secondary" style={{ fontSize: 11, padding: '2px 8px', opacity: 0.7 }}
+            onClick={() => importNote(allNotes, createNote, updateNote)}
+            title="JSONファイルからリストをインポート">📥 インポート</button>
         </div>
       )}
       {notes.map((note) => (
@@ -326,6 +397,14 @@ export function NoteList({ onNew }: Props) {
               <span className="ctx-label">{c.name}{noteCtx.note.category_id === c.id ? ' ✓' : ''}</span>
             </button>
           ))}
+          <div className="context-menu-sep" />
+          <button
+            className="context-menu-item"
+            onClick={() => { exportNote(noteCtx.note); setNoteCtx(null); }}
+          >
+            <span className="ctx-icon">📤</span>
+            <span className="ctx-label">このリストをエクスポート</span>
+          </button>
           <div className="context-menu-sep" />
           <button
             className="context-menu-item danger"

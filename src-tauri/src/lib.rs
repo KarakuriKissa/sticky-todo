@@ -81,6 +81,8 @@ pub fn run() {
             commands::export_database,
             commands::import_database,
             commands::delete_database,
+            commands::write_text_file,
+            commands::read_text_file,
             commands::search_all_items,
         ])
         .run(tauri::generate_context!())
