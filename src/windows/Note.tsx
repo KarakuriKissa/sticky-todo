@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { TodoItemRow } from '../components/TodoItem';
 import { useNoteStore } from '../store/noteStore';
 import { useAppStore } from '../store/appStore';
@@ -381,6 +382,19 @@ export function NoteWindow({ noteId }: Props) {
           >
             {saveStatus === 'saving' ? '💾…' : saveStatus === 'saved' ? '✓' : saveStatus === 'error' ? '⚠' : ''}
           </span>
+
+          {/* Launcher button */}
+          <button
+            className="pin-btn"
+            onClick={async () => {
+              const launcher = await WebviewWindow.getByLabel('launcher');
+              if (launcher) { await launcher.show(); await launcher.setFocus(); }
+            }}
+            title="ランチャーを開く"
+            style={{ fontSize: 13 }}
+          >
+            🗂
+          </button>
 
           {/* Pin button — visually distinct when ON */}
           <button

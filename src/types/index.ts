@@ -84,4 +84,5 @@ export interface AppSettings {
   deadline_warn_days: number;
   priority_mode: 'hml' | 'abc'; // 'hml' = 高中低, 'abc' = ABC
   reminder_interval_min?: number; // minutes between desktop reminder checks (0 = disabled)
+  reopen_windows_on_start?: boolean; // restore open note windows on app launch
 }

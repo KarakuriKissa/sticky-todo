@@ -99,6 +99,17 @@ export function AdvancedTab({ draft, setDraft }: Props) {
         分ごと（0 で無効）
       </label>
 
+      <h3 style={{ marginTop: 20 }}>起動時の動作</h3>
+      <p style={para}>
+        アプリを起動したとき、前回開いていたリストウィンドウを自動で再表示します。
+      </p>
+      <label className="toggle-row">
+        <input type="checkbox"
+          checked={draft.reopen_windows_on_start ?? true}
+          onChange={(e) => setDraft((d) => ({ ...d, reopen_windows_on_start: e.target.checked }))} />
+        前回開いていたリストを起動時に復元する
+      </label>
+
       <h3 style={{ marginTop: 20 }}>データベース</h3>
       <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
         すべてのデータはローカルの SQLite データベースに保存されています。<br />

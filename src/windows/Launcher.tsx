@@ -28,7 +28,8 @@ export function Launcher() {
 
   useEffect(() => {
     load().then(() => {
-      reopenSavedWindows();
+      const { settings } = useAppStore.getState();
+      if (settings.reopen_windows_on_start !== false) reopenSavedWindows();
     });
   }, []);
 

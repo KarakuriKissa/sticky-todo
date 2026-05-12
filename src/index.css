@@ -285,17 +285,20 @@ ul { list-style: none; }
   gap: 4px;
   background: rgba(0,0,0,.12);
   min-height: 34px;
-  overflow: hidden;          /* clip very long titles cleanly */
+  overflow: visible;         /* allow color-picker dropdown to overflow */
 }
 
 /* Static title text — content-width, NOT a drag region (so right-click works) */
 .note-title-text {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   font-weight: 700;
   font-size: 14px;
   color: #1e1e2e;
   cursor: text;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   user-select: none;
   padding: 2px 6px;
   border-radius: 3px;
