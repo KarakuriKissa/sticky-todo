@@ -38,9 +38,12 @@ async function importNote(
   const path = await open({ title: 'リストをインポート', filters: [{ name: 'JSON', extensions: ['json'] }] });
   if (!path || typeof path !== 'string') return;
   const text = await invoke<string>('read_text_file', { path });
-  const data = JSON.parse(text);
-  if (!data?.note || !Array.isArray(data?.items)) { alert('形式が正しくありません'); return; }
-
+  let data: any;
+  try { data = JSON.parse(text); } catch { alert('JSONとして読み込めませんでした'); return; }
+  if (!data?.note || !Array.isArray(data?.items) || typeof data.note.title !== 'string') {
+    alert('形式が正しくありません');
+    return;
+  }
   const srcNote: Note = data.note;
   const srcItems: TodoItem[] = data.items;
 
@@ -59,19 +62,42 @@ async function importNote(
 
   // 新規リストとして作成（新IDを発行）
   const newNote = await createNote(title);
-  updateNote({ ...newNote, color: srcNote.color, warn_days: srcNote.warn_days });
+  updateNote({
+    ...newNote,
+    color: typeof srcNote.color === 'string' ? srcNote.color : newNote.color,
+    warn_days: typeof srcNote.warn_days === 'number' ? srcNote.warn_days : null,
+  });
 
-  // アイテムを新しいnote_idで保存
+  // アイテムを新しいnote_idで保存（必須フィールドの欠落に備えてデフォルトを埋める）
   if (srcItems.length > 0) {
-    const newItems: TodoItem[] = srcItems.map(item => ({
-      ...item,
+    const nowIso = new Date().toISOString();
+    const newItems: TodoItem[] = srcItems.map((item, idx) => ({
       id: crypto.randomUUID(),
       note_id: newNote.id,
+      parent_id: null, // 親子参照は古いIDなのでリセット
+      text: typeof item?.text === 'string' ? item.text : '',
+      checked: !!item?.checked,
+      indent: typeof item?.indent === 'number' ? item.indent : 0,
+      collapsed: !!item?.collapsed,
+      locked: !!item?.locked,
+      status: typeof item?.status === 'string' ? item.status : null,
+      assignees: typeof item?.assignees === 'string' ? item.assignees : '[]',
+      assignee_person_id: typeof item?.assignee_person_id === 'string' ? item.assignee_person_id : null,
+      memo: typeof item?.memo === 'string' ? item.memo : null,
+      bold: !!item?.bold,
+      priority: typeof item?.priority === 'string' ? item.priority : null,
+      start_date: typeof item?.start_date === 'string' ? item.start_date : null,
+      end_date: typeof item?.end_date === 'string' ? item.end_date : null,
+      limit_date: typeof item?.limit_date === 'string' ? item.limit_date : null,
+      item_type: (item?.item_type === 'heading' || item?.item_type === 'separator') ? item.item_type : 'normal',
+      sort_order: typeof item?.sort_order === 'number' ? item.sort_order : idx,
+      archived: !!item?.archived,
+      updated_at: nowIso,
       dirty: true,
     }));
     await invoke('save_items', { items: newItems });
   }
-  alert(`「${title}」としてインポートしました`);
+  alert(`「${title}」としてインポートしました（タスク${srcItems.length}件）`);
 }
 
 

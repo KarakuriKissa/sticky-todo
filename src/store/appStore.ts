@@ -73,6 +73,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   deadline_warn_days: 3,
   priority_mode: 'hml' as const,
   reopen_windows_on_start: true,
+  reminder_interval_min: 30,
 };
 
 function now() {
@@ -109,6 +110,15 @@ let _seedInProgress = false; // guard against double-invoke (React StrictMode et
 async function seedTutorial(categories: Category[], statuses: Status[]) {
   if (_seedInProgress) return;
   _seedInProgress = true;
+  try {
+    await _doSeedTutorial(categories, statuses);
+  } finally {
+    // Always reset so a failed seed can be retried on the next launch.
+    _seedInProgress = false;
+  }
+}
+
+async function _doSeedTutorial(categories: Category[], statuses: Status[]) {
   const personalCat = categories.find((c) => c.name === '個人');
   const workCat = categories.find((c) => c.name === '仕事');
   const statusInProgress = statuses.find((s) => s.name === '作業中');
@@ -388,11 +398,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
       width: note.window_width,
       height: note.window_height,
     });
-    set((s) => {
-      const next = new Set([...s.openWindowIds, note.id]);
-      persistOpenWindows(next);
-      return { openWindowIds: next };
-    });
+    const next = new Set([...get().openWindowIds, note.id]);
+    set({ openWindowIds: next });
+    await persistOpenWindows(next);
   },
 
   trackWindowClose: async (noteId: string) => {
@@ -467,11 +475,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
           : [...s.statuses, status],
       };
     });
+    emit('statuses-updated', {}).catch(() => {});
   },
 
   deleteStatus: async (id: string) => {
     await invoke('delete_status', { id });
     set((s) => ({ statuses: s.statuses.filter((st) => st.id !== id) }));
+    emit('statuses-updated', {}).catch(() => {});
   },
 
   saveAssigneeGroup: async (group: AssigneeGroup) => {
@@ -484,6 +494,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           : [...s.assigneeGroups, group],
       };
     });
+    emit('assignees-updated', {}).catch(() => {});
   },
 
   deleteAssigneeGroup: async (id: string) => {
@@ -492,6 +503,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       assigneeGroups: s.assigneeGroups.filter((g) => g.id !== id),
       assigneePersons: s.assigneePersons.filter((p) => p.group_id !== id),
     }));
+    emit('assignees-updated', {}).catch(() => {});
   },
 
   saveAssigneePerson: async (person: AssigneePerson) => {
@@ -504,11 +516,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
           : [...s.assigneePersons, person],
       };
     });
+    emit('assignees-updated', {}).catch(() => {});
   },
 
   deleteAssigneePerson: async (id: string) => {
     await invoke('delete_assignee_person', { id });
     set((s) => ({ assigneePersons: s.assigneePersons.filter((p) => p.id !== id) }));
+    emit('assignees-updated', {}).catch(() => {});
   },
 
   saveSettings: async (settings: AppSettings) => {

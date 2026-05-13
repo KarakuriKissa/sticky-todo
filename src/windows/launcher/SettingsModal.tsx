@@ -28,17 +28,23 @@ async function importStatuses(
   const path = await open({ title: 'ステータスをインポート', filters: [{ name: 'JSON', extensions: ['json'] }] });
   if (!path || typeof path !== 'string') return;
   const text = await invoke<string>('read_text_file', { path });
-  const data = JSON.parse(text);
-  if (!data?.statuses) { alert('形式が正しくありません'); return; }
+  let data: any;
+  try { data = JSON.parse(text); } catch { alert('JSONとして読み込めませんでした'); return; }
+  if (!data?.statuses || !Array.isArray(data.statuses)) { alert('形式が正しくありません'); return; }
   let added = 0, skipped = 0;
+  // Compute next sort_order from the actual max, not array length (which could
+  // be stale if items were deleted earlier).
+  const maxOrder = existing.reduce((m, s) => Math.max(m, s.sort_order ?? 0), -1);
   for (const s of data.statuses as Status[]) {
-    const dup = existing.find(e => e.name === s.name && e.color === s.color);
+    if (!s?.name) { skipped++; continue; }
+    // Deduplicate by name only — same-name with different color is still a dup.
+    const dup = existing.find(e => e.name === s.name);
     if (dup) { skipped++; continue; }
     const id = await invoke<string>('generate_id');
-    await saveStatus({ id, name: s.name, color: s.color, sort_order: existing.length + added });
+    await saveStatus({ id, name: s.name, color: s.color ?? '#94a3b8', sort_order: maxOrder + 1 + added });
     added++;
   }
-  alert(`インポート完了: ${added}件追加, ${skipped}件スキップ（重複）`);
+  alert(`インポート完了: ${added}件追加, ${skipped}件スキップ（重複・不正データ）`);
 }
 
 // ── 担当者 エクスポート/インポート ──────────────────────────────────────────
@@ -68,23 +74,35 @@ async function importAssignees(
   const path = await open({ title: '担当者をインポート', filters: [{ name: 'JSON', extensions: ['json'] }] });
   if (!path || typeof path !== 'string') return;
   const text = await invoke<string>('read_text_file', { path });
-  const data = JSON.parse(text);
-  if (!data?.groups) { alert('形式が正しくありません'); return; }
+  let data: any;
+  try { data = JSON.parse(text); } catch { alert('JSONとして読み込めませんでした'); return; }
+  if (!data?.groups || !Array.isArray(data.groups)) { alert('形式が正しくありません'); return; }
+  // Maintain a running local snapshot — otherwise filters against
+  // existingPersons miss everyone added earlier in this loop, breaking sort_order.
+  const localGroups = [...existingGroups];
+  const localPersons = [...existingPersons];
   let groupAdded = 0, personAdded = 0, personSkipped = 0;
   for (const g of data.groups as { name: string; persons: { name: string; color: string }[] }[]) {
-    let group = existingGroups.find(eg => eg.name === g.name);
+    if (!g?.name) continue;
+    let group = localGroups.find(eg => eg.name === g.name);
     if (!group) {
       const id = await invoke<string>('generate_id');
-      group = { id, name: g.name, sort_order: existingGroups.length + groupAdded };
+      const maxGroupOrder = localGroups.reduce((m, x) => Math.max(m, x.sort_order ?? 0), -1);
+      group = { id, name: g.name, sort_order: maxGroupOrder + 1 };
       await saveAssigneeGroup(group);
+      localGroups.push(group);
       groupAdded++;
     }
     for (const p of g.persons ?? []) {
-      const dup = existingPersons.find(ep => ep.group_id === group!.id && ep.name === p.name);
+      if (!p?.name) { personSkipped++; continue; }
+      const dup = localPersons.find(ep => ep.group_id === group!.id && ep.name === p.name);
       if (dup) { personSkipped++; continue; }
       const pid = await invoke<string>('generate_id');
-      const groupPersons = existingPersons.filter(ep => ep.group_id === group!.id);
-      await saveAssigneePerson({ id: pid, group_id: group!.id, name: p.name, color: p.color ?? '#6366f1', sort_order: groupPersons.length + personAdded });
+      const groupPersons = localPersons.filter(ep => ep.group_id === group!.id);
+      const maxOrder = groupPersons.reduce((m, x) => Math.max(m, x.sort_order ?? 0), -1);
+      const newPerson = { id: pid, group_id: group!.id, name: p.name, color: p.color ?? '#6366f1', sort_order: maxOrder + 1 };
+      await saveAssigneePerson(newPerson);
+      localPersons.push(newPerson);
       personAdded++;
     }
   }

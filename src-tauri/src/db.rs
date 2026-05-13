@@ -316,9 +316,17 @@ impl Database {
     pub fn upsert_category(&self, c: &Category) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT OR REPLACE INTO categories (id,name,color,sort_order) VALUES (?1,?2,?3,?4)",
+            "INSERT INTO categories (id,name,color,sort_order) VALUES (?1,?2,?3,?4)
+             ON CONFLICT(id) DO UPDATE SET name=excluded.name, color=excluded.color, sort_order=excluded.sort_order",
             params![c.id, c.name, c.color, c.sort_order],
         )?;
+        Ok(())
+    }
+
+    pub fn delete_category_with_orphan_cleanup(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE notes SET category_id=NULL WHERE category_id=?1", [id])?;
+        conn.execute("DELETE FROM categories WHERE id=?1", [id])?;
         Ok(())
     }
 
@@ -351,7 +359,8 @@ impl Database {
     pub fn upsert_status(&self, s: &Status) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT OR REPLACE INTO statuses (id,name,color,sort_order) VALUES (?1,?2,?3,?4)",
+            "INSERT INTO statuses (id,name,color,sort_order) VALUES (?1,?2,?3,?4)
+             ON CONFLICT(id) DO UPDATE SET name=excluded.name, color=excluded.color, sort_order=excluded.sort_order",
             params![s.id, s.name, s.color, s.sort_order],
         )?;
         Ok(())
@@ -383,17 +392,37 @@ impl Database {
     }
 
     pub fn upsert_assignee_group(&self, g: &AssigneeGroup) -> Result<()> {
+        // CRITICAL: INSERT OR REPLACE would DELETE then INSERT, cascading via
+        // assignee_persons.group_id ON DELETE CASCADE and wiping all members.
+        // Use ON CONFLICT DO UPDATE to preserve child rows.
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT OR REPLACE INTO assignee_groups (id,name,sort_order) VALUES (?1,?2,?3)",
+            "INSERT INTO assignee_groups (id,name,sort_order) VALUES (?1,?2,?3)
+             ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                sort_order=excluded.sort_order",
             params![g.id, g.name, g.sort_order],
         )?;
         Ok(())
     }
 
     pub fn delete_assignee_group(&self, id: &str) -> Result<()> {
+        // Clean up dangling references in todo_items before cascading.
+        // (todo_items.assignee_person_id has no FK, so CASCADE doesn't reach there.)
         let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE todo_items SET assignee_person_id=NULL
+             WHERE assignee_person_id IN (SELECT id FROM assignee_persons WHERE group_id=?1)",
+            [id],
+        )?;
         conn.execute("DELETE FROM assignee_groups WHERE id=?1", [id])?;
+        Ok(())
+    }
+
+    pub fn delete_assignee_person(&self, _id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE todo_items SET assignee_person_id=NULL WHERE assignee_person_id=?1", [_id])?;
+        conn.execute("DELETE FROM assignee_persons WHERE id=?1", [_id])?;
         Ok(())
     }
 
@@ -419,17 +448,19 @@ impl Database {
     pub fn upsert_assignee_person(&self, p: &AssigneePerson) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT OR REPLACE INTO assignee_persons (id,group_id,name,color,sort_order) VALUES (?1,?2,?3,?4,?5)",
+            "INSERT INTO assignee_persons (id,group_id,name,color,sort_order) VALUES (?1,?2,?3,?4,?5)
+             ON CONFLICT(id) DO UPDATE SET
+                group_id=excluded.group_id,
+                name=excluded.name,
+                color=excluded.color,
+                sort_order=excluded.sort_order",
             params![p.id, p.group_id, p.name, p.color, p.sort_order],
         )?;
         Ok(())
     }
 
-    pub fn delete_assignee_person(&self, id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM assignee_persons WHERE id=?1", [id])?;
-        Ok(())
-    }
+    // (delete_assignee_person is defined above with orphan cleanup; this is
+    // intentionally left out to avoid a duplicate definition.)
 
     // ── Settings ───────────────────────────────────────────────────────────────
 

@@ -40,22 +40,21 @@ export function Launcher() {
   useEffect(() => {
     const seenKey = 'sticky-todo:last-seen-build';
     const lastSeen = Number(localStorage.getItem(seenKey) ?? '0');
-    fetch('https://api.github.com/repos/KarakuriKissa/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success')
+    const ac = new AbortController();
+    fetch('https://api.github.com/repos/KarakuriKissa/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success', { signal: ac.signal })
       .then((r) => r.json())
       .then((j) => {
         const run = j.workflow_runs?.[0];
         if (run && run.run_number > lastSeen + 0) {
-          // Show banner only if a strictly NEW run appeared after first launch.
           if (lastSeen === 0) {
-            // First time we see a build → just remember, don't bug the user.
             localStorage.setItem(seenKey, String(run.run_number));
           } else if (run.run_number > lastSeen) {
-            // Link to Releases page (user-friendly) not the GitHub Actions build page.
             setUpdateBanner({ runNumber: run.run_number, url: 'https://github.com/KarakuriKissa/sticky-todo/releases/latest' });
           }
         }
       })
-      .catch(() => {});
+      .catch(() => {}); // includes AbortError on unmount
+    return () => ac.abort();
   }, []);
 
   // The launcher search is GLOBAL: it filters notes by title AND by task content.

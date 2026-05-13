@@ -145,7 +145,7 @@ pub fn save_category(category: Category, db: State<'_, Database>) -> Result<(), 
 
 #[tauri::command]
 pub fn delete_category(id: String, db: State<'_, Database>) -> Result<(), String> {
-    db.delete_category(&id).map_err(|e| e.to_string())
+    db.delete_category_with_orphan_cleanup(&id).map_err(|e| e.to_string())
 }
 
 // ── Statuses ───────────────────────────────────────────────────────────────────

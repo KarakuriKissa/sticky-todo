@@ -114,6 +114,31 @@ export function NoteWindow({ noteId }: Props) {
     return () => { unlisten?.(); };
   }, [noteId, editingTitle]);
 
+  // Listen for statuses/assignees changes from other windows so the dropdowns
+  // here update immediately when the user edits them in the launcher settings.
+  useEffect(() => {
+    let unlistenStatus: (() => void) | undefined;
+    let unlistenAssignee: (() => void) | undefined;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('statuses-updated', async () => {
+        try {
+          const next = await invoke<any[]>('get_statuses');
+          useAppStore.setState({ statuses: next });
+        } catch { /* ignore */ }
+      }).then(fn => { unlistenStatus = fn; }).catch(() => {});
+      listen('assignees-updated', async () => {
+        try {
+          const [groups, persons] = await Promise.all([
+            invoke<any[]>('get_assignee_groups'),
+            invoke<any[]>('get_assignee_persons'),
+          ]);
+          useAppStore.setState({ assigneeGroups: groups, assigneePersons: persons });
+        } catch { /* ignore */ }
+      }).then(fn => { unlistenAssignee = fn; }).catch(() => {});
+    });
+    return () => { unlistenStatus?.(); unlistenAssignee?.(); };
+  }, []);
+
   // Listen for request-close event (emitted by NoteList "リストを閉じる")
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -135,7 +160,7 @@ export function NoteWindow({ noteId }: Props) {
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); selectAll(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !isInputFocused) { e.preventDefault(); selectAll(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
         e.stopImmediatePropagation();           // suppress WebView2's native find
@@ -152,8 +177,9 @@ export function NoteWindow({ noteId }: Props) {
         setShowCheatSheet(false);
         return;
       }
-      // ? key — show cheat sheet (only when not typing into a field)
-      if (!isInputFocused && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
+      // ? key — show cheat sheet (only when not typing into a field, and
+      // not during IME composition so JP/CN input isn't disrupted)
+      if (!isInputFocused && !e.isComposing && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
         e.preventDefault();
         setShowCheatSheet((v) => !v);
       }
