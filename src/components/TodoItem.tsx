@@ -1,4 +1,4 @@
-import { useRef, KeyboardEvent, useState, MouseEvent } from 'react';
+import { useRef, KeyboardEvent, useState, MouseEvent, useEffect } from 'react';
 import type { TodoItem as Item } from '../types';
 import { useNoteStore } from '../store/noteStore';
 import { useAppStore } from '../store/appStore';
@@ -75,6 +75,17 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     }
   };
   const exitEdit = () => setIsEditing(false);
+
+  // Auto-enter edit mode when this item was just added via toolbar/quick-add.
+  // The Note window stores a pendingFocusId; if it matches, enter edit and clear.
+  useEffect(() => {
+    const pending = useNoteStore.getState().pendingFocusId;
+    if (pending === item.id && !item.locked) {
+      useNoteStore.getState().clearPendingFocus();
+      enterEdit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
 
   // ── Keyboard ────────────────────────────────────────────────────────────────
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {

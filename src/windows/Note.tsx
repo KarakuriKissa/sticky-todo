@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { TodoItemRow } from '../components/TodoItem';
 import { useNoteStore } from '../store/noteStore';
 import { useAppStore } from '../store/appStore';
@@ -193,17 +192,20 @@ export function NoteWindow({ noteId }: Props) {
   // Quick-add: extra indent levels added via Tab (and removed via Shift+Tab) before submit.
   const [quickAddIndent, setQuickAddIndent] = useState(0);
   const submitQuickAdd = () => {
-    const t = quickAddText.trim();
-    if (!t) return;
-    // Pass an explicit indent override = (last item's indent) + quickAddIndent
+    const raw = quickAddText;
+    if (!raw.trim()) return;
+    // Split on newlines — paste from spreadsheet/doc creates multiple tasks.
+    const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length === 0) return;
     const last = items[items.length - 1];
     const baseIndent = last ? last.indent : 0;
-    const id = addItem(undefined, Math.max(0, Math.min(6, baseIndent + quickAddIndent)));
-    if (id) {
-      useNoteStore.getState().updateItem(id, { text: t });
-      setQuickAddText('');
-      setQuickAddIndent(0);
+    const indent = Math.max(0, Math.min(6, baseIndent + quickAddIndent));
+    for (const line of lines) {
+      const id = addItem(undefined, indent);
+      if (id) useNoteStore.getState().updateItem(id, { text: line });
     }
+    setQuickAddText('');
+    setQuickAddIndent(0);
   };
 
   const close = () => {
@@ -313,7 +315,10 @@ export function NoteWindow({ noteId }: Props) {
 
   const addTyped = (type: ItemType) => {
     const id = addItem(undefined, 0);
+    if (!id) return;
     useNoteStore.getState().updateItem(id, { item_type: type });
+    // Separators have no text, no need to enter edit mode.
+    if (type !== 'separator') useNoteStore.setState({ pendingFocusId: id });
   };
 
   return (
@@ -386,10 +391,7 @@ export function NoteWindow({ noteId }: Props) {
           {/* Launcher button */}
           <button
             className="pin-btn"
-            onClick={async () => {
-              const launcher = await WebviewWindow.getByLabel('launcher');
-              if (launcher) { await launcher.show(); await launcher.setFocus(); }
-            }}
+            onClick={() => { invoke('show_launcher').catch(() => {}); }}
             title="ランチャーを開く"
             style={{ fontSize: 13 }}
           >

@@ -72,6 +72,11 @@ interface NoteStore {
   // Live save indicator. 'idle' | 'saving' | 'saved' | 'error'
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
   lastSavedAt: number | null;
+
+  // ID of item to enter edit mode on mount (toolbar add, quick-add, etc.).
+  // TodoItem reads this and self-clears when it enters edit mode.
+  pendingFocusId: string | null;
+  clearPendingFocus: () => void;
 }
 
 function now() {
@@ -152,6 +157,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     dragState: null,
     saveStatus: 'idle',
     lastSavedAt: null,
+    pendingFocusId: null,
+    clearPendingFocus: () => set({ pendingFocusId: null }),
     startDrag: (fromId) => set({ dragState: { fromId, overItemId: null, overPos: 'after' } }),
     updateDragOver: (overId, pos) => set((s) => s.dragState ? { dragState: { ...s.dragState, overItemId: overId, overPos: pos } } : {}),
     endDrag: () => set({ dragState: null }),

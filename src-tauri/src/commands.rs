@@ -411,6 +411,26 @@ pub fn search_all_items(
 }
 
 #[tauri::command]
+pub async fn show_launcher(app: AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("launcher") {
+        win.show().map_err(|e| e.to_string())?;
+        win.unminimize().ok();
+        win.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    // Launcher was destroyed — rebuild it.
+    WebviewWindowBuilder::new(&app, "launcher", WebviewUrl::App("/".into()))
+        .title("Sticky ToDo β")
+        .inner_size(960.0, 720.0)
+        .min_inner_size(600.0, 480.0)
+        .decorations(true)
+        .visible(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }

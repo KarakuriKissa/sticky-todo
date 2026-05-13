@@ -1524,15 +1524,17 @@ kbd {
   font-size: 9px;
   color: var(--muted);
   cursor: pointer;
-  display: none; /* hidden by default — empty rows use full width */
+  display: inline-block;
+  opacity: 0.25; /* always visible but faint — gives a hint where to click */
   padding: 1px 4px;
   border-radius: 4px;
   border: 1px dashed var(--muted);
   white-space: nowrap;
   user-select: none;
+  transition: opacity .12s;
 }
-.todo-item:hover .inline-add-btn { display: inline-block; opacity: 0.6; }
-.todo-item:hover .inline-add-btn:hover { opacity: 1; background: rgba(0,0,0,.05); }
+.todo-item:hover .inline-add-btn { opacity: 0.7; }
+.inline-add-btn:hover { opacity: 1 !important; background: rgba(0,0,0,.05); }
 
 /* ── Inline date input ───────────────────────────────────────────────────── */
 .inline-date-input {

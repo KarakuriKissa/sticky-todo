@@ -83,6 +83,7 @@ pub fn run() {
             commands::delete_database,
             commands::write_text_file,
             commands::read_text_file,
+            commands::show_launcher,
             commands::search_all_items,
         ])
         .run(tauri::generate_context!())

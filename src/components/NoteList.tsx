@@ -8,6 +8,14 @@ import { log } from '../utils/log';
 // ── リスト エクスポート ───────────────────────────────────────────────────────
 async function exportNote(note: Note) {
   const items = await invoke<TodoItem[]>('get_note_items', { noteId: note.id });
+  if (items.length === 0) {
+    const { confirm } = await import('@tauri-apps/plugin-dialog');
+    const proceed = await confirm(
+      `「${note.title}」にはタスクが1件もありません。\n空のリストとしてエクスポートしますか？`,
+      { title: '空のリストです', kind: 'info', okLabel: 'エクスポート', cancelLabel: 'キャンセル' },
+    );
+    if (!proceed) return;
+  }
   const { save } = await import('@tauri-apps/plugin-dialog');
   const safe = note.title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
   const path = await save({
@@ -17,7 +25,7 @@ async function exportNote(note: Note) {
   });
   if (!path) return;
   await invoke('write_text_file', { path, content: JSON.stringify({ version: 1, note, items }, null, 2) });
-  alert('エクスポートしました');
+  alert(`エクスポートしました（${items.length}件のタスク）`);
 }
 
 // ── リスト インポート ─────────────────────────────────────────────────────────

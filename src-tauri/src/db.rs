@@ -181,12 +181,31 @@ impl Database {
     }
 
     pub fn upsert_note(&self, n: &Note) -> Result<()> {
+        // IMPORTANT: Must NOT use "INSERT OR REPLACE" — that would DELETE then
+        // INSERT, which cascades through the ON DELETE CASCADE foreign key on
+        // todo_items.note_id and wipes all tasks belonging to this note.
+        // Use INSERT ... ON CONFLICT DO UPDATE which preserves child rows.
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT OR REPLACE INTO notes
+            "INSERT INTO notes
              (id,title,category_id,window_x,window_y,window_width,window_height,
               always_on_top,color,sort_order,locked,warn_days,created_at,updated_at,dirty)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)
+             ON CONFLICT(id) DO UPDATE SET
+                title=excluded.title,
+                category_id=excluded.category_id,
+                window_x=excluded.window_x,
+                window_y=excluded.window_y,
+                window_width=excluded.window_width,
+                window_height=excluded.window_height,
+                always_on_top=excluded.always_on_top,
+                color=excluded.color,
+                sort_order=excluded.sort_order,
+                locked=excluded.locked,
+                warn_days=excluded.warn_days,
+                created_at=excluded.created_at,
+                updated_at=excluded.updated_at,
+                dirty=excluded.dirty",
             params![
                 n.id, n.title, n.category_id,
                 n.window_x, n.window_y, n.window_width, n.window_height,
