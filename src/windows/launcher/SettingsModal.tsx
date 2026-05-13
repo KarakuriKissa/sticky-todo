@@ -118,7 +118,8 @@ export function HelpSection() {
       // Record this run as "seen" on first check.
       if (lastSeen === 0) localStorage.setItem(seenKey, String(run.run_number));
       if (run.run_number > lastSeen && lastSeen > 0) {
-        setUpdateState({ kind: 'update', runNumber: run.run_number, url: run.html_url });
+        // Link to Releases (user-friendly download page) not the build artifacts page.
+        setUpdateState({ kind: 'update', runNumber: run.run_number, url: 'https://github.com/KarakuriKissa/sticky-todo/releases/latest' });
       } else {
         setUpdateState({ kind: 'latest' });
       }

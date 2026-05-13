@@ -50,7 +50,8 @@ export function Launcher() {
             // First time we see a build → just remember, don't bug the user.
             localStorage.setItem(seenKey, String(run.run_number));
           } else if (run.run_number > lastSeen) {
-            setUpdateBanner({ runNumber: run.run_number, url: run.html_url });
+            // Link to Releases page (user-friendly) not the GitHub Actions build page.
+            setUpdateBanner({ runNumber: run.run_number, url: 'https://github.com/KarakuriKissa/sticky-todo/releases/latest' });
           }
         }
       })
