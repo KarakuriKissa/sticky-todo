@@ -396,11 +396,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   trackWindowClose: async (noteId: string) => {
-    set((s) => {
-      const next = new Set([...s.openWindowIds].filter((id) => id !== noteId));
-      persistOpenWindows(next);
-      return { openWindowIds: next };
-    });
+    // Each window has its own appStore instance, so a note window's
+    // openWindowIds doesn't reflect other open windows.
+    // Read the authoritative KV state, remove just this note, write back.
+    // Must await before the window is destroyed (race vs appWin.destroy()).
+    let current: string[] = [];
+    try {
+      const json = await invoke<string | null>('get_kv_setting', { key: 'open_windows' });
+      if (json) current = JSON.parse(json);
+    } catch { /* ignore */ }
+    const next = new Set(current.filter((id) => id !== noteId));
+    set({ openWindowIds: next });
+    await persistOpenWindows(next);
   },
 
   reorderNotes: (ids: string[]) => {
