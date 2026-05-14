@@ -60,6 +60,7 @@ impl Database {
                  item_type          TEXT DEFAULT 'normal',
                  sort_order         INTEGER DEFAULT 0,
                  archived           INTEGER DEFAULT 0,
+                 strikethrough      INTEGER DEFAULT 0,
                  updated_at         TEXT NOT NULL,
                  dirty              INTEGER DEFAULT 1,
                  FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
@@ -104,6 +105,7 @@ impl Database {
         let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN memo TEXT", []);
         let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN bold INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN priority TEXT", []);
+        let _ = conn.execute("ALTER TABLE todo_items ADD COLUMN strikethrough INTEGER DEFAULT 0", []);
 
         // Seed default categories
         let cat_count: i64 =
@@ -231,7 +233,7 @@ impl Database {
             "SELECT id,note_id,parent_id,text,checked,indent,collapsed,locked,status,
                     assignees,assignee_person_id,memo,bold,priority,
                     start_date,end_date,limit_date,item_type,
-                    sort_order,archived,updated_at,dirty
+                    sort_order,archived,updated_at,dirty,strikethrough
              FROM todo_items WHERE note_id=?1 ORDER BY sort_order",
         )?;
         let mut rows = stmt.query([note_id])?;
@@ -260,6 +262,7 @@ impl Database {
                 archived:           r.get::<_, i32>(19)? != 0,
                 updated_at:         r.get(20)?,
                 dirty:              r.get::<_, i32>(21)? != 0,
+                strikethrough:      r.get::<_, i32>(22).unwrap_or(0) != 0,
             });
         }
         Ok(out)
@@ -272,8 +275,8 @@ impl Database {
              (id,note_id,parent_id,text,checked,indent,collapsed,locked,status,
               assignees,assignee_person_id,memo,bold,priority,
               start_date,end_date,limit_date,item_type,
-              sort_order,archived,updated_at,dirty)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
+              sort_order,archived,updated_at,dirty,strikethrough)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
             params![
                 it.id, it.note_id, it.parent_id, it.text,
                 it.checked as i32, it.indent, it.collapsed as i32, it.locked as i32,
@@ -281,7 +284,7 @@ impl Database {
                 it.memo, it.bold as i32, it.priority,
                 it.start_date, it.end_date, it.limit_date,
                 it.item_type, it.sort_order, it.archived as i32,
-                it.updated_at, it.dirty as i32,
+                it.updated_at, it.dirty as i32, it.strikethrough as i32,
             ],
         )?;
         Ok(())
@@ -519,7 +522,7 @@ impl Database {
             "SELECT id,note_id,parent_id,text,checked,indent,collapsed,locked,status,
                     assignees,assignee_person_id,memo,bold,priority,
                     start_date,end_date,limit_date,item_type,
-                    sort_order,archived,updated_at,dirty
+                    sort_order,archived,updated_at,dirty,strikethrough
              FROM todo_items WHERE dirty=1",
         )?;
         let mut rows = stmt.query([])?;
@@ -548,6 +551,7 @@ impl Database {
                 archived:           r.get::<_, i32>(19)? != 0,
                 updated_at:         r.get(20)?,
                 dirty:              r.get::<_, i32>(21)? != 0,
+                strikethrough:      r.get::<_, i32>(22).unwrap_or(0) != 0,
             });
         }
         Ok(out)

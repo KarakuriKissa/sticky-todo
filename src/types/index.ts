@@ -39,6 +39,7 @@ export interface TodoItem {
   item_type: ItemType;
   sort_order: number;
   archived: boolean;
+  strikethrough: boolean;
   updated_at: string;
   dirty: boolean;
 }

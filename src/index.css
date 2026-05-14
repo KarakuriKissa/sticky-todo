@@ -595,6 +595,7 @@ ul { list-style: none; }
   cursor: text;
 }
 .todo-text.done { text-decoration: line-through; color: rgba(30,30,46,.4); }
+.todo-text.strike { text-decoration: line-through; }
 .todo-text.bold { font-weight: 700; }
 .todo-text[readonly] { cursor: default; color: rgba(30,30,46,.6); }
 .todo-text::placeholder { color: rgba(30,30,46,.28); }
@@ -612,6 +613,7 @@ ul { list-style: none; }
   color: #1e1e2e;
 }
 .todo-text-view.done { text-decoration: line-through; color: rgba(30,30,46,.4); }
+.todo-text-view.strike { text-decoration: line-through; }
 .todo-text-view.bold { font-weight: 700; }
 .todo-link {
   color: #2563eb;
@@ -646,6 +648,10 @@ ul { list-style: none; }
    the longest typical status name (e.g. "確認待ち" = 4 zenkaku chars). */
 .badge-col-status   { min-width: 64px; display: flex; justify-content: flex-end; }
 .badge-col-date     { width: auto; }
+/* Priority column — fixed slot so the badge appearing/disappearing never
+   shifts the other columns. When empty the inline picker is hidden (hover-only)
+   so the slot collapses but the badge, when present, always lands here. */
+.badge-col-priority { min-width: 22px; display: flex; justify-content: center; }
 /* Status badge itself fills the column so colors line up across rows. */
 .badge-col-status .status-badge { width: 100%; text-align: center; }
 
@@ -707,6 +713,24 @@ ul { list-style: none; }
   white-space: nowrap;
   font-weight: 600;
 }
+/* "NEW" badge for freshly-imported tasks — fades itself out after ~5s */
+.new-item-badge {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  color: #fff;
+  background: #22c55e;
+  padding: 1px 5px;
+  border-radius: 8px;
+  margin-left: 4px;
+  flex-shrink: 0;
+  animation: new-badge-fade 6s ease-out forwards;
+}
+@keyframes new-badge-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .priority-badge {
   font-size: 10px;
   padding: 1px 6px;
@@ -1524,8 +1548,8 @@ kbd {
   font-size: 9px;
   color: var(--muted);
   cursor: pointer;
-  display: inline-block;
-  opacity: 0.25; /* always visible but faint — gives a hint where to click */
+  display: none; /* hidden by default — empty cells collapse so the task text
+                    flows into the unused 担当/ステータス space */
   padding: 1px 4px;
   border-radius: 4px;
   border: 1px dashed var(--muted);
@@ -1533,8 +1557,8 @@ kbd {
   user-select: none;
   transition: opacity .12s;
 }
-.todo-item:hover .inline-add-btn { opacity: 0.7; }
-.inline-add-btn:hover { opacity: 1 !important; background: rgba(0,0,0,.05); }
+.todo-item:hover .inline-add-btn { display: inline-block; opacity: 0.55; }
+.todo-item:hover .inline-add-btn:hover { opacity: 1; background: rgba(0,0,0,.05); }
 
 /* ── Inline date input ───────────────────────────────────────────────────── */
 .inline-date-input {

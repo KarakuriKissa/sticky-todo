@@ -80,6 +80,14 @@ export function NoteWindow({ noteId }: Props) {
     return () => clearInterval(id);
   }, [flush]);
 
+  // Clear "NEW" badges on imported items a few seconds after the window opens.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      useNoteStore.getState().clearNewItemIds();
+    }, 6000);
+    return () => clearTimeout(t);
+  }, []);
+
   // Desktop reminders for overdue / soon-due tasks (extracted hook).
   useReminders({ items, note, settings });
 
@@ -217,10 +225,8 @@ export function NoteWindow({ noteId }: Props) {
 
   // Quick-add: extra indent levels added via Tab (and removed via Shift+Tab) before submit.
   const [quickAddIndent, setQuickAddIndent] = useState(0);
-  const submitQuickAdd = () => {
-    const raw = quickAddText;
-    if (!raw.trim()) return;
-    // Split on newlines — paste from spreadsheet/doc creates multiple tasks.
+  // Create one task per non-empty line. Shared by Enter-submit and multi-line paste.
+  const submitQuickAddLines = (raw: string) => {
     const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
     if (lines.length === 0) return;
     const last = items[items.length - 1];
@@ -232,6 +238,11 @@ export function NoteWindow({ noteId }: Props) {
     }
     setQuickAddText('');
     setQuickAddIndent(0);
+  };
+
+  const submitQuickAdd = () => {
+    if (!quickAddText.trim()) return;
+    submitQuickAddLines(quickAddText);
   };
 
   const close = () => {
@@ -498,6 +509,16 @@ export function NoteWindow({ noteId }: Props) {
             placeholder={`✏️ 新しいタスクを入力して Enter で追加…${quickAddIndent > 0 ? `  (インデント+${quickAddIndent})` : ''}`}
             value={quickAddText}
             onChange={(e) => setQuickAddText(e.target.value)}
+            onPaste={(e) => {
+              // A single-line <input> collapses pasted newlines into spaces.
+              // Intercept the raw clipboard text — if it has line breaks,
+              // create one task per line immediately.
+              const raw = e.clipboardData.getData('text');
+              if (/\r?\n/.test(raw.trim())) {
+                e.preventDefault();
+                submitQuickAddLines(raw);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); submitQuickAdd(); }
               if (e.key === 'Escape') { setQuickAddText(''); setQuickAddIndent(0); }

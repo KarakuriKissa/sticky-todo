@@ -32,6 +32,14 @@ const PRIORITY_OPTIONS = [
 
 export function NoteToolbar(p: ToolbarProps) {
   const selCount = p.selectedIds.size;
+  // Priority can only be applied to normal tasks — headings/separators have none.
+  // The ★ button stays visible at all times (so the toolbar layout never jumps)
+  // but is disabled unless at least one selected item is a normal task.
+  const items = useNoteStore.getState().items;
+  const hasNormalSelected = [...p.selectedIds].some((id) => {
+    const it = items.find((i) => i.id === id);
+    return it && (it.item_type ?? 'normal') === 'normal';
+  });
   return (
     <div className="note-type-bar">
       <button className="type-btn" onClick={() => p.addItem()} title="項目追加">＋</button>
@@ -54,11 +62,18 @@ export function NoteToolbar(p: ToolbarProps) {
         </select>
       )}
 
-      {p.settings.feature_priority && selCount > 0 && (
+      {p.settings.feature_priority && (
         <div style={{ position: 'relative' }}>
-          <button className="type-btn active-feature"
-            onClick={(e) => { e.stopPropagation(); p.setShowPriorityPicker((o) => !o); }}>★</button>
-          {p.showPriorityPicker && (
+          <button
+            className={`type-btn${hasNormalSelected ? ' active-feature' : ''}`}
+            disabled={!hasNormalSelected}
+            title={hasNormalSelected ? '選択タスクの優先度を設定' : 'タスクを選択すると優先度を設定できます'}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (hasNormalSelected) p.setShowPriorityPicker((o) => !o);
+            }}
+          >★</button>
+          {p.showPriorityPicker && hasNormalSelected && (
             <div className="status-dropdown"
               style={{ top: '100%', left: 0, bottom: 'auto' }}
               onClick={(e) => e.stopPropagation()}>

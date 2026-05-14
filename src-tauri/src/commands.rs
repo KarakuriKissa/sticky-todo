@@ -364,7 +364,7 @@ pub fn search_all_items(
             "SELECT i.id,i.note_id,i.parent_id,i.text,i.checked,i.indent,i.collapsed,i.locked,
                     i.status,i.assignees,i.assignee_person_id,i.memo,i.bold,i.priority,
                     i.start_date,i.end_date,i.limit_date,i.item_type,i.sort_order,i.archived,
-                    i.updated_at,i.dirty,n.title
+                    i.updated_at,i.dirty,i.strikethrough,n.title
              FROM todo_items i JOIN notes n ON n.id = i.note_id
              WHERE i.archived = 0 AND lower(i.text) LIKE '%' || ?1 || '%'
              LIMIT 200",
@@ -396,8 +396,9 @@ pub fn search_all_items(
                     archived: r.get::<_, i32>(19)? != 0,
                     updated_at: r.get(20)?,
                     dirty: r.get::<_, i32>(21)? != 0,
+                    strikethrough: r.get::<_, i32>(22).unwrap_or(0) != 0,
                 },
-                r.get::<_, String>(22)?,
+                r.get::<_, String>(23)?,
             ))
         })
         .map_err(|e| e.to_string())?;

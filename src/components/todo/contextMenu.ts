@@ -13,6 +13,7 @@ export interface CtxBuilderDeps {
   addItem: (afterId?: string, indent?: number, position?: 'before' | 'after') => string;
   updateItem: (id: string, patch: Partial<Item>) => void;
   toggleBold: (id: string) => void;
+  toggleStrike: (id: string) => void;
   toggleLock: (id: string) => void;
   indent: (id: string) => void;
   dedent: (id: string) => void;
@@ -48,6 +49,11 @@ export function buildContextMenu(d: CtxBuilderDeps): ContextMenuItem[] {
       label: `${item.bold ? '太字を解除' : '太字'}${selSuffix}`,
       icon: 'B', shortcut: 'Ctrl+B',
       action: () => d.toggleBold(item.id),
+    },
+    {
+      label: `${item.strikethrough ? '打ち消し線を解除' : '打ち消し線'}${selSuffix}`,
+      icon: 'S', shortcut: 'Ctrl+Shift+S',
+      action: () => d.toggleStrike(item.id),
     },
     {
       label: 'コメント', icon: '💬', shortcut: 'Ctrl+M',

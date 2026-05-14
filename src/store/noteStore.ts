@@ -33,6 +33,7 @@ interface NoteStore {
   deleteItem: (id: string) => void;
   toggleCheck: (id: string) => void;
   toggleBold: (id: string) => void;
+  toggleStrike: (id: string) => void;
   toggleLock: (id: string) => void;
   toggleCollapse: (id: string) => void;
   indent: (id: string) => void;
@@ -77,6 +78,11 @@ interface NoteStore {
   // TodoItem reads this and self-clears when it enters edit mode.
   pendingFocusId: string | null;
   clearPendingFocus: () => void;
+
+  // Items freshly imported — TodoItem shows a temporary "NEW" badge for these.
+  // Populated from localStorage on load(), auto-cleared a few seconds later.
+  newItemIds: Set<string>;
+  clearNewItemIds: () => void;
 }
 
 function now() {
@@ -105,6 +111,7 @@ function makeItem(noteId: string, partial: Partial<TodoItem> = {}): TodoItem {
     item_type: 'normal' as ItemType,
     sort_order: 0,
     archived: false,
+    strikethrough: false,
     updated_at: now(),
     dirty: true,
     ...partial,
@@ -159,6 +166,11 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     lastSavedAt: null,
     pendingFocusId: null,
     clearPendingFocus: () => set({ pendingFocusId: null }),
+    newItemIds: new Set(),
+    clearNewItemIds: () => {
+      try { localStorage.removeItem('sticky-todo:new-items'); } catch { /* ignore */ }
+      set({ newItemIds: new Set() });
+    },
     startDrag: (fromId) => set({ dragState: { fromId, overItemId: null, overPos: 'after' } }),
     updateDragOver: (overId, pos) => set((s) => s.dragState ? { dragState: { ...s.dragState, overItemId: overId, overPos: pos } } : {}),
     endDrag: () => set({ dragState: null }),
@@ -183,6 +195,16 @@ export const useNoteStore = create<NoteStore>((set, get) => {
           }
         }
       }
+
+      // Pick up any freshly-imported item IDs so TodoItem can flag them "NEW".
+      try {
+        const rawNew = localStorage.getItem('sticky-todo:new-items');
+        if (rawNew) {
+          const ids: string[] = JSON.parse(rawNew);
+          const mine = ids.filter((id) => items.some((it) => it.id === id));
+          if (mine.length > 0) set({ newItemIds: new Set(mine) });
+        }
+      } catch { /* ignore */ }
 
       const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order);
       // Only OVERWRITE if the user hasn't already started editing in this window
@@ -224,12 +246,8 @@ export const useNoteStore = create<NoteStore>((set, get) => {
         inheritedIndent = allItems[allItems.length - 1].indent;
       }
 
-      // Default deadline = 10 days from now (date only, ISO YYYY-MM-DD).
-      const tenDays = new Date();
-      tenDays.setDate(tenDays.getDate() + 10);
-      const limit_date = tenDays.toISOString().slice(0, 10);
-
-      const newItem = makeItem(noteId, { indent: inheritedIndent, limit_date });
+      // New tasks start with NO deadline — the user sets one only if needed.
+      const newItem = makeItem(noteId, { indent: inheritedIndent });
       let items = allItems;
 
       if (afterId) {
@@ -301,6 +319,16 @@ export const useNoteStore = create<NoteStore>((set, get) => {
       mutate((items) =>
         items.map((i) =>
           ids.has(i.id) ? { ...i, bold: !i.bold, updated_at: now(), dirty: true } : i,
+        ),
+      );
+    },
+
+    toggleStrike: (id: string) => {
+      const { selectedIds } = get();
+      const ids = selectedIds.has(id) ? selectedIds : new Set([id]);
+      mutate((items) =>
+        items.map((i) =>
+          ids.has(i.id) ? { ...i, strikethrough: !i.strikethrough, updated_at: now(), dirty: true } : i,
         ),
       );
     },

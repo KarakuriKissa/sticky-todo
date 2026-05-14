@@ -5,7 +5,7 @@ import { useAppStore } from '../store/appStore';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { renderTextWithLinks } from './todo/textRender';
 import { StatusBadge, PriorityBadge, AssigneeBadge, DateBadge } from './todo/badges';
-import { InlineStatusPicker, InlineAssigneePicker, InlineDatePicker } from './todo/inlinePickers';
+import { InlineStatusPicker, InlineAssigneePicker, InlineDatePicker, InlinePriorityPicker } from './todo/inlinePickers';
 import { buildContextMenu } from './todo/contextMenu';
 import { makeRowKeyDown } from './todo/rowKeyboard';
 
@@ -22,12 +22,13 @@ interface Props {
 
 export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMode, activeGroupId, searchTerm, isCurrentMatch }: Props) {
   const {
-    updateItem, deleteItem, toggleCheck, toggleBold, toggleLock, toggleCollapse,
+    updateItem, deleteItem, toggleCheck, toggleBold, toggleStrike, toggleLock, toggleCollapse,
     indent, dedent, addItem, selectedIds, toggleSelected, moveItem,
     duplicateItem, setSelected, dragState, startDrag, updateDragOver, endDrag,
     moveSelectedItems, deleteSelected, duplicateSelected, lockSelected,
-    indentSelected, dedentSelected,
+    indentSelected, dedentSelected, newItemIds,
   } = useNoteStore();
+  const isNewlyImported = newItemIds.has(item.id);
   const { statuses, settings, assigneePersons, assigneeGroups } = useAppStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -60,7 +61,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
 
   const ctxItems: ContextMenuItem[] = buildContextMenu({
     item, isInSel, selSuffix, selectedIds,
-    addItem, updateItem, toggleBold, toggleLock,
+    addItem, updateItem, toggleBold, toggleStrike, toggleLock,
     indent, dedent, duplicateItem, deleteItem,
     indentSelected, dedentSelected, lockSelected,
     duplicateSelected, deleteSelected,
@@ -170,6 +171,9 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
       e.preventDefault(); toggleBold(item.id);
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault(); toggleStrike(item.id);
     }
   };
 
@@ -421,7 +425,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         <input
           ref={inputRef}
           data-text-input=""
-          className={`todo-text${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}`}
+          className={`todo-text${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}${item.strikethrough ? ' strike' : ''}`}
           value={item.text}
           readOnly={item.locked}
           onChange={(e) => !item.locked && updateItem(item.id, { text: e.target.value })}
@@ -435,7 +439,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
       ) : (
         <div
           data-text-input=""
-          className={`todo-text todo-text-view${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}`}
+          className={`todo-text todo-text-view${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}${item.strikethrough ? ' strike' : ''}`}
           onClick={(e) => { e.stopPropagation(); onRowClick(e); }}
           onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
           onMouseDown={(e) => e.stopPropagation()}
@@ -443,6 +447,9 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           {item.text ? renderTextWithLinks(item.text, searchTerm) : <span className="todo-text-placeholder"></span>}
         </div>
       )}
+
+      {/* "NEW" badge for freshly-imported items (auto-clears after a few seconds) */}
+      {isNewlyImported && <span className="new-item-badge">NEW</span>}
 
       {/* Badges — fixed-width columns: 担当者 | ステータス | 期日 */}
       <div className="todo-badges">
@@ -476,13 +483,19 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           </div>
         )}
 
-        {/* ── Priority (compact, after the main columns) ── */}
-        {settings.feature_priority && item.priority && (
-          <PriorityBadge
-            priority={item.priority}
-            onSelect={(p) => updateMaybeBulk({ priority: p })}
-            mode={priorityMode ?? 'hml'}
-          />
+        {/* ── 優先度 column — always rendered so the icon appearing doesn't
+               shift the layout. Empty shows a faint inline picker. ── */}
+        {settings.feature_priority && (
+          <div className="badge-col badge-col-priority">
+            {item.priority
+              ? <PriorityBadge
+                  priority={item.priority}
+                  onSelect={(p) => updateMaybeBulk({ priority: p })}
+                  mode={priorityMode ?? 'hml'}
+                />
+              : <InlinePriorityPicker mode={priorityMode ?? 'hml'} onSelect={(p) => updateMaybeBulk({ priority: p })} />
+            }
+          </div>
         )}
 
         {/* ── Memo indicator ── */}

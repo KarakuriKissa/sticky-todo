@@ -84,6 +84,43 @@ export function InlineAssigneePicker({
   );
 }
 
+export function InlinePriorityPicker({
+  onSelect,
+  mode = 'hml',
+}: {
+  onSelect: (p: string | null) => void;
+  mode?: 'hml' | 'abc';
+}) {
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLSpanElement>(null);
+  const opts = mode === 'abc'
+    ? [{ v: 'high', l: 'A', c: '#ef4444' }, { v: 'medium', l: 'B', c: '#f97316' }, { v: 'low', l: 'C', c: '#22c55e' }]
+    : [{ v: 'high', l: '高', c: '#ef4444' }, { v: 'medium', l: '中', c: '#f97316' }, { v: 'low', l: '低', c: '#22c55e' }];
+  return (
+    <span
+      ref={btnRef}
+      className="inline-add-btn"
+      title="優先度を設定"
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        setAnchor((a) => a ? null : btnRef.current?.getBoundingClientRect() ?? null);
+      }}
+    >
+      ！＋
+      {anchor && (
+        <FloatingDropdown anchor={anchor} onClose={() => setAnchor(null)}>
+          {opts.map((o) => (
+            <div key={o.v} className="status-option" style={{ borderLeft: `3px solid ${o.c}` }}
+              onClick={() => { onSelect(o.v); setAnchor(null); }}>
+              {o.l}
+            </div>
+          ))}
+        </FloatingDropdown>
+      )}
+    </span>
+  );
+}
+
 export function InlineDatePicker({ onSelect }: { onSelect: (d: string | null) => void }) {
   const [open, setOpen] = useState(false);
   const [val, setVal] = useState('');

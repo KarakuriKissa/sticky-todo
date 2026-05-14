@@ -47,6 +47,8 @@ pub struct TodoItem {
     pub item_type: String,
     pub sort_order: i64,
     pub archived: bool,
+    #[serde(default)]
+    pub strikethrough: bool,
     pub updated_at: String,
     pub dirty: bool,
 }

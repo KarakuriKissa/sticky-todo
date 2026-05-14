@@ -92,12 +92,18 @@ async function importNote(
       item_type: (item?.item_type === 'heading' || item?.item_type === 'separator') ? item.item_type : 'normal',
       sort_order: typeof item?.sort_order === 'number' ? item.sort_order : idx,
       archived: !!item?.archived,
+      strikethrough: !!item?.strikethrough,
       updated_at: nowIso,
       dirty: true,
     }));
     await invoke('save_items', { items: newItems });
+    // Flag these items so the note window shows a temporary "NEW" badge
+    // instead of a blocking alert popup.
+    try {
+      localStorage.setItem('sticky-todo:new-items', JSON.stringify(newItems.map((i) => i.id)));
+    } catch { /* ignore */ }
   }
-  alert(`「${title}」としてインポートしました（タスク${srcItems.length}件）`);
+  // No alert — the new list simply appears in the launcher list.
 }
 
 
