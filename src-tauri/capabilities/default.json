@@ -22,6 +22,9 @@
     "core:window:allow-inner-size",
     "shell:allow-open",
     "dialog:default",
-    "notification:default"
+    "notification:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
   ]
 }

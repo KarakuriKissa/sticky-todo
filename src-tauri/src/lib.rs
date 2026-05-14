@@ -11,6 +11,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -84,6 +88,8 @@ pub fn run() {
             commands::write_text_file,
             commands::read_text_file,
             commands::show_launcher,
+            commands::backup_database,
+            commands::list_backups,
             commands::search_all_items,
         ])
         .run(tauri::generate_context!())

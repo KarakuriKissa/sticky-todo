@@ -74,6 +74,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   priority_mode: 'hml' as const,
   reopen_windows_on_start: true,
   reminder_interval_min: 30,
+  backup_interval_min: 60,
 };
 
 function now() {

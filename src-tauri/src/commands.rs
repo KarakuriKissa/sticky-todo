@@ -436,6 +436,69 @@ pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+// ── Automatic backups ──────────────────────────────────────────────────────
+// Copies the live DB into app_data_dir/backups/ with a timestamped name,
+// keeping only the most recent `keep` files (default 3).
+#[tauri::command]
+pub fn backup_database(app: AppHandle, db: State<'_, Database>) -> Result<String, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let backup_dir = data_dir.join("backups");
+    std::fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
+
+    // Flush WAL into the main DB file so the copy is complete.
+    {
+        let conn = db.conn.lock().map_err(|e| e.to_string())?;
+        let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+    }
+
+    let src = data_dir.join("sticky-todo.db");
+    let ts = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+    let dest = backup_dir.join(format!("backup-{}.db", ts));
+    std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+
+    // Prune — keep only the 3 newest backups.
+    let mut files: Vec<_> = std::fs::read_dir(&backup_dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_name().to_string_lossy().starts_with("backup-")
+                && e.file_name().to_string_lossy().ends_with(".db")
+        })
+        .collect();
+    files.sort_by_key(|e| e.file_name());
+    while files.len() > 3 {
+        let oldest = files.remove(0);
+        let _ = std::fs::remove_file(oldest.path());
+    }
+    Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn list_backups(app: AppHandle) -> Result<Vec<(String, String)>, String> {
+    // Returns (full_path, filename) pairs, newest first.
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let backup_dir = data_dir.join("backups");
+    if !backup_dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut files: Vec<_> = std::fs::read_dir(&backup_dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let n = e.file_name().to_string_lossy().to_string();
+            n.starts_with("backup-") && n.ends_with(".db")
+        })
+        .map(|e| {
+            (
+                e.path().to_string_lossy().to_string(),
+                e.file_name().to_string_lossy().to_string(),
+            )
+        })
+        .collect();
+    files.sort_by(|a, b| b.1.cmp(&a.1)); // newest first
+    Ok(files)
+}
+
 #[tauri::command]
 pub fn read_text_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())

@@ -33,6 +33,54 @@ export function Launcher() {
     });
   }, []);
 
+  // Automatic periodic DB backup (keeps the 3 most recent in app_data/backups).
+  // Interval is configurable in settings; 0 disables it.
+  useEffect(() => {
+    const mins = settings.backup_interval_min ?? 60;
+    if (!mins || mins <= 0) return;
+    // Run one shortly after launch, then on the configured interval.
+    const first = setTimeout(() => { invoke('backup_database').catch(() => {}); }, 30_000);
+    const id = setInterval(() => { invoke('backup_database').catch(() => {}); }, mins * 60_000);
+    return () => { clearTimeout(first); clearInterval(id); };
+  }, [settings.backup_interval_min]);
+
+  // Restore the launcher window to wherever it was last closed, and keep that
+  // position saved so reopening (incl. via the 🗂 button) lands in the same spot.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let moveTimer: ReturnType<typeof setTimeout> | null = null;
+    (async () => {
+      const { getCurrentWindow, LogicalPosition } = await import('@tauri-apps/api/window');
+      const win = getCurrentWindow();
+      // Restore saved position.
+      try {
+        const raw = localStorage.getItem('sticky-todo:launcher-pos');
+        if (raw) {
+          const { x, y } = JSON.parse(raw);
+          if (typeof x === 'number' && typeof y === 'number') {
+            await win.setPosition(new LogicalPosition(x, y));
+          }
+        }
+      } catch { /* ignore */ }
+      // Persist position on move (debounced) so it survives a close.
+      try {
+        unlisten = await win.onMoved(({ payload }) => {
+          if (moveTimer) clearTimeout(moveTimer);
+          moveTimer = setTimeout(() => {
+            win.scaleFactor().then((scale) => {
+              try {
+                localStorage.setItem('sticky-todo:launcher-pos', JSON.stringify({
+                  x: payload.x / scale, y: payload.y / scale,
+                }));
+              } catch { /* ignore */ }
+            }).catch(() => {});
+          }, 400);
+        });
+      } catch { /* ignore */ }
+    })();
+    return () => { if (moveTimer) clearTimeout(moveTimer); unlisten?.(); };
+  }, []);
+
   // Background update check on launcher open. Compares the latest GitHub
   // Actions build run number against the one we last seen and shows a banner
   // if a newer build is available.

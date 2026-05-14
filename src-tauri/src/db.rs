@@ -333,11 +333,6 @@ impl Database {
         Ok(())
     }
 
-    pub fn delete_category(&self, id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM categories WHERE id=?1", [id])?;
-        Ok(())
-    }
 
     // ── Statuses ───────────────────────────────────────────────────────────────
 

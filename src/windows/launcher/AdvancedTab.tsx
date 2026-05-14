@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useState } from 'react';
 import type { AppSettings } from '../../types';
 
 interface Props {
@@ -7,8 +8,40 @@ interface Props {
 }
 
 // Advanced settings — deadline warning, desktop notification interval,
-// language placeholder, sync placeholder, DB export/import/delete actions.
+// autostart, DB export/import/delete actions.
 export function AdvancedTab({ draft, setDraft }: Props) {
+  // PC autostart — managed by the OS, not part of AppSettings, so we read/write
+  // it directly via the autostart plugin.
+  const [autostart, setAutostart] = useState(false);
+  const [autostartBusy, setAutostartBusy] = useState(false);
+  useEffect(() => {
+    import('@tauri-apps/plugin-autostart')
+      .then(({ isEnabled }) => isEnabled())
+      .then(setAutostart)
+      .catch(() => {});
+  }, []);
+  const toggleAutostart = async (on: boolean) => {
+    setAutostartBusy(true);
+    try {
+      const { enable, disable } = await import('@tauri-apps/plugin-autostart');
+      if (on) await enable(); else await disable();
+      setAutostart(on);
+    } catch (e) {
+      alert('自動起動の設定に失敗しました: ' + e);
+    } finally {
+      setAutostartBusy(false);
+    }
+  };
+
+  // Backup list — (full_path, filename) pairs, newest first.
+  const [backups, setBackups] = useState<[string, string][]>([]);
+  const refreshBackups = async () => {
+    try {
+      setBackups(await invoke<[string, string][]>('list_backups'));
+    } catch { /* ignore */ }
+  };
+  useEffect(() => { refreshBackups(); }, []);
+
   const onExport = async () => {
     const { save } = await import('@tauri-apps/plugin-dialog');
     const ts = new Date().toISOString().slice(0, 10);
@@ -42,6 +75,27 @@ export function AdvancedTab({ draft, setDraft }: Props) {
     if (!ok) return;
     try { await invoke('import_database', { srcPath: path }); }
     catch (e) { alert('インポート失敗: ' + e); }
+  };
+
+  const onBackupNow = async () => {
+    try {
+      await invoke<string>('backup_database');
+      await refreshBackups();
+      alert('バックアップを作成しました');
+    } catch (e) {
+      alert('バックアップ失敗: ' + e);
+    }
+  };
+
+  const onRestoreBackup = async (path: string, name: string) => {
+    const { confirm } = await import('@tauri-apps/plugin-dialog');
+    const ok = await confirm(
+      `現在のデータを「${name}」で完全に置き換えます。\nこの操作は取り消せません。続行しますか？`,
+      { title: 'バックアップから復元', kind: 'warning' },
+    );
+    if (!ok) return;
+    try { await invoke('import_database', { srcPath: path }); }
+    catch (e) { alert('復元失敗: ' + e); }
   };
 
   const onDelete = async () => {
@@ -109,6 +163,13 @@ export function AdvancedTab({ draft, setDraft }: Props) {
           onChange={(e) => setDraft((d) => ({ ...d, reopen_windows_on_start: e.target.checked }))} />
         前回開いていたリストを起動時に復元する
       </label>
+      <label className="toggle-row" style={{ marginTop: 4 }}>
+        <input type="checkbox"
+          checked={autostart}
+          disabled={autostartBusy}
+          onChange={(e) => toggleAutostart(e.target.checked)} />
+        Windows 起動時に自動でアプリを立ち上げる
+      </label>
 
       <h3 style={{ marginTop: 20 }}>データベース</h3>
       <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
@@ -120,6 +181,35 @@ export function AdvancedTab({ draft, setDraft }: Props) {
         <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onImport}>📥 インポート</button>
         <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }} onClick={onDelete}>🗑️ データベースを削除</button>
       </div>
+
+      <h3 style={{ marginTop: 20 }}>自動バックアップ</h3>
+      <p style={para}>
+        一定間隔でデータベースのバックアップを自動作成します（最新3つを保持）。<br />
+        <strong>0 にすると自動バックアップを無効化</strong>します。
+      </p>
+      <label className="toggle-row" style={{ gap: 6 }}>
+        バックアップ間隔
+        <input type="number" min={0} max={1440}
+          value={draft.backup_interval_min ?? 60}
+          onChange={(e) => setDraft((d) => ({ ...d, backup_interval_min: Number(e.target.value) }))}
+          style={{ ...numberInput, width: 64 }} />
+        分ごと（0 で無効）
+      </label>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onBackupNow}>💾 今すぐバックアップ</button>
+      </div>
+      {backups.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>保存済みバックアップ（クリックで復元）:</p>
+          {backups.map(([path, name]) => (
+            <div key={path} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '3px 0' }}>
+              <span style={{ flex: 1, fontFamily: 'monospace' }}>{name}</span>
+              <button className="btn-secondary" style={{ fontSize: 11, padding: '2px 8px' }}
+                onClick={() => onRestoreBackup(path, name)}>復元</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <h3 style={{ marginTop: 20 }}>⚠️ アプリの初期化</h3>
       <div style={{ fontSize: 12, lineHeight: 1.7, padding: '10px 12px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 6, marginBottom: 10 }}>
