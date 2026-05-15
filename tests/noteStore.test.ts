@@ -109,10 +109,10 @@ describe('noteStore', () => {
     expect(itemB?.indent).toBe(2);
   });
 
-  it('new tasks get a default deadline 10 days out', () => {
+  it('new tasks start with no deadline set', () => {
     useNoteStore.getState().setNote(mkNote());
     const id = useNoteStore.getState().addItem();
     const item = useNoteStore.getState().items.find((i) => i.id === id);
-    expect(item?.limit_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(item?.limit_date).toBeNull();
   });
 });
