@@ -89,7 +89,9 @@ export function makeRowKeyDown(d: RowKeyboardDeps) {
     if (ctrl && e.key === 'm') { e.preventDefault(); d.setMemoText(d.item.memo ?? ''); d.setShowMemoEdit(true); return; }
     if (ctrl && (e.key === 'h' || e.key === 'H')) {
       e.preventDefault();
-      d.updateItem(d.item.id, { item_type: e.shiftKey ? 'normal' : 'heading' });
+      const next = e.shiftKey ? 'normal' : 'heading';
+      const ids = d.isInSel ? [...d.selectedIds] : [d.item.id];
+      ids.forEach((id) => d.updateItem(id, { item_type: next }));
       return;
     }
     if (ctrl && e.key === 'e') {

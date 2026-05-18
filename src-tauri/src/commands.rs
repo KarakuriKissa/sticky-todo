@@ -412,6 +412,18 @@ pub fn search_all_items(
 }
 
 #[tauri::command]
+pub async fn center_launcher(app: AppHandle) -> Result<(), String> {
+    let win = app
+        .get_webview_window("launcher")
+        .ok_or_else(|| "launcher window not found".to_string())?;
+    win.center().map_err(|e| e.to_string())?;
+    win.show().ok();
+    win.unminimize().ok();
+    win.set_focus().ok();
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn show_launcher(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("launcher") {
         win.show().map_err(|e| e.to_string())?;

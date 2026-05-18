@@ -88,6 +88,7 @@ pub fn run() {
             commands::write_text_file,
             commands::read_text_file,
             commands::show_launcher,
+            commands::center_launcher,
             commands::backup_database,
             commands::list_backups,
             commands::search_all_items,

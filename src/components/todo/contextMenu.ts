@@ -60,8 +60,27 @@ export function buildContextMenu(d: CtxBuilderDeps): ContextMenuItem[] {
       action: d.openMemoEditor,
     },
     { label: '', separator: true, action: () => {} },
-    { label: '見出しに変更', icon: 'H', shortcut: 'Ctrl+H', action: () => d.updateItem(item.id, { item_type: 'heading' }) },
-    { label: '通常に変更', icon: '•', shortcut: 'Ctrl+Shift+H', action: () => d.updateItem(item.id, { item_type: 'normal' }) },
+    {
+      label: `見出しに変更${selSuffix}`, icon: 'H', shortcut: 'Ctrl+H',
+      action: () => {
+        const ids = isInSel ? [...selectedIds] : [item.id];
+        ids.forEach((id) => d.updateItem(id, { item_type: 'heading' }));
+      },
+    },
+    {
+      label: `通常に変更${selSuffix}`, icon: '•', shortcut: 'Ctrl+Shift+H',
+      action: () => {
+        const ids = isInSel ? [...selectedIds] : [item.id];
+        ids.forEach((id) => d.updateItem(id, { item_type: 'normal' }));
+      },
+    },
+    {
+      label: `区切り線に変更${selSuffix}`, icon: '—',
+      action: () => {
+        const ids = isInSel ? [...selectedIds] : [item.id];
+        ids.forEach((id) => d.updateItem(id, { item_type: 'separator' }));
+      },
+    },
     { label: '', separator: true, action: () => {} },
     {
       label: `インデント${selSuffix}`, icon: '→', shortcut: 'Tab',
