@@ -372,7 +372,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
   updateNote: (note: Note) => {
     const updated = { ...note, updated_at: now(), dirty: true };
     set((s) => ({ notes: s.notes.map((n) => (n.id === note.id ? updated : n)) }));
-    debouncedSaveNote(updated);
+    // Save IMMEDIATELY (not debounced). The previous 500ms debounce caused a
+    // race: editing a title in the launcher then opening the note window
+    // before the debounce fired meant the note window loaded the stale title
+    // from the DB, and its close-time geometry save then wrote that stale
+    // title back, undoing the user's edit.
+    invoke('save_note', { note: updated }).catch((e) => log.error('[updateNote] save_note failed:', e));
     emit('note-updated', { id: updated.id, title: updated.title, color: updated.color }).catch(() => {});
   },
 
@@ -552,17 +557,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 }));
 
-// ── Debounced save ────────────────────────────────────────────────────────────
-const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-function debouncedSaveNote(note: Note) {
-  const prev = saveTimers.get(note.id);
-  if (prev) clearTimeout(prev);
-  saveTimers.set(
-    note.id,
-    setTimeout(() => {
-      invoke('save_note', { note }).catch((e) => log.error(e));
-      saveTimers.delete(note.id);
-    }, 500),
-  );
-}
+// (Old debouncedSaveNote was removed — updateNote now saves immediately. The
+// debounce caused a race where opening a note window before the save fired
+// loaded a stale title from the DB.)
