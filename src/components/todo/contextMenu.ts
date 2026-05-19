@@ -54,7 +54,7 @@ export function buildContextMenu(d: CtxBuilderDeps): ContextMenuItem[] {
     },
     {
       label: `${item.strikethrough ? '打ち消し線を解除' : '打ち消し線'}${selSuffix}`,
-      icon: 'S', shortcut: 'Ctrl+Shift+S',
+      icon: 'S', shortcut: 'Ctrl+Alt+S',
       action: () => d.toggleStrike(item.id),
     },
     {

@@ -174,7 +174,8 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
       e.preventDefault(); toggleBold(item.id);
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 's' || e.key === 'S')) {
+    // Ctrl+Alt+S (avoids Ctrl+Shift+S which is "Save As" in many DCC tools).
+    if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 's' || e.key === 'S')) {
       e.preventDefault(); toggleStrike(item.id);
     }
   };

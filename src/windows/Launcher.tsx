@@ -7,8 +7,12 @@ import type { SortMode } from '../types';
 import { log } from '../utils/log';
 import { SettingsModal } from './launcher/SettingsModal';
 
+// Sort modes are ONE-SHOT: picking name_asc reorders the list NOW and then
+// the dropdown returns to "保存された順" (i.e. the persisted manual order).
+// This stops the previous behavior where dragging a list under a sort mode
+// silently snapped back to alphabetical / date order.
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'manual',       label: '手動' },
+  { value: 'manual',       label: '保存された順' },
   { value: 'name_asc',     label: '名前 昇順' },
   { value: 'name_desc',    label: '名前 降順' },
   { value: 'created_asc',  label: '作成日 古い順' },
@@ -115,9 +119,12 @@ export function Launcher() {
         e.preventDefault();
         searchRef.current?.focus();
       }
-      // Ctrl+Shift+0 (or Ctrl+Home) — re-center the launcher on the screen
-      // for when it has wandered off-screen or onto a disconnected monitor.
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '0' || e.key === 'Home')) {
+      // Ctrl+Shift+0 — re-center the launcher on the screen for when it has
+      // wandered off-screen or onto a disconnected monitor.
+      // NOTE: Shift+0 produces ")" on US keyboards, so check e.code (which is
+      // layout-independent) AND fall back to the literal characters.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey &&
+          (e.code === 'Digit0' || e.key === '0' || e.key === ')' || e.key === 'Home')) {
         e.preventDefault();
         invoke('center_launcher').catch(() => {});
       }
@@ -206,7 +213,35 @@ export function Launcher() {
   };
 
   const setSort = async (mode: SortMode) => {
-    await saveSettings({ ...settings, sort_mode: mode });
+    // Sort modes other than 'manual' are one-shot: apply NOW and persist the
+    // resulting order as the new manual baseline, then reset the dropdown.
+    if (mode === 'manual') {
+      await saveSettings({ ...settings, sort_mode: 'manual' });
+      return;
+    }
+    const { notes, categories, reorderNotes } = useAppStore.getState();
+    // Use the existing `sorted` logic by temporarily applying the mode locally.
+    const cmp = (() => {
+      switch (mode) {
+        case 'name_asc':  return (a: typeof notes[number], b: typeof notes[number]) => a.title.localeCompare(b.title, 'ja');
+        case 'name_desc': return (a: typeof notes[number], b: typeof notes[number]) => b.title.localeCompare(a.title, 'ja');
+        case 'created_asc':  return (a: typeof notes[number], b: typeof notes[number]) => (a.created_at || a.updated_at).localeCompare(b.created_at || b.updated_at);
+        case 'created_desc': return (a: typeof notes[number], b: typeof notes[number]) => (b.created_at || b.updated_at).localeCompare(a.created_at || a.updated_at);
+        case 'group_asc': {
+          const m = new Map(categories.map(c => [c.id, c.name]));
+          return (a: typeof notes[number], b: typeof notes[number]) => (m.get(a.category_id ?? '') ?? '').localeCompare(m.get(b.category_id ?? '') ?? '', 'ja');
+        }
+        case 'group_desc': {
+          const m = new Map(categories.map(c => [c.id, c.name]));
+          return (a: typeof notes[number], b: typeof notes[number]) => (m.get(b.category_id ?? '') ?? '').localeCompare(m.get(a.category_id ?? '') ?? '', 'ja');
+        }
+      }
+      return () => 0;
+    })();
+    const ids = [...notes].sort(cmp).map((n) => n.id);
+    reorderNotes(ids);
+    // Always keep sort_mode = 'manual' so further drags survive.
+    await saveSettings({ ...settings, sort_mode: 'manual' });
   };
 
   const onResizerMouseDown = (e: React.MouseEvent) => {
