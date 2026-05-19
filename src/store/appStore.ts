@@ -26,6 +26,7 @@ interface AppStore {
 
   load: () => Promise<void>;
   reopenSavedWindows: () => Promise<void>;
+  reseedTutorial: () => Promise<void>;
 
   // Notes
   createNote: (title?: string) => Promise<Note>;
@@ -333,6 +334,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
         log.error('[appStore] tutorial seed failed:', e);
       }
     }
+  },
+
+  reseedTutorial: async () => {
+    // Re-add the sample tutorial lists without touching existing data.
+    // Bypasses the _seedInProgress guard via direct _doSeedTutorial.
+    const { categories, statuses } = get();
+    await seedTutorial(categories, statuses);
+    const [reloadedNotes, reloadedGroups, reloadedPersons] = await Promise.all([
+      invoke<Note[]>('get_all_notes'),
+      invoke<AssigneeGroup[]>('get_assignee_groups'),
+      invoke<AssigneePerson[]>('get_assignee_persons'),
+    ]);
+    set({ notes: reloadedNotes, assigneeGroups: reloadedGroups, assigneePersons: reloadedPersons });
   },
 
   reopenSavedWindows: async () => {

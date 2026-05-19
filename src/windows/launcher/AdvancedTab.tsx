@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
+import { useAppStore } from '../../store/appStore';
 import type { AppSettings } from '../../types';
 
 interface Props {
@@ -181,6 +182,24 @@ export function AdvancedTab({ draft, setDraft }: Props) {
         <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onImport}>📥 インポート</button>
         <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }} onClick={onDelete}>🗑️ データベースを削除</button>
       </div>
+
+      <h3 style={{ marginTop: 20 }}>サンプルリスト</h3>
+      <p style={para}>
+        初回起動時のチュートリアル用サンプルリスト（ようこそ／今週のタスク／買い物リスト）を
+        既存のデータを残したまま追加します。
+      </p>
+      <button
+        className="btn-secondary"
+        style={{ fontSize: 12, padding: '5px 12px' }}
+        onClick={async () => {
+          try {
+            await useAppStore.getState().reseedTutorial();
+            alert('サンプルリストを追加しました');
+          } catch (e) {
+            alert('追加に失敗: ' + e);
+          }
+        }}
+      >📝 サンプルリストを追加</button>
 
       <h3 style={{ marginTop: 20 }}>自動バックアップ</h3>
       <p style={para}>

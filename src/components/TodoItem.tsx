@@ -334,6 +334,13 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           e.stopPropagation();
           setSelected(new Set([item.id]));
         }}
+        onMouseEnter={(e) => {
+          if (item.memo) {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setHoverMemo({ above: rect.top > window.innerHeight * 0.5 });
+          }
+        }}
+        onMouseLeave={() => setHoverMemo(null)}
       >
         {!item.locked && (
           <span
@@ -360,7 +367,34 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           onMouseDown={(e) => e.stopPropagation()}
           placeholder="見出し"
         />
+        {/* Memo indicator — identical to normal items so headings can carry
+            comments too (prevents losing notes when toggling task↔heading). */}
+        {settings.feature_memo && item.memo && (
+          <span className="memo-indicator" title={item.memo} onClick={openComment}>💬</span>
+        )}
         {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems} onClose={() => setCtx(null)} />}
+        {item.memo && hoverMemo && !showMemoEdit && (
+          <div className={`memo-tooltip${hoverMemo.above ? ' memo-tooltip-above' : ''}`}>
+            <div className="memo-tooltip-text">{item.memo}</div>
+          </div>
+        )}
+        {showMemoEdit && (
+          <div className={`comment-popup${commentAbove ? ' comment-popup-above' : ''}`} onClick={(e) => e.stopPropagation()}>
+            <div className="memo-popup-title">コメント</div>
+            <textarea
+              className="memo-textarea"
+              autoFocus
+              value={memoText}
+              onChange={(e) => setMemoText(e.target.value)}
+              placeholder="コメントを入力…"
+              rows={4}
+            />
+            <div className="memo-popup-actions">
+              <button className="btn-primary" onClick={saveMemo}>保存</button>
+              <button className="btn-secondary" onClick={() => setShowMemoEdit(false)}>キャンセル</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

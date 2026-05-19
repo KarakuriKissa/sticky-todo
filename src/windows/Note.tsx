@@ -202,6 +202,47 @@ export function NoteWindow({ noteId }: Props) {
           if (n > 0) e.preventDefault();
         }
       }
+
+      // Arrow-key selection navigation: when something is selected and the user
+      // isn't editing text, ↑/↓ shifts the selection by one item. Works even
+      // without the row being focused (row-level handler already covers focused
+      // rows; this catches the "clicked, then pressed arrow" path).
+      if (!isInputFocused && !e.shiftKey && !e.ctrlKey && !e.metaKey &&
+          (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        const st = useNoteStore.getState();
+        if (st.selectedIds.size === 0) return;
+        const ids = [...st.selectedIds];
+        const items = st.items.filter((i) => !i.archived);
+        // Anchor = last selected in display order for ↓, first for ↑.
+        let anchorIdx: number;
+        if (e.key === 'ArrowDown') {
+          anchorIdx = items.length - 1;
+          for (let i = items.length - 1; i >= 0; i--) {
+            if (ids.includes(items[i].id)) { anchorIdx = i; break; }
+          }
+          const next = items[anchorIdx + 1];
+          if (next) {
+            e.preventDefault();
+            st.setSelected(new Set([next.id]));
+            setTimeout(() => {
+              document.querySelector<HTMLElement>(`[data-item-id="${next.id}"]`)?.focus();
+            }, 0);
+          }
+        } else {
+          anchorIdx = 0;
+          for (let i = 0; i < items.length; i++) {
+            if (ids.includes(items[i].id)) { anchorIdx = i; break; }
+          }
+          const prev = items[anchorIdx - 1];
+          if (prev) {
+            e.preventDefault();
+            st.setSelected(new Set([prev.id]));
+            setTimeout(() => {
+              document.querySelector<HTMLElement>(`[data-item-id="${prev.id}"]`)?.focus();
+            }, 0);
+          }
+        }
+      }
     };
     // capture: true so we beat WebView2's built-in Ctrl+F handler.
     window.addEventListener('keydown', handler, true);
@@ -376,8 +417,28 @@ export function NoteWindow({ noteId }: Props) {
   const noteColor = note?.color ?? '#fef08a';
   const titleText = note?.title ?? '';
 
+  // Return the id of the last-selected item (in display order), or undefined.
+  // Used so toolbar add-buttons insert below the user's current selection
+  // instead of always appending to the end of the list.
+  const anchorAfterSelection = (): string | undefined => {
+    if (selectedIds.size === 0) return undefined;
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (selectedIds.has(items[i].id)) return items[i].id;
+    }
+    return undefined;
+  };
+
+  // Toolbar "+" button — insert below the selection (or at end if none).
+  const addItemFromToolbar = (): string => {
+    const after = anchorAfterSelection();
+    const id = addItem(after, undefined);
+    if (id) useNoteStore.setState({ pendingFocusId: id });
+    return id;
+  };
+
   const addTyped = (type: ItemType) => {
-    const id = addItem(undefined, 0);
+    const after = anchorAfterSelection();
+    const id = addItem(after, after ? undefined : 0);
     if (!id) return;
     useNoteStore.getState().updateItem(id, { item_type: type });
     // Separators have no text, no need to enter edit mode.
@@ -513,7 +574,7 @@ export function NoteWindow({ noteId }: Props) {
         showArchived={showArchived}
         setShowArchived={setShowArchived}
         archivedCount={archivedCount}
-        addItem={addItem}
+        addItem={addItemFromToolbar}
         addTyped={addTyped}
       />
 
