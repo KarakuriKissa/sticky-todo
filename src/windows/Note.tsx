@@ -191,6 +191,17 @@ export function NoteWindow({ noteId }: Props) {
         e.preventDefault();
         setShowCheatSheet((v) => !v);
       }
+      // Task-level copy / paste — only when not editing text (so it doesn't
+      // hijack the user's normal text Ctrl+C/V in inputs).
+      if ((e.ctrlKey || e.metaKey) && !isInputFocused) {
+        if (e.key === 'c' || e.key === 'C') {
+          const n = useNoteStore.getState().copySelectedToClipboard();
+          if (n > 0) e.preventDefault();
+        } else if (e.key === 'v' || e.key === 'V') {
+          const n = useNoteStore.getState().pasteFromClipboard();
+          if (n > 0) e.preventDefault();
+        }
+      }
     };
     // capture: true so we beat WebView2's built-in Ctrl+F handler.
     window.addEventListener('keydown', handler, true);
@@ -226,15 +237,30 @@ export function NoteWindow({ noteId }: Props) {
   // Quick-add: extra indent levels added via Tab (and removed via Shift+Tab) before submit.
   const [quickAddIndent, setQuickAddIndent] = useState(0);
   // Create one task per non-empty line. Shared by Enter-submit and multi-line paste.
+  // If something is selected, insert below the last selected item (in display order).
+  // Otherwise append to the end of the list.
   const submitQuickAddLines = (raw: string) => {
     const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
     if (lines.length === 0) return;
-    const last = items[items.length - 1];
-    const baseIndent = last ? last.indent : 0;
+    // Find anchor item to insert after.
+    let anchorId: string | undefined;
+    if (selectedIds.size > 0) {
+      // Last selected item in current display order.
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (selectedIds.has(items[i].id)) { anchorId = items[i].id; break; }
+      }
+    }
+    const anchor = anchorId ? items.find((i) => i.id === anchorId) : items[items.length - 1];
+    const baseIndent = anchor ? anchor.indent : 0;
     const indent = Math.max(0, Math.min(6, baseIndent + quickAddIndent));
+    // Insert sequentially after the previously-inserted item so paste-order is preserved.
+    let prevId = anchorId;
     for (const line of lines) {
-      const id = addItem(undefined, indent);
-      if (id) useNoteStore.getState().updateItem(id, { text: line });
+      const id = addItem(prevId, indent);
+      if (id) {
+        useNoteStore.getState().updateItem(id, { text: line });
+        prevId = id;
+      }
     }
     setQuickAddText('');
     setQuickAddIndent(0);

@@ -83,6 +83,11 @@ interface NoteStore {
   // Populated from localStorage on load(), auto-cleared a few seconds later.
   newItemIds: Set<string>;
   clearNewItemIds: () => void;
+
+  // Internal task clipboard. Stored in localStorage so copy-paste works across
+  // different note windows of the same app.
+  copySelectedToClipboard: () => number;
+  pasteFromClipboard: () => number;
 }
 
 function now() {
@@ -170,6 +175,52 @@ export const useNoteStore = create<NoteStore>((set, get) => {
     clearNewItemIds: () => {
       try { localStorage.removeItem('sticky-todo:new-items'); } catch { /* ignore */ }
       set({ newItemIds: new Set() });
+    },
+
+    copySelectedToClipboard: () => {
+      const { selectedIds, items } = get();
+      if (selectedIds.size === 0) return 0;
+      // Preserve display order from the current items array.
+      const copied = items.filter((i) => selectedIds.has(i.id)).map((i) => ({ ...i }));
+      try {
+        localStorage.setItem('sticky-todo:task-clipboard', JSON.stringify(copied));
+      } catch { /* ignore */ }
+      return copied.length;
+    },
+
+    pasteFromClipboard: () => {
+      const raw = localStorage.getItem('sticky-todo:task-clipboard');
+      if (!raw) return 0;
+      let parsed: TodoItem[] = [];
+      try { parsed = JSON.parse(raw); } catch { return 0; }
+      if (!Array.isArray(parsed) || parsed.length === 0) return 0;
+      const noteId = get().note?.id;
+      if (!noteId) return 0;
+      const { selectedIds, items } = get();
+      // Find anchor: bottom-most selected item in display order, or end of list.
+      let anchorIdx = items.length - 1;
+      if (selectedIds.size > 0) {
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (selectedIds.has(items[i].id)) { anchorIdx = i; break; }
+        }
+      }
+      const nowIso = new Date().toISOString();
+      // Map old IDs → new IDs so parent_id within the copied set still resolves.
+      const idMap = new Map<string, string>();
+      for (const p of parsed) idMap.set(p.id, crypto.randomUUID());
+      const fresh: TodoItem[] = parsed.map((p) => ({
+        ...p,
+        id: idMap.get(p.id)!,
+        note_id: noteId,
+        parent_id: p.parent_id && idMap.has(p.parent_id) ? idMap.get(p.parent_id)! : null,
+        updated_at: nowIso,
+        dirty: true,
+      }));
+      const next = [...items.slice(0, anchorIdx + 1), ...fresh, ...items.slice(anchorIdx + 1)];
+      mutate(() => next);
+      // Select the freshly pasted items so the user sees what was added.
+      set({ selectedIds: new Set(fresh.map((f) => f.id)) });
+      return fresh.length;
     },
     startDrag: (fromId) => set({ dragState: { fromId, overItemId: null, overPos: 'after' } }),
     updateDragOver: (overId, pos) => set((s) => s.dragState ? { dragState: { ...s.dragState, overItemId: overId, overPos: pos } } : {}),

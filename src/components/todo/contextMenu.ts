@@ -15,6 +15,8 @@ export interface CtxBuilderDeps {
   toggleBold: (id: string) => void;
   toggleStrike: (id: string) => void;
   toggleLock: (id: string) => void;
+  copyToClipboard: () => number;
+  pasteFromClipboard: () => number;
   indent: (id: string) => void;
   dedent: (id: string) => void;
   duplicateItem: (id: string) => void;
@@ -99,7 +101,15 @@ export function buildContextMenu(d: CtxBuilderDeps): ContextMenuItem[] {
       action: () => isInSel ? d.lockSelected(!item.locked) : d.toggleLock(item.id),
     },
     {
-      label: `複製${selSuffix}`, icon: '📋', shortcut: 'Ctrl+D',
+      label: `コピー${selSuffix}`, icon: '⧉', shortcut: 'Ctrl+C',
+      action: () => d.copyToClipboard(),
+    },
+    {
+      label: '貼り付け（このタスクの下に）', icon: '📋', shortcut: 'Ctrl+V',
+      action: () => d.pasteFromClipboard(),
+    },
+    {
+      label: `複製${selSuffix}`, icon: '🔁', shortcut: 'Ctrl+D',
       action: () => isInSel ? d.duplicateSelected() : d.duplicateItem(item.id),
     },
     {

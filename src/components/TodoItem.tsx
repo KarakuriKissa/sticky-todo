@@ -65,6 +65,8 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     indent, dedent, duplicateItem, deleteItem,
     indentSelected, dedentSelected, lockSelected,
     duplicateSelected, deleteSelected,
+    copyToClipboard: () => useNoteStore.getState().copySelectedToClipboard(),
+    pasteFromClipboard: () => useNoteStore.getState().pasteFromClipboard(),
     openMemoEditor: () => { setMemoText(item.memo ?? ''); setShowMemoEdit(true); },
   });
 

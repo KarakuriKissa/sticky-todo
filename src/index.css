@@ -452,6 +452,11 @@ ul { list-style: none; }
   font-size: 11px;
   color: rgba(30,30,46,.45);
   padding: 0 3px;
+  /* Fixed width so the surrounding buttons don't shift when the count
+     appears/disappears as the user makes a selection. */
+  min-width: 36px;
+  display: inline-block;
+  text-align: center;
 }
 
 /* ── Search bar in Note window ───────────────────────────────────────────── */
@@ -644,14 +649,16 @@ ul { list-style: none; }
   overflow: hidden;
 }
 .badge-col-assignee { width: auto; }
-/* Status column has a fixed min-width so all rows align — width is sized for
-   the longest typical status name (e.g. "確認待ち" = 4 zenkaku chars). */
-.badge-col-status   { min-width: 64px; display: flex; justify-content: flex-end; }
-.badge-col-date     { width: auto; }
-/* Priority column — fixed slot so the badge appearing/disappearing never
-   shifts the other columns. When empty the inline picker is hidden (hover-only)
-   so the slot collapses but the badge, when present, always lands here. */
-.badge-col-priority { min-width: 22px; display: flex; justify-content: center; }
+/* Columns shrink to zero when empty so the task text can flow into their
+   space. When a badge is present, it carries its own min-width via the
+   :has() rule below — that keeps non-empty rows visually aligned. */
+.badge-col-status   { min-width: 0; display: flex; justify-content: flex-end; }
+.badge-col-date     { width: auto; min-width: 0; }
+.badge-col-priority { min-width: 0; display: flex; justify-content: center; }
+/* When the cell actually contains a badge, reserve enough room so colors
+   line up across rows. Empty cells stay collapsed. */
+.badge-col-status:has(.status-badge) { min-width: 64px; }
+.badge-col-priority:has(.priority-badge) { min-width: 22px; }
 /* Status badge itself fills the column so colors line up across rows. */
 .badge-col-status .status-badge { width: 100%; text-align: center; }
 

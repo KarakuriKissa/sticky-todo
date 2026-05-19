@@ -99,7 +99,9 @@ export function NoteToolbar(p: ToolbarProps) {
         </button>
       )}
 
-      {selCount > 0 && <span className="sel-count">{selCount}件</span>}
+      {/* Always reserve a fixed-width slot so the rest of the toolbar doesn't
+          shift when a selection appears/disappears. */}
+      <span className="sel-count">{selCount > 0 ? `${selCount}件` : ''}</span>
 
       <button className="type-btn"
         onClick={() => useNoteStore.getState().checkSelected(true)}
