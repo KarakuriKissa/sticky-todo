@@ -87,6 +87,7 @@ pub fn run() {
             commands::delete_database,
             commands::write_text_file,
             commands::read_text_file,
+            commands::open_url_with,
             commands::show_launcher,
             commands::center_launcher,
             commands::backup_database,

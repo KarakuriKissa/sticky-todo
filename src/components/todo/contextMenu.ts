@@ -77,10 +77,12 @@ export function buildContextMenu(d: CtxBuilderDeps): ContextMenuItem[] {
       },
     },
     {
-      label: `区切り線に変更${selSuffix}`, icon: '—',
+      // ADD a separator below (not convert) — converting a task to a separator
+      // destroys its text and is an easy mis-click, so this inserts instead.
+      label: '区切り線を追加（下に）', icon: '—',
       action: () => {
-        const ids = isInSel ? [...selectedIds] : [item.id];
-        ids.forEach((id) => d.updateItem(id, { item_type: 'separator' }));
+        const newId = d.addItem(item.id, item.indent, 'after');
+        if (newId) d.updateItem(newId, { item_type: 'separator' });
       },
     },
     { label: '', separator: true, action: () => {} },

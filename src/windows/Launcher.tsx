@@ -119,22 +119,23 @@ export function Launcher() {
         e.preventDefault();
         searchRef.current?.focus();
       }
-      // Ctrl+Shift+0 — re-center the launcher on the screen for when it has
-      // wandered off-screen or onto a disconnected monitor.
-      // NOTE: Shift+0 produces ")" on US keyboards, so check e.code (which is
-      // layout-independent) AND fall back to the literal characters.
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey &&
-          (e.code === 'Digit0' || e.key === '0' || e.key === ')' || e.key === 'Home')) {
+      // Ctrl+Shift+G — re-center the launcher on the screen for when it has
+      // wandered off-screen or onto a disconnected monitor. (G = "go to center";
+      // chosen because letter keys are layout-independent and unambiguous,
+      // unlike Shift+0 which becomes ")" on many keyboards.)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.code === 'KeyG' || e.key === 'g' || e.key === 'G')) {
         e.preventDefault();
-        invoke('center_launcher').catch(() => {});
+        e.stopPropagation();
+        invoke('center_launcher').catch((err) => log.error('[center_launcher]', err));
       }
       // Escape from anywhere closes the search popup.
       if (e.key === 'Escape' && useAppStore.getState().searchQuery) {
         useAppStore.getState().setSearchQuery('');
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    // capture:true so we beat any element-level handlers / native shortcuts.
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, []);
 
   // Whenever the search query changes, run a global item search and store the
@@ -322,7 +323,7 @@ export function Launcher() {
           <button
             className="btn-icon"
             onClick={() => invoke('center_launcher').catch(() => {})}
-            title="画面中央に移動 (Ctrl+Shift+0)"
+            title="画面中央に移動 (Ctrl+Shift+G)"
           >🎯</button>
           <button className="btn-icon" onClick={() => setShowSettings(true)} title="設定">⚙</button>
         </header>

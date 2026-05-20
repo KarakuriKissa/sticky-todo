@@ -28,6 +28,37 @@ async function exportNote(note: Note) {
   alert(`エクスポートしました（${items.length}件のタスク）`);
 }
 
+// ── リストをテキスト(.txt)でエクスポート ──────────────────────────────────────
+// ファイル名 = リスト名、内容は見た目で構造が分かる整形テキスト。
+async function exportNoteAsText(note: Note) {
+  const items = await invoke<TodoItem[]>('get_note_items', { noteId: note.id });
+  const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order);
+  const lines: string[] = [`# ${note.title}`, ''];
+  for (const it of sorted) {
+    const indent = '    '.repeat(Math.max(0, it.indent));
+    if (it.item_type === 'separator') {
+      lines.push(`${indent}----------------------------------------`);
+    } else if (it.item_type === 'heading') {
+      lines.push(`${indent}■ ${it.text}`);
+    } else {
+      const box = it.checked ? '[x]' : '[ ]';
+      let line = `${indent}${box} ${it.text}`;
+      if (it.memo) line += `   ※ ${it.memo.replace(/\r?\n/g, ' ')}`;
+      lines.push(line);
+    }
+  }
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  const safe = note.title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 60) || 'todo';
+  const path = await save({
+    title: 'テキストでエクスポート',
+    defaultPath: `${safe}.txt`,
+    filters: [{ name: 'テキスト', extensions: ['txt'] }],
+  });
+  if (!path) return;
+  await invoke('write_text_file', { path, content: lines.join('\r\n') });
+  alert('テキストでエクスポートしました');
+}
+
 // ── リスト インポート ─────────────────────────────────────────────────────────
 async function importNote(
   existingNotes: Note[],
@@ -67,6 +98,12 @@ async function importNote(
     color: typeof srcNote.color === 'string' ? srcNote.color : newNote.color,
     warn_days: typeof srcNote.warn_days === 'number' ? srcNote.warn_days : null,
   });
+  // Flag the new list so the launcher shows a "NEW" badge on it.
+  try {
+    const existing = JSON.parse(localStorage.getItem('sticky-todo:new-notes') || '[]');
+    localStorage.setItem('sticky-todo:new-notes', JSON.stringify([...existing, newNote.id]));
+    window.dispatchEvent(new CustomEvent('sticky-new-note', { detail: newNote.id }));
+  } catch { /* ignore */ }
 
   // アイテムを新しいnote_idで保存（必須フィールドの欠落に備えてデフォルトを埋める）
   if (srcItems.length > 0) {
@@ -129,6 +166,26 @@ export function NoteList({ onNew }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<Note | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [noteCtx, setNoteCtx] = useState<{ note: Note; x: number; y: number } | null>(null);
+  // Note IDs that were just imported — show a temporary "NEW" badge, auto-clear.
+  const [newNoteIds, setNewNoteIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const pickUp = () => {
+      try {
+        const ids: string[] = JSON.parse(localStorage.getItem('sticky-todo:new-notes') || '[]');
+        if (ids.length > 0) {
+          setNewNoteIds(new Set(ids));
+          // Clear the badges after a few seconds.
+          setTimeout(() => {
+            setNewNoteIds(new Set());
+            localStorage.removeItem('sticky-todo:new-notes');
+          }, 6000);
+        }
+      } catch { /* ignore */ }
+    };
+    pickUp();
+    window.addEventListener('sticky-new-note', pickUp);
+    return () => window.removeEventListener('sticky-new-note', pickUp);
+  }, []);
 
   // Pointer-based drag state
   const [noteDrag, setNoteDrag] = useState<{
@@ -333,6 +390,7 @@ export function NoteList({ onNew }: Props) {
                 title="ダブルクリックで編集"
               >
                 {note.title || '（無題）'}
+                {newNoteIds.has(note.id) && <span className="new-item-badge" style={{ marginLeft: 6 }}>NEW</span>}
               </div>
             )}
             <div className="note-card-meta">
@@ -443,7 +501,14 @@ export function NoteList({ onNew }: Props) {
             onClick={() => { exportNote(noteCtx.note); setNoteCtx(null); }}
           >
             <span className="ctx-icon">📤</span>
-            <span className="ctx-label">このリストをエクスポート</span>
+            <span className="ctx-label">エクスポート（JSON・再インポート用）</span>
+          </button>
+          <button
+            className="context-menu-item"
+            onClick={() => { exportNoteAsText(noteCtx.note); setNoteCtx(null); }}
+          >
+            <span className="ctx-icon">📝</span>
+            <span className="ctx-label">テキストで保存（.txt）</span>
           </button>
           <div className="context-menu-sep" />
           <button

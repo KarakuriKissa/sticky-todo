@@ -1,27 +1,31 @@
-import { open as shellOpen } from '@tauri-apps/plugin-shell';
+import { openExternal } from '../../utils/openExternal';
 
-// Render free text with clickable URLs and (optionally) wrap a search term in
-// <mark> so the user can see what they searched for. Used by TodoItemRow's
-// view-mode div.
+// Render free text with clickable URLs / file-system paths and (optionally)
+// wrap a search term in <mark>. Used by TodoItemRow's view-mode div and the
+// comment popup.
+//
+// Linkified:
+//   - http(s):// URLs            → opens in the preferred / default browser
+//   - C:\... , C:/... , \\srv\.. → opens the folder/file in Explorer
+//   - /Users/... (absolute unix) → opens in the file manager
 export function renderTextWithLinks(text: string, searchTerm?: string): React.ReactNode {
-  const urlRe = /(https?:\/\/[^\s]+)/g;
-  // 1. Split into URL and non-URL chunks.
-  const parts: { text: string; isUrl: boolean }[] = [];
+  // URL OR Windows drive path OR UNC path OR absolute unix path.
+  const linkRe = /(https?:\/\/[^\s]+|[A-Za-z]:[\\/][^\s]+|\\\\[^\s]+|\/[^\s/][^\s]*)/g;
+  const parts: { text: string; isLink: boolean }[] = [];
   let lastIdx = 0;
   let m: RegExpExecArray | null;
-  while ((m = urlRe.exec(text)) !== null) {
-    if (m.index > lastIdx) parts.push({ text: text.slice(lastIdx, m.index), isUrl: false });
-    parts.push({ text: m[0], isUrl: true });
+  while ((m = linkRe.exec(text)) !== null) {
+    if (m.index > lastIdx) parts.push({ text: text.slice(lastIdx, m.index), isLink: false });
+    parts.push({ text: m[0], isLink: true });
     lastIdx = m.index + m[0].length;
   }
-  if (lastIdx < text.length) parts.push({ text: text.slice(lastIdx), isUrl: false });
+  if (lastIdx < text.length) parts.push({ text: text.slice(lastIdx), isLink: false });
 
-  // 2. For non-URL chunks, highlight the search term with <mark>.
   const term = (searchTerm ?? '').trim().toLowerCase();
   let key = 0;
   const result: React.ReactNode[] = [];
   for (const p of parts) {
-    if (p.isUrl) {
+    if (p.isLink) {
       result.push(
         <a
           key={key++}
@@ -30,8 +34,7 @@ export function renderTextWithLinks(text: string, searchTerm?: string): React.Re
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            // Open in the user's default browser, never inside the webview.
-            shellOpen(p.text).catch(() => {});
+            openExternal(p.text);
           }}
           title={p.text}
         >{p.text}</a>,

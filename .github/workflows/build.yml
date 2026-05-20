@@ -137,3 +137,61 @@ jobs:
             src-tauri/target/release/sticky-todo.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ════════════════════════════════════════════════════════════════════════
+  #  macOS ビルド（.dmg / .app）— Apple Silicon + Intel ユニバーサル
+  # ════════════════════════════════════════════════════════════════════════
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: コードを取得
+        uses: actions/checkout@v4
+
+      - name: Node.js セットアップ
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Bun セットアップ
+        uses: oven-sh/setup-bun@v2
+
+      - name: Rust セットアップ（Intel+ARM両対応）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust キャッシュ
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: 依存パッケージをインストール
+        run: bun install
+
+      - name: Tauri アイコンを生成（コミット済みソースから）
+        run: bunx tauri icon src-tauri/icons/icon-source.png
+
+      - name: アプリをビルド（ユニバーサル）
+        run: bunx tauri build --target universal-apple-darwin
+
+      - name: 📦 macOS インストーラーをアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: StickyTodo-macOS
+          retention-days: 90
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+
+      - name: 📦 GitHub Release に macOS 版を追加
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: StickyTodo build #${{ github.run_number }}
+          draft: false
+          prerelease: true
+          files: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

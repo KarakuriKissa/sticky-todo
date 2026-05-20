@@ -87,4 +87,5 @@ export interface AppSettings {
   reminder_interval_min?: number; // minutes between desktop reminder checks (0 = disabled)
   reopen_windows_on_start?: boolean; // restore open note windows on app launch
   backup_interval_min?: number; // minutes between automatic DB backups (0 = disabled)
+  browser_path?: string; // path/app of preferred browser for opening URLs ('' = OS default)
 }

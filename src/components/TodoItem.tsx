@@ -38,6 +38,9 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
   const [commentAbove, setCommentAbove] = useState(false);
   const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
   const [hoverMemo, setHoverMemo] = useState<{ above: boolean } | null>(null);
+  // Comment read-popup: shown on 💬 icon hover, "pinned" open on icon click.
+  // Pinned popups close on an outside click. (Right-click still opens the editor.)
+  const [memoPinned, setMemoPinned] = useState(false);
 
   const isDragging = dragState?.fromId === item.id;
   const isDragOver = dragState?.overItemId === item.id;
@@ -89,6 +92,16 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
+
+  // Close a pinned comment popup when clicking anywhere outside this row.
+  useEffect(() => {
+    if (!memoPinned) return;
+    const onDocClick = (ev: globalThis.MouseEvent) => {
+      if (!rowRef.current?.contains(ev.target as Node)) setMemoPinned(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [memoPinned]);
 
   // ── Keyboard ────────────────────────────────────────────────────────────────
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -414,13 +427,6 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
       onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
       onKeyDown={onRowKeyDown}
       onContextMenu={onContextMenu}
-      onMouseEnter={(e) => {
-        if (item.memo) {
-          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          setHoverMemo({ above: rect.top > window.innerHeight * 0.5 });
-        }
-      }}
-      onMouseLeave={() => setHoverMemo(null)}
     >
       {/* Drag grip */}
       {!item.locked && (
@@ -535,23 +541,39 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           </div>
         )}
 
-        {/* ── Memo indicator ── */}
+        {/* ── Memo indicator ──
+            Hover  → show read popup (with clickable links).
+            Click  → pin the popup open (closes on outside click).
+            Right-click on the row → edit (unchanged). */}
         {settings.feature_memo && item.memo && (
-          <span className="memo-indicator" title={item.memo} onClick={openComment}>💬</span>
+          <span
+            className="memo-indicator"
+            onMouseEnter={(e) => {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setHoverMemo({ above: rect.top > window.innerHeight * 0.5 });
+            }}
+            onMouseLeave={() => setHoverMemo(null)}
+            onClick={(e) => { e.stopPropagation(); setMemoPinned((p) => !p); }}
+            title="クリックで固定表示 / 右クリックで編集"
+          >💬</span>
         )}
       </div>
 
       {/* Context menu */}
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems} onClose={() => setCtx(null)} />}
 
-      {/* Memo hover tooltip - Google Sheets style */}
-      {item.memo && hoverMemo && !showMemoEdit && (
-        <div className={`memo-tooltip${hoverMemo.above ? ' memo-tooltip-above' : ''}`}>
-          <div className="memo-tooltip-text">{item.memo}</div>
+      {/* Comment read popup — shown on icon hover OR pinned via click.
+          Links inside are clickable. */}
+      {item.memo && (hoverMemo || memoPinned) && !showMemoEdit && (
+        <div
+          className={`memo-tooltip${(hoverMemo?.above) ? ' memo-tooltip-above' : ''}${memoPinned ? ' memo-tooltip-pinned' : ''}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="memo-tooltip-text">{renderTextWithLinks(item.memo)}</div>
         </div>
       )}
 
-      {/* Comment edit popup */}
+      {/* Comment edit popup (opened from right-click menu) */}
       {showMemoEdit && (
         <div className={`comment-popup${commentAbove ? ' comment-popup-above' : ''}`} onClick={(e) => e.stopPropagation()}>
           <div className="memo-popup-title">コメント</div>
@@ -560,7 +582,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
             autoFocus
             value={memoText}
             onChange={(e) => setMemoText(e.target.value)}
-            placeholder="コメントを入力…"
+            placeholder="コメントを入力…（URL や フォルダのパスも貼れます）"
             rows={4}
           />
           <div className="memo-popup-actions">

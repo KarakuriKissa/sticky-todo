@@ -201,6 +201,29 @@ export function AdvancedTab({ draft, setDraft }: Props) {
         }}
       >📝 サンプルリストを追加</button>
 
+      <h3 style={{ marginTop: 20 }}>リンクを開くブラウザ</h3>
+      <p style={para}>
+        タスクやコメント内の URL をクリックしたとき、ここで指定したブラウザで開きます。<br />
+        <strong>空欄なら OS の既定ブラウザ</strong>で開きます。<br />
+        例（Windows）: <code>C:\Program Files\Google\Chrome\Application\chrome.exe</code><br />
+        例（Mac）: <code>Google Chrome</code>（アプリ名）
+      </p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input
+          type="text"
+          value={draft.browser_path ?? ''}
+          placeholder="（空欄 = 既定のブラウザ）"
+          onChange={(e) => setDraft((d) => ({ ...d, browser_path: e.target.value }))}
+          style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '4px 8px', fontSize: 12 }}
+        />
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }}
+          onClick={async () => {
+            const { open } = await import('@tauri-apps/plugin-dialog');
+            const path = await open({ title: 'ブラウザの実行ファイルを選択', multiple: false, directory: false });
+            if (typeof path === 'string') setDraft((d) => ({ ...d, browser_path: path }));
+          }}>参照…</button>
+      </div>
+
       <h3 style={{ marginTop: 20 }}>自動バックアップ</h3>
       <p style={para}>
         一定間隔でデータベースのバックアップを自動作成します（最新3つを保持）。<br />

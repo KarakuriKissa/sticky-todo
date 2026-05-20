@@ -448,6 +448,27 @@ pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+// Open a URL with a specific browser executable (or app, on macOS).
+// `browser` is an absolute path to the browser binary, or on macOS an app name.
+#[tauri::command]
+pub fn open_url_with(url: String, browser: String) -> Result<(), String> {
+    use std::process::Command;
+    #[cfg(target_os = "windows")]
+    {
+        Command::new(&browser).arg(&url).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // Treat `browser` as an application name/path: `open -a "Browser" url`.
+        Command::new("open").args(["-a", &browser, &url]).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new(&browser).arg(&url).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // ── Automatic backups ──────────────────────────────────────────────────────
 // Copies the live DB into app_data_dir/backups/ with a timestamped name,
 // keeping only the most recent `keep` files (default 3).

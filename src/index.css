@@ -1239,6 +1239,13 @@ kbd {
   top: auto;
   bottom: calc(100% + 4px);
 }
+/* Pinned (clicked) popup is interactive so links inside can be clicked. */
+.memo-tooltip-pinned {
+  pointer-events: auto;
+  border-color: #a5b4fc;
+  box-shadow: 0 4px 18px rgba(99,102,241,.35);
+}
+.memo-tooltip-pinned .todo-link { pointer-events: auto; }
 .memo-tooltip-text {
   padding: 8px 12px;
   font-size: 12px;
