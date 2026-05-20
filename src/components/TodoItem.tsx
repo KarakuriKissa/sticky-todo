@@ -400,7 +400,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
               autoFocus
               value={memoText}
               onChange={(e) => setMemoText(e.target.value)}
-              placeholder="コメントを入力…"
+              placeholder="コメントを入力…（[表示文字](URL) でリンクも）"
               rows={4}
             />
             <div className="memo-popup-actions">
@@ -582,7 +582,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
             autoFocus
             value={memoText}
             onChange={(e) => setMemoText(e.target.value)}
-            placeholder="コメントを入力…（URL や フォルダのパスも貼れます）"
+            placeholder="コメントを入力…（URL・パス可。[表示文字](URL) でリンクも）"
             rows={4}
           />
           <div className="memo-popup-actions">

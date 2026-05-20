@@ -77,6 +77,7 @@ export function CheatSheet({ onClose }: CheatSheetProps) {
     ['行を移動', 'Ctrl+Shift+↑/↓'],
     ['削除', 'Delete'],
     ['キャンセル / 閉じる', 'Esc'],
+    ['ハイパーリンク', '[表示文字](URL)'],
     ['この一覧を表示', '?'],
   ];
   return (

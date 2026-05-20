@@ -21,55 +21,77 @@ function shortLabel(link: string): string {
   return `…${link.includes('\\') ? '\\' : '/'}${seg}`.slice(0, MAX);
 }
 
-// Render free text with clickable URLs / file-system paths and (optionally)
-// wrap a search term in <mark>. Used by TodoItemRow's view-mode div and the
-// comment popup.
+// Render free text with clickable links and (optionally) wrap a search term
+// in <mark>. Used by TodoItemRow's view-mode div and the comment popup.
 //
-// Linkified:
-//   - http(s):// URLs            → opens in the preferred / default browser
-//   - C:\... , C:/... , \\srv\.. → opens the folder/file in Explorer
-//   - /Users/... (absolute unix) → opens in the file manager
-export function renderTextWithLinks(text: string, searchTerm?: string): React.ReactNode {
-  // URL OR Windows drive path OR UNC path OR absolute unix path.
-  const linkRe = /(https?:\/\/[^\s]+|[A-Za-z]:[\\/][^\s]+|\\\\[^\s]+|\/[^\s/][^\s]*)/g;
-  const parts: { text: string; isLink: boolean }[] = [];
-  let lastIdx = 0;
-  let m: RegExpExecArray | null;
-  while ((m = linkRe.exec(text)) !== null) {
-    if (m.index > lastIdx) parts.push({ text: text.slice(lastIdx, m.index), isLink: false });
-    parts.push({ text: m[0], isLink: true });
-    lastIdx = m.index + m[0].length;
-  }
-  if (lastIdx < text.length) parts.push({ text: text.slice(lastIdx), isLink: false });
+// Three link forms are supported:
+//   1. Markdown hyperlink:  [表示文字](https://... or C:\path)  → shows 表示文字
+//   2. Bare URL:            https://...   → opens in preferred / default browser
+//   3. File path:           C:\... , \\srv\.. , /Users/...  → opens in Explorer
+type Token =
+  | { kind: 'text'; text: string }
+  | { kind: 'link'; label: string; target: string };
 
+function tokenize(text: string): Token[] {
+  const tokens: Token[] = [];
+  // [label](target) — label has no ']' , target has no ')' or whitespace
+  const mdRe = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+  // bare URL / win path / UNC / absolute unix path
+  const bareRe = /(https?:\/\/[^\s]+|[A-Za-z]:[\\/][^\s]+|\\\\[^\s]+|\/[^\s/][^\s]*)/g;
+
+  // First split out markdown links.
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const pushBare = (chunk: string) => {
+    let li = 0;
+    let bm: RegExpExecArray | null;
+    bareRe.lastIndex = 0;
+    while ((bm = bareRe.exec(chunk)) !== null) {
+      if (bm.index > li) tokens.push({ kind: 'text', text: chunk.slice(li, bm.index) });
+      tokens.push({ kind: 'link', label: bm[0], target: bm[0] });
+      li = bm.index + bm[0].length;
+    }
+    if (li < chunk.length) tokens.push({ kind: 'text', text: chunk.slice(li) });
+  };
+  while ((m = mdRe.exec(text)) !== null) {
+    if (m.index > last) pushBare(text.slice(last, m.index));
+    tokens.push({ kind: 'link', label: m[1], target: m[2] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) pushBare(text.slice(last));
+  return tokens;
+}
+
+export function renderTextWithLinks(text: string, searchTerm?: string): React.ReactNode {
+  const tokens = tokenize(text);
   const term = (searchTerm ?? '').trim().toLowerCase();
   let key = 0;
   const result: React.ReactNode[] = [];
-  for (const p of parts) {
-    if (p.isLink) {
+  for (const tok of tokens) {
+    if (tok.kind === 'link') {
+      // For bare links keep the smart shortening; for markdown links show the
+      // author-chosen label verbatim.
+      const display = tok.label === tok.target ? shortLabel(tok.target) : tok.label;
       result.push(
         <a
           key={key++}
           className="todo-link"
-          href={p.text}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openExternal(p.text);
-          }}
-          title={p.text}
-        >{shortLabel(p.text)}</a>,
+          href={tok.target}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); openExternal(tok.target); }}
+          title={tok.target}
+        >{display}</a>,
       );
       continue;
     }
-    if (!term) { result.push(<span key={key++}>{p.text}</span>); continue; }
-    const lower = p.text.toLowerCase();
+    const p = tok.text;
+    if (!term) { result.push(<span key={key++}>{p}</span>); continue; }
+    const lower = p.toLowerCase();
     let i = 0;
-    while (i < p.text.length) {
+    while (i < p.length) {
       const at = lower.indexOf(term, i);
-      if (at < 0) { result.push(<span key={key++}>{p.text.slice(i)}</span>); break; }
-      if (at > i) result.push(<span key={key++}>{p.text.slice(i, at)}</span>);
-      result.push(<mark key={key++} className="todo-text-match">{p.text.slice(at, at + term.length)}</mark>);
+      if (at < 0) { result.push(<span key={key++}>{p.slice(i)}</span>); break; }
+      if (at > i) result.push(<span key={key++}>{p.slice(i, at)}</span>);
+      result.push(<mark key={key++} className="todo-text-match">{p.slice(at, at + term.length)}</mark>);
       i = at + term.length;
     }
   }
