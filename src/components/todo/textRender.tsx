@@ -1,5 +1,26 @@
 import { openExternal } from '../../utils/openExternal';
 
+// Long links are visually noisy. Show a compact label but keep the full target
+// for the click / hover-title. URLs → "domain/…last-segment"; paths → "…\\last".
+function shortLabel(link: string): string {
+  const MAX = 48;
+  if (link.length <= MAX) return link;
+  if (/^https?:\/\//i.test(link)) {
+    try {
+      const u = new URL(link);
+      const tail = (u.pathname + u.search).replace(/\/$/, '');
+      const last = tail.split('/').filter(Boolean).pop() ?? '';
+      const compact = last ? `${u.hostname}/…/${last}` : u.hostname;
+      return compact.length <= MAX ? compact : `${u.hostname}/…`;
+    } catch {
+      return link.slice(0, MAX - 1) + '…';
+    }
+  }
+  // File path → keep the last segment after the final slash/backslash.
+  const seg = link.split(/[\\/]/).filter(Boolean).pop() ?? link;
+  return `…${link.includes('\\') ? '\\' : '/'}${seg}`.slice(0, MAX);
+}
+
 // Render free text with clickable URLs / file-system paths and (optionally)
 // wrap a search term in <mark>. Used by TodoItemRow's view-mode div and the
 // comment popup.
@@ -37,7 +58,7 @@ export function renderTextWithLinks(text: string, searchTerm?: string): React.Re
             openExternal(p.text);
           }}
           title={p.text}
-        >{p.text}</a>,
+        >{shortLabel(p.text)}</a>,
       );
       continue;
     }
