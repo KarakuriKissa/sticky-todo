@@ -21,6 +21,7 @@ export interface ToolbarProps {
   archivedCount: number;
   addItem: (afterId?: string, indent?: number, position?: 'before' | 'after') => string;
   addTyped: (t: ItemType) => void;
+  onInsertLink: () => void;
 }
 
 const PRIORITY_OPTIONS = [
@@ -45,6 +46,11 @@ export function NoteToolbar(p: ToolbarProps) {
       <button className="type-btn" onClick={() => p.addItem()} title="項目追加">＋</button>
       <button className="type-btn" onClick={() => p.addTyped('heading')} title="見出し">H</button>
       <button className="type-btn" onClick={() => p.addTyped('separator')} title="区切り線">—</button>
+      {/* Hyperlink: select text in a task, then click. mousedown (not click) so
+          the input keeps its selection before focus moves to the button. */}
+      <button className="type-btn"
+        onMouseDown={(e) => { e.preventDefault(); p.onInsertLink(); }}
+        title="選択した文字にリンクを設定（先にタスク内の文字を選択）">🔗</button>
       <button className="type-btn"
         onClick={() => { if (selCount > 0) [...p.selectedIds].forEach((id) => useNoteStore.getState().indent(id)); }}
         title="インデント (Tab)">→</button>

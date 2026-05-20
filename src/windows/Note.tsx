@@ -41,6 +41,11 @@ export function NoteWindow({ noteId }: Props) {
   // visible task list and supports up/down navigation between hits.
   const [showSearch, setShowSearch] = useState(false);
   const [searchMatchIdx, setSearchMatchIdx] = useState(0);
+  // Hyperlink dialog: captures the text selection of the currently-edited task
+  // and asks for a URL, then wraps the selection as [selected](url).
+  const [linkDialog, setLinkDialog] = useState<
+    null | { itemId: string; start: number; end: number; selText: string; url: string }
+  >(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
   const closingRef = useRef(false);
@@ -436,6 +441,34 @@ export function NoteWindow({ noteId }: Props) {
     return id;
   };
 
+  // Capture the selection in the currently-edited task input so we can wrap it
+  // as a hyperlink. Called on the link button's mousedown (before focus moves).
+  const captureLinkSelection = () => {
+    const el = document.activeElement as HTMLInputElement | null;
+    if (!el || !el.hasAttribute?.('data-text-input')) return;
+    const row = el.closest('[data-item-id]');
+    const itemId = row?.getAttribute('data-item-id');
+    if (!itemId) return;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    if (end <= start) return; // nothing selected
+    const selText = el.value.slice(start, end);
+    setLinkDialog({ itemId, start, end, selText, url: '' });
+  };
+
+  const applyLink = () => {
+    if (!linkDialog) return;
+    const { itemId, start, end, url } = linkDialog;
+    const u = url.trim();
+    if (!u) { setLinkDialog(null); return; }
+    const it = useNoteStore.getState().items.find((i) => i.id === itemId);
+    if (!it) { setLinkDialog(null); return; }
+    const label = it.text.slice(start, end);
+    const next = it.text.slice(0, start) + `[${label}](${u})` + it.text.slice(end);
+    useNoteStore.getState().updateItem(itemId, { text: next });
+    setLinkDialog(null);
+  };
+
   const addTyped = (type: ItemType) => {
     const after = anchorAfterSelection();
     const id = addItem(after, after ? undefined : 0);
@@ -576,6 +609,7 @@ export function NoteWindow({ noteId }: Props) {
         archivedCount={archivedCount}
         addItem={addItemFromToolbar}
         addTyped={addTyped}
+        onInsertLink={captureLinkSelection}
       />
 
       {/* Hidden search bar — kept in DOM to preserve any existing CSS / focus
@@ -674,6 +708,34 @@ export function NoteWindow({ noteId }: Props) {
 
       {/* ── Cheat sheet (? key) ── */}
       {showCheatSheet && <CheatSheet onClose={() => setShowCheatSheet(false)} />}
+
+      {/* ── Hyperlink dialog (Excel/Sheets-style) ── */}
+      {linkDialog && (
+        <div className="modal-overlay" onClick={() => setLinkDialog(null)}>
+          <div className="modal" style={{ width: 380, maxWidth: '90vw' }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ fontSize: 16, marginBottom: 10 }}>リンクを設定</h2>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+              選択した文字: <b style={{ color: 'var(--text)' }}>{linkDialog.selText}</b>
+            </p>
+            <input
+              autoFocus
+              type="text"
+              value={linkDialog.url}
+              placeholder="https://… または C:\フォルダのパス"
+              onChange={(e) => setLinkDialog((d) => d ? { ...d, url: e.target.value } : d)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
+                if (e.key === 'Escape') setLinkDialog(null);
+              }}
+              style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '6px 8px', fontSize: 13 }}
+            />
+            <div className="modal-actions" style={{ marginTop: 12 }}>
+              <button className="btn-primary" onClick={applyLink}>リンクを設定</button>
+              <button className="btn-secondary" onClick={() => setLinkDialog(null)}>キャンセル</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
