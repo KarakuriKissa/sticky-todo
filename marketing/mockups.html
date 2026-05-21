@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StickyTodo — 紹介モックアップ</title>
+<style>
+  :root{
+    --ink:#1f2430; --muted:#5b6472; --indigo:#6366f1; --yellow:#fef08a;
+    --paper:#ffffff; --line:#e6e2cf; --bg:#11141b;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic UI",sans-serif;
+    background:radial-gradient(circle at 30% 20%, #232a3a 0%, #11141b 70%);
+    color:#e8eaf0; padding:48px; min-height:100vh;
+  }
+  h1.page{font-size:34px; font-weight:800; margin-bottom:6px;}
+  p.sub{color:#9aa4b2; margin-bottom:36px;}
+  .shot{margin-bottom:56px;}
+  .shot > .cap{font-size:14px; color:#cdd3e0; margin-bottom:12px; padding-left:4px; border-left:3px solid var(--indigo); padding:4px 0 4px 10px;}
+  .row{display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start;}
+
+  /* ── Sticky note window ── */
+  .note{
+    width:430px; border-radius:10px; overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.45); border:1px solid rgba(0,0,0,.2);
+    background:var(--yellow);
+  }
+  .note.blue{background:#bfdbfe;}
+  .note.green{background:#bbf7d0;}
+  .note.orange{background:#fed7aa;}
+  .titlebar{display:flex; align-items:center; gap:6px; padding:7px 9px; background:rgba(0,0,0,.12); min-height:36px;}
+  .titlebar .ttl{font-weight:700; font-size:14px; color:#1e1e2e;}
+  .titlebar .spacer{flex:1;}
+  .titlebar .btn{width:18px; height:18px; border-radius:50%; background:rgba(0,0,0,.12); font-size:11px; display:flex; align-items:center; justify-content:center; color:#1e1e2e;}
+  .titlebar .swatch{width:16px;height:16px;border-radius:50%;border:2px solid rgba(0,0,0,.2);background:var(--yellow);}
+  .toolbar{display:flex; gap:3px; padding:5px 8px; background:rgba(0,0,0,.05); flex-wrap:wrap; align-items:center;}
+  .tbtn{font-size:12px; padding:2px 7px; border-radius:5px; background:rgba(255,255,255,.55); color:#1e1e2e; border:1px solid rgba(0,0,0,.08);}
+  .tbtn.act{background:var(--indigo); color:#fff;}
+  .body{padding:6px 8px 12px;}
+  .quick{width:100%; border:1px dashed rgba(0,0,0,.25); background:rgba(255,255,255,.5); border-radius:6px; padding:6px 9px; font-size:12.5px; color:#6b6b50; margin-bottom:6px;}
+  .item{display:flex; align-items:center; gap:7px; padding:3px 4px; border-radius:4px; min-height:27px; font-size:13px; color:#1e1e2e;}
+  .item:hover{background:rgba(0,0,0,.05);}
+  .item.sel{background:rgba(99,102,241,.14); outline:1.5px solid rgba(99,102,241,.5);}
+  .grip{color:rgba(0,0,0,.3); font-size:12px;}
+  .cb{width:14px;height:14px;border:2px solid #6366f1;border-radius:3px; flex-shrink:0;}
+  .cb.on{background:#6366f1; position:relative;}
+  .cb.on::after{content:"✓"; color:#fff; font-size:10px; position:absolute; left:1px; top:-3px;}
+  .txt{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .txt.done{text-decoration:line-through; color:rgba(30,30,46,.45);}
+  .txt.bold{font-weight:700;}
+  .link{color:#2563eb; text-decoration:underline; cursor:pointer;}
+  .heading{font-weight:800; font-size:13.5px; color:#1e1e2e; padding:6px 4px 2px; letter-spacing:.3px;}
+  .sep{height:0; border-top:2px dashed rgba(0,0,0,.18); margin:5px 6px;}
+  .badge{font-size:10px; padding:1px 8px; border-radius:10px; color:#fff; font-weight:700; white-space:nowrap;}
+  .b-st{min-width:58px; text-align:center;}
+  .dot{width:13px;height:13px;border-radius:50%; flex-shrink:0;}
+  .date{font-size:11px; color:#5b6472;}
+  .date.warn{color:#b45309; font-weight:700;}
+  .pri{font-size:10px; font-weight:800; color:#fff; border-radius:10px; padding:1px 7px;}
+  .memo{font-size:12px;}
+  .indent1{padding-left:24px;}
+  .indent2{padding-left:44px;}
+  .new{font-size:8px;font-weight:800;background:#22c55e;color:#fff;border-radius:8px;padding:1px 5px;margin-left:4px;}
+
+  /* ── Launcher ── */
+  .launcher{width:540px; border-radius:10px; overflow:hidden; box-shadow:0 18px 50px rgba(0,0,0,.45); display:flex; background:#fffdf5; border:1px solid var(--line);}
+  .side{width:150px; background:#f4f1e3; border-right:1px solid var(--line); padding:10px 0;}
+  .side .sh{font-size:11px; color:#8a8470; padding:4px 14px; font-weight:700;}
+  .cat{padding:6px 14px; font-size:13px; color:#3a3a3a; display:flex; gap:8px; align-items:center;}
+  .cat.act{background:#fff; font-weight:700;}
+  .cat .cdot{width:9px;height:9px;border-radius:50%;}
+  .main{flex:1; padding:12px;}
+  .lhead{display:flex; gap:8px; align-items:center; margin-bottom:12px;}
+  .search{flex:1; background:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12px; color:#888;}
+  .newbtn{width:30px;height:30px;border-radius:6px;background:var(--indigo);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;}
+  .card{background:#fff; border:1px solid var(--line); border-left:4px solid var(--yellow); border-radius:6px; padding:9px 11px; margin-bottom:8px;}
+  .card.blue{border-left-color:#60a5fa;}
+  .card.green{border-left-color:#34d399;}
+  .card .ct{font-weight:700; font-size:13.5px; color:#222;}
+  .card .cm{font-size:11px; color:#8a8a8a; margin-top:3px;}
+  .pin{font-size:11px; color:#9ca3af;}
+
+  /* tooltip mock */
+  .tip{margin-top:6px; background:#fff; border:1px solid #a5b4fc; border-radius:8px; box-shadow:0 4px 18px rgba(99,102,241,.35); padding:8px 12px; font-size:12px; color:#1e1e2e; max-width:240px;}
+</style>
+</head>
+<body>
+  <h1 class="page">📌 StickyTodo — 画面イメージ</h1>
+  <p class="sub">実際のアプリと同じ見た目のモックアップです。スクリーンショット素材・紹介ページ用にどうぞ。</p>
+
+  <!-- 1. メインの付箋（多機能） -->
+  <div class="shot">
+    <div class="cap">① タスクに「ステータス・担当者・期日・優先度・コメント」をまとめて持たせられる</div>
+    <div class="row">
+      <div class="note orange">
+        <div class="titlebar">
+          <span class="ttl">🎯 今週のタスク</span><span class="spacer"></span>
+          <span class="btn">🗂</span><span class="btn">📌</span><span class="swatch" style="background:#fed7aa"></span><span class="btn">✕</span>
+        </div>
+        <div class="toolbar">
+          <span class="tbtn">＋</span><span class="tbtn">H</span><span class="tbtn">—</span><span class="tbtn">🔗</span>
+          <span class="tbtn act">★</span><span class="tbtn">高中低</span><span class="tbtn">☑</span><span class="tbtn">🗄️</span>
+        </div>
+        <div class="body">
+          <div class="quick">✏️ 新しいタスクを入力して Enter で追加…</div>
+          <div class="heading">🔥 緊急</div>
+          <div class="item">
+            <span class="grip">⠿</span><span class="cb"></span>
+            <span class="txt">クライアントへ<span class="link">[見積書](リンク)</span>を送付</span>
+            <span class="dot" style="background:#6366f1"></span>
+            <span class="badge b-st" style="background:#34d399">作業中</span>
+            <span class="date warn">今日</span><span class="pri" style="background:#ef4444">高</span>
+          </div>
+          <div class="item">
+            <span class="grip">⠿</span><span class="cb"></span>
+            <span class="txt">納品データの最終チェック</span>
+            <span class="dot" style="background:#22c55e"></span>
+            <span class="badge b-st" style="background:#f87171">リテイク</span>
+            <span class="date warn">明日</span><span class="pri" style="background:#f97316">中</span>
+          </div>
+          <div class="sep"></div>
+          <div class="heading">📦 通常</div>
+          <div class="item">
+            <span class="grip">⠿</span><span class="cb"></span>
+            <span class="txt">ドキュメント整備</span><span class="memo">💬</span>
+            <span class="date">5/28</span>
+          </div>
+          <div class="item indent1">
+            <span class="grip">⠿</span><span class="cb"></span>
+            <span class="txt">図版を差し替える</span>
+          </div>
+          <div class="heading">🎉 完了済み</div>
+          <div class="item">
+            <span class="grip">⠿</span><span class="cb on"></span>
+            <span class="txt done">提案書レビュー</span>
+            <span class="badge b-st" style="background:#4ade80">完了</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="align-self:center; max-width:240px;">
+        <div class="tip">💬  コメントは アイコンにマウスを乗せると表示、クリックで固定。中の <span class="link">リンク</span> も開けます。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. ランチャー -->
+  <div class="shot">
+    <div class="cap">② ランチャー：カテゴリで分類、付箋リストを一覧管理。横断検索も</div>
+    <div class="launcher">
+      <div class="side">
+        <div class="sh">カテゴリ</div>
+        <div class="cat act"><span class="cdot" style="background:#60a5fa"></span>個人</div>
+        <div class="cat"><span class="cdot" style="background:#34d399"></span>仕事</div>
+        <div class="cat"><span class="cdot" style="background:#c084fc"></span>プロジェクト</div>
+      </div>
+      <div class="main">
+        <div class="lhead">
+          <div class="search">🌐 リスト名・タスクを横断検索… (Ctrl+F)</div>
+          <div class="newbtn">＋</div>
+        </div>
+        <div class="card orange">
+          <div class="ct">🎯 今週のタスク</div>
+          <div class="cm">仕事 ・ 8件 ・ 2日前</div>
+        </div>
+        <div class="card green">
+          <div class="ct">🛒 買い物リスト <span class="new">NEW</span></div>
+          <div class="cm">個人 ・ 6件 ・ たった今インポート</div>
+        </div>
+        <div class="card blue">
+          <div class="ct">📚 ようこそ — 使い方</div>
+          <div class="cm">個人 ・ 20件 ・ 5日前</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 複数付箋をデスクトップに -->
+  <div class="shot">
+    <div class="cap">③ 付箋スタイル：必要なリストだけデスクトップに常駐させて作業</div>
+    <div class="row">
+      <div class="note green" style="width:300px;">
+        <div class="titlebar"><span class="ttl">🛒 買い物リスト</span><span class="spacer"></span><span class="btn">📌</span><span class="btn">✕</span></div>
+        <div class="body">
+          <div class="heading">🥬 食料品</div>
+          <div class="item"><span class="cb"></span><span class="txt">牛乳</span></div>
+          <div class="item"><span class="cb"></span><span class="txt">パン</span></div>
+          <div class="item"><span class="cb on"></span><span class="txt done">コーヒー豆</span></div>
+        </div>
+      </div>
+      <div class="note blue" style="width:300px;">
+        <div class="titlebar"><span class="ttl">📚 メモ</span><span class="spacer"></span><span class="btn">📍</span><span class="btn">✕</span></div>
+        <div class="body">
+          <div class="item"><span class="cb"></span><span class="txt bold">企画書を <span class="link">[共有フォルダ](パス)</span> に保存</span></div>
+          <div class="item"><span class="cb"></span><span class="txt">参考: <span class="link">公式サイト</span></span></div>
+          <div class="sep"></div>
+          <div class="item"><span class="cb"></span><span class="txt">打ち合わせメモまとめ</span><span class="memo">💬</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

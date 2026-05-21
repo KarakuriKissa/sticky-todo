@@ -393,21 +393,11 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           </div>
         )}
         {showMemoEdit && (
-          <div className={`comment-popup${commentAbove ? ' comment-popup-above' : ''}`} onClick={(e) => e.stopPropagation()}>
-            <div className="memo-popup-title">コメント</div>
-            <textarea
-              className="memo-textarea"
-              autoFocus
-              value={memoText}
-              onChange={(e) => setMemoText(e.target.value)}
-              placeholder="コメントを入力…（[表示文字](URL) でリンクも）"
-              rows={4}
-            />
-            <div className="memo-popup-actions">
-              <button className="btn-primary" onClick={saveMemo}>保存</button>
-              <button className="btn-secondary" onClick={() => setShowMemoEdit(false)}>キャンセル</button>
-            </div>
-          </div>
+          <CommentEditor
+            value={memoText} setValue={setMemoText}
+            onSave={saveMemo} onCancel={() => setShowMemoEdit(false)}
+            above={commentAbove}
+          />
         )}
       </div>
     );
@@ -575,23 +565,96 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
 
       {/* Comment edit popup (opened from right-click menu) */}
       {showMemoEdit && (
-        <div className={`comment-popup${commentAbove ? ' comment-popup-above' : ''}`} onClick={(e) => e.stopPropagation()}>
-          <div className="memo-popup-title">コメント</div>
-          <textarea
-            className="memo-textarea"
-            autoFocus
-            value={memoText}
-            onChange={(e) => setMemoText(e.target.value)}
-            placeholder="コメントを入力…（URL・パス可。[表示文字](URL) でリンクも）"
-            rows={4}
-          />
-          <div className="memo-popup-actions">
-            <button className="btn-primary" onClick={saveMemo}>保存</button>
-            <button className="btn-secondary" onClick={() => setShowMemoEdit(false)}>キャンセル</button>
-          </div>
-        </div>
+        <CommentEditor
+          value={memoText} setValue={setMemoText}
+          onSave={saveMemo} onCancel={() => setShowMemoEdit(false)}
+          above={commentAbove}
+        />
       )}
     </div>
   );
 }
 
+// ── Comment editor ────────────────────────────────────────────────────────────
+// Shared by normal items and headings. Adds:
+//   - Enter to save, Shift+Enter for a newline
+//   - a 🔗 button that wraps the selected text as [selected](url)
+function CommentEditor({
+  value, setValue, onSave, onCancel, above,
+}: {
+  value: string;
+  setValue: (s: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  above: boolean;
+}) {
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const [linkSel, setLinkSel] = useState<{ start: number; end: number } | null>(null);
+  const [linkUrl, setLinkUrl] = useState('');
+
+  const startLink = () => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    if (end <= start) return; // need a selection
+    setLinkSel({ start, end });
+    setLinkUrl('');
+  };
+  const applyLink = () => {
+    if (!linkSel) return;
+    const u = linkUrl.trim();
+    if (u) {
+      const label = value.slice(linkSel.start, linkSel.end);
+      setValue(value.slice(0, linkSel.start) + `[${label}](${u})` + value.slice(linkSel.end));
+    }
+    setLinkSel(null);
+  };
+
+  return (
+    <div className={`comment-popup${above ? ' comment-popup-above' : ''}`} onClick={(e) => e.stopPropagation()}>
+      <div className="memo-popup-title">
+        コメント
+        <button
+          className="comment-link-btn"
+          title="選択した文字にリンクを設定（先に文字を選択）"
+          onMouseDown={(e) => { e.preventDefault(); startLink(); }}
+        >🔗 リンク</button>
+      </div>
+      <textarea
+        ref={taRef}
+        className="memo-textarea"
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          // Enter saves; Shift+Enter inserts a newline (default textarea behavior).
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSave(); }
+          if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        }}
+        placeholder="コメントを入力…（Shift+Enterで改行 / 文字を選んで🔗でリンク）"
+        rows={4}
+      />
+      {linkSel && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <input
+            autoFocus
+            className="memo-link-input"
+            value={linkUrl}
+            placeholder="https://… / C:\パス / 独自スキーム"
+            onChange={(e) => setLinkUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
+              if (e.key === 'Escape') { e.preventDefault(); setLinkSel(null); }
+            }}
+          />
+          <button className="btn-primary" style={{ fontSize: 11, padding: '2px 8px' }} onClick={applyLink}>OK</button>
+        </div>
+      )}
+      <div className="memo-popup-actions">
+        <button className="btn-primary" onClick={onSave}>保存</button>
+        <button className="btn-secondary" onClick={onCancel}>キャンセル</button>
+      </div>
+    </div>
+  );
+}

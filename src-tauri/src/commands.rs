@@ -448,6 +448,29 @@ pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+// Open a filesystem path (folder or file) in the OS file manager.
+// shellOpen() is unreliable for bare folder paths on Windows, so we shell out
+// to the platform file manager directly.
+#[tauri::command]
+pub fn open_path(path: String) -> Result<(), String> {
+    use std::process::Command;
+    #[cfg(target_os = "windows")]
+    {
+        // explorer.exe sometimes returns a non-zero code even on success, so
+        // we don't check the exit status — just that spawning worked.
+        Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // Open a URL with a specific browser executable (or app, on macOS).
 // `browser` is an absolute path to the browser binary, or on macOS an app name.
 #[tauri::command]

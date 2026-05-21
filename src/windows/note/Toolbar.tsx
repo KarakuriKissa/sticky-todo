@@ -48,7 +48,7 @@ export function NoteToolbar(p: ToolbarProps) {
       <button className="type-btn" onClick={() => p.addTyped('separator')} title="区切り線">—</button>
       {/* Hyperlink: select text in a task, then click. mousedown (not click) so
           the input keeps its selection before focus moves to the button. */}
-      <button className="type-btn"
+      <button className="type-btn active-feature"
         onMouseDown={(e) => { e.preventDefault(); p.onInsertLink(); }}
         title="選択した文字にリンクを設定（先にタスク内の文字を選択）">🔗</button>
       <button className="type-btn"

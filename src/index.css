@@ -1279,7 +1279,31 @@ kbd {
   margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: .04em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
+.comment-link-btn {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #6366f1;
+  border-radius: 5px;
+  padding: 2px 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.comment-link-btn:hover { background: #4f46e5; }
+.memo-link-input {
+  flex: 1;
+  border: 1px solid #c7d2fe;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #1e1e2e;
+  outline: none;
+}
+.memo-link-input:focus { border-color: #6366f1; }
 .memo-textarea {
   width: 100%;
   border: 1px solid #ddd;

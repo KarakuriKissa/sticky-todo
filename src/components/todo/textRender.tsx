@@ -1,24 +1,37 @@
 import { openExternal } from '../../utils/openExternal';
 
-// Long links are visually noisy. Show a compact label but keep the full target
-// for the click / hover-title. URLs → "domain/…last-segment"; paths → "…\\last".
+// Long links are visually noisy. Show a compact label that keeps BOTH the head
+// (so you can tell http vs which drive/scheme) AND the tail (the meaningful
+// last segment). The full target is preserved for the click / hover-title.
 function shortLabel(link: string): string {
-  const MAX = 48;
+  const MAX = 52;
   if (link.length <= MAX) return link;
+
+  // http(s) → "https://host/…/lastSegment"
   if (/^https?:\/\//i.test(link)) {
     try {
       const u = new URL(link);
+      const scheme = u.protocol + '//';            // "https://"
       const tail = (u.pathname + u.search).replace(/\/$/, '');
       const last = tail.split('/').filter(Boolean).pop() ?? '';
-      const compact = last ? `${u.hostname}/…/${last}` : u.hostname;
-      return compact.length <= MAX ? compact : `${u.hostname}/…`;
-    } catch {
-      return link.slice(0, MAX - 1) + '…';
-    }
+      const out = last ? `${scheme}${u.hostname}/…/${last}` : `${scheme}${u.hostname}`;
+      return out.length <= MAX ? out : `${scheme}${u.hostname}/…`;
+    } catch { /* fall through */ }
   }
-  // File path → keep the last segment after the final slash/backslash.
+
+  // Custom scheme (onenote://, myapp:// …) → keep scheme head + tail.
+  const scm = link.match(/^[a-z][a-z0-9+.\-]*:\/\//i);
+  if (scm) {
+    const head = link.slice(0, Math.min(link.length, scm[0].length + 12));
+    return `${head}…${link.slice(-16)}`;
+  }
+
+  // Filesystem path → keep the drive/UNC head + last segment.
+  const sep = link.includes('\\') ? '\\' : '/';
   const seg = link.split(/[\\/]/).filter(Boolean).pop() ?? link;
-  return `…${link.includes('\\') ? '\\' : '/'}${seg}`.slice(0, MAX);
+  const driveMatch = link.match(/^([A-Za-z]:|\\\\[^\\]+)/); // "C:" or "\\\\server"
+  const head = driveMatch ? driveMatch[1] : '';
+  return `${head}${sep}…${sep}${seg}`;
 }
 
 // Render free text with clickable links and (optionally) wrap a search term
@@ -36,8 +49,9 @@ function tokenize(text: string): Token[] {
   const tokens: Token[] = [];
   // [label](target) — label has no ']' , target has no ')' or whitespace
   const mdRe = /\[([^\]]+)\]\(([^)\s]+)\)/g;
-  // bare URL / win path / UNC / absolute unix path
-  const bareRe = /(https?:\/\/[^\s]+|[A-Za-z]:[\\/][^\s]+|\\\\[^\s]+|\/[^\s/][^\s]*)/g;
+  // any-scheme URL (http, ftp, onenote, custom company protocols…) / win path /
+  // UNC / absolute unix path
+  const bareRe = /([a-z][a-z0-9+.\-]*:\/\/[^\s]+|[A-Za-z]:[\\/][^\s]+|\\\\[^\s]+|\/[^\s/][^\s]*)/gi;
 
   // First split out markdown links.
   let last = 0;

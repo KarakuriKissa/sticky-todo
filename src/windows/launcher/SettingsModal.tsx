@@ -237,6 +237,26 @@ export function HelpSection() {
         )}
       </div>
 
+      <h4 style={{ marginTop: 18 }}>🆕 更新履歴</h4>
+      <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 6 }}>
+        最近の主な変更点です。全文は GitHub の CHANGELOG をご覧ください。
+      </p>
+      <ul className="help-list" style={{ fontSize: 12 }}>
+        <li>🔗 ハイパーリンク：文字を選んで 🔗 ボタンでリンク化（タスク・コメント両対応）</li>
+        <li>📂 URL・フォルダパス・独自スキームをクリックで開ける（開くブラウザも指定可）</li>
+        <li>💬 コメント：アイコンのホバーで表示／クリックで固定、Shift+Enterで改行</li>
+        <li>📋 タスクのコピペ・複数行貼り付け・打ち消し線・矢印キー移動</li>
+        <li>🍎 Mac版（.dmg）の配布を開始</li>
+        <li>💾 自動バックアップ・起動時復元・PC自動起動</li>
+        <li>🐛 保存のたびにタスクが消える重大バグを修正</li>
+      </ul>
+      <p style={{ fontSize: 12, marginTop: 4 }}>
+        <a href="#" onClick={async (e) => {
+          e.preventDefault();
+          (await import('@tauri-apps/plugin-shell')).open('https://github.com/KarakuriKissa/sticky-todo/blob/main/CHANGELOG.md');
+        }} style={{ color: '#a5b4fc' }}>更新履歴の全文を見る →</a>
+      </p>
+
       <h4 style={{ marginTop: 18 }}>📄 このアプリについて</h4>
       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.9 }}>
         StickyTodo は<b>完全無料</b>で使えるデスクトップ向けタスク管理アプリです。<br />
