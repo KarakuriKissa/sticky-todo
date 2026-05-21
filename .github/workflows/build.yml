@@ -114,7 +114,18 @@ jobs:
           retention-days: 90
           path: src-tauri/target/release/sticky-todo.exe
 
-      # ── 11. GitHub Releases に自動公開（ビルド番号タグ付き） ──────────
+      # ── 11. 配布ファイル名を分かりやすくリネーム ─────────────────────
+      - name: 配布ファイル名を整える（Windows）
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-files | Out-Null
+          $nsis = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          $msi  = Get-ChildItem src-tauri/target/release/bundle/msi/*.msi  | Select-Object -First 1
+          if ($nsis) { Copy-Item $nsis.FullName "release-files/StickyTodo-Windows-インストーラー.exe" -Force }
+          if ($msi)  { Copy-Item $msi.FullName  "release-files/StickyTodo-Windows.msi" -Force }
+          Copy-Item src-tauri/target/release/sticky-todo.exe "release-files/StickyTodo-Windows-単体版.exe" -Force
+
+      # ── 12. GitHub Releases に自動公開（ビルド番号タグ付き） ──────────
       - name: 📦 GitHub Release を作成
         if: success()
         uses: softprops/action-gh-release@v2
@@ -123,18 +134,20 @@ jobs:
           name: StickyTodo build #${{ github.run_number }}
           body: |
             自動生成されたビルドです。
-            - コミット: ${{ github.sha }}
-            - ビルド番号: #${{ github.run_number }}
-            - ビルド日時: ${{ github.event.head_commit.timestamp }}
 
-            ⚠ β版・無署名のため、初回起動時に Windows SmartScreen 警告が表示されます。
-            「詳細情報」→「実行」で続行してください。
+            ## ダウンロード
+            - **Windows**: `StickyTodo-Windows-インストーラー.exe`（推奨）/ `StickyTodo-Windows.msi` / `StickyTodo-Windows-単体版.exe`（インストール不要）
+            - **Mac**: `StickyTodo-Mac.dmg`（Intel / Apple Silicon 両対応）
+
+            ## 補足
+            - ビルド番号: #${{ github.run_number }}
+            - ⚠ β版・無署名のため、初回起動時に警告が出ます。
+              - Windows: SmartScreen →「詳細情報」→「実行」
+              - Mac: アプリを右クリック →「開く」
           draft: false
           prerelease: true
           files: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/sticky-todo.exe
+            release-files/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -183,6 +196,12 @@ jobs:
             src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
 
+      - name: 配布ファイル名を整える（Mac）
+        run: |
+          mkdir -p release-files
+          dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -n1)
+          cp "$dmg" "release-files/StickyTodo-Mac.dmg"
+
       - name: 📦 GitHub Release に macOS 版を追加
         if: success()
         uses: softprops/action-gh-release@v2
@@ -192,6 +211,6 @@ jobs:
           draft: false
           prerelease: true
           files: |
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            release-files/StickyTodo-Mac.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
