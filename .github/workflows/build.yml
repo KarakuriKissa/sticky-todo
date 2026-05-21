@@ -96,25 +96,7 @@ jobs:
       - name: アプリをビルド
         run: npm run tauri build
 
-      # ── 9. インストーラーをアップロード ───────────────────────────────
-      - name: 📦 インストーラーをアップロード
-        uses: actions/upload-artifact@v4
-        with:
-          name: StickyTodo-インストーラー
-          retention-days: 90
-          path: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/msi/*.msi
-
-      # ── 10. 単体 EXE もアップロード ───────────────────────────────────
-      - name: 📦 単体EXEをアップロード
-        uses: actions/upload-artifact@v4
-        with:
-          name: StickyTodo-EXE単体
-          retention-days: 90
-          path: src-tauri/target/release/sticky-todo.exe
-
-      # ── 11. 配布ファイル名を分かりやすくリネーム ─────────────────────
+      # ── 9. 配布ファイル名を分かりやすくリネーム ──────────────────────
       - name: 配布ファイル名を整える（Windows）
         shell: pwsh
         run: |
@@ -125,31 +107,13 @@ jobs:
           if ($msi)  { Copy-Item $msi.FullName  "release-files/StickyTodo-Windows.msi" -Force }
           Copy-Item src-tauri/target/release/sticky-todo.exe "release-files/StickyTodo-Windows-単体版.exe" -Force
 
-      # ── 12. GitHub Releases に自動公開（ビルド番号タグ付き） ──────────
-      - name: 📦 GitHub Release を作成
-        if: success()
-        uses: softprops/action-gh-release@v2
+      # ── 10. 成果物をアーティファクトとして渡す（Releaseは後段の release ジョブで一括公開）
+      - name: 📦 Windows 成果物をアップロード
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: build-${{ github.run_number }}
-          name: StickyTodo build #${{ github.run_number }}
-          body: |
-            自動生成されたビルドです。
-
-            ## ダウンロード
-            - **Windows**: `StickyTodo-Windows-インストーラー.exe`（推奨）/ `StickyTodo-Windows.msi` / `StickyTodo-Windows-単体版.exe`（インストール不要）
-            - **Mac**: `StickyTodo-Mac.dmg`（Intel / Apple Silicon 両対応）
-
-            ## 補足
-            - ビルド番号: #${{ github.run_number }}
-            - ⚠ β版・無署名のため、初回起動時に警告が出ます。
-              - Windows: SmartScreen →「詳細情報」→「実行」
-              - Mac: アプリを右クリック →「開く」
-          draft: false
-          prerelease: true
-          files: |
-            release-files/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-windows
+          retention-days: 90
+          path: release-files/*
 
   # ════════════════════════════════════════════════════════════════════════
   #  macOS ビルド（.dmg / .app）— Apple Silicon + Intel ユニバーサル
@@ -187,30 +151,58 @@ jobs:
       - name: アプリをビルド（ユニバーサル）
         run: bunx tauri build --target universal-apple-darwin
 
-      - name: 📦 macOS インストーラーをアップロード
-        uses: actions/upload-artifact@v4
-        with:
-          name: StickyTodo-macOS
-          retention-days: 90
-          path: |
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
-
       - name: 配布ファイル名を整える（Mac）
         run: |
           mkdir -p release-files
           dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -n1)
           cp "$dmg" "release-files/StickyTodo-Mac.dmg"
 
-      - name: 📦 GitHub Release に macOS 版を追加
-        if: success()
+      - name: 📦 Mac 成果物をアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          retention-days: 90
+          path: release-files/StickyTodo-Mac.dmg
+
+  # ════════════════════════════════════════════════════════════════════════
+  #  Release 公開（両ビルド完了後に 1 回だけ。並列実行による競合を防ぐ）
+  # ════════════════════════════════════════════════════════════════════════
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 成果物をダウンロード
+        uses: actions/download-artifact@v4
+        with:
+          path: dl
+
+      - name: ファイルを集約
+        run: |
+          mkdir -p out
+          cp dl/release-windows/* out/ 2>/dev/null || true
+          cp dl/release-macos/* out/ 2>/dev/null || true
+          ls -la out
+
+      - name: 📦 GitHub Release を公開
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: StickyTodo build #${{ github.run_number }}
+          body: |
+            自動生成されたビルドです。
+
+            ## ダウンロード
+            - **Windows**: `StickyTodo-Windows-インストーラー.exe`（推奨）/ `StickyTodo-Windows.msi` / `StickyTodo-Windows-単体版.exe`（インストール不要）
+            - **Mac**: `StickyTodo-Mac.dmg`（Intel / Apple Silicon 両対応）
+
+            ## 補足
+            - ビルド番号: #${{ github.run_number }}
+            - ⚠ β版・無署名のため、初回起動時に警告が出ます。
+              - Windows: SmartScreen →「詳細情報」→「実行」
+              - Mac: アプリを右クリック →「開く」
           draft: false
           prerelease: true
           files: |
-            release-files/StickyTodo-Mac.dmg
+            out/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
