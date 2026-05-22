@@ -8,6 +8,7 @@ import { StatusBadge, PriorityBadge, AssigneeBadge, DateBadge } from './todo/bad
 import { InlineStatusPicker, InlineAssigneePicker, InlineDatePicker, InlinePriorityPicker } from './todo/inlinePickers';
 import { buildContextMenu } from './todo/contextMenu';
 import { makeRowKeyDown } from './todo/rowKeyboard';
+import { RichTextEdit } from './todo/RichTextEdit';
 
 interface Props {
   item: Item;
@@ -104,7 +105,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
   }, [memoPinned]);
 
   // ── Keyboard ────────────────────────────────────────────────────────────────
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (item.locked && e.key !== 'Escape' && e.key !== 'Tab') {
       if (!e.ctrlKey && !e.metaKey) {
         e.preventDefault();
@@ -453,21 +454,17 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
         disabled={item.locked}
       />
 
-      {/* Text — input while editing, div with clickable URLs while viewing */}
+      {/* Text — RichTextEdit (links stay blue while editing) while editing,
+          div with clickable URLs while viewing */}
       {isEditing ? (
-        <input
-          ref={inputRef}
-          data-text-input=""
-          className={`todo-text${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}${item.strikethrough ? ' strike' : ''}`}
+        <RichTextEdit
           value={item.text}
-          readOnly={item.locked}
-          onChange={(e) => !item.locked && updateItem(item.id, { text: e.target.value })}
+          onChange={(md) => !item.locked && updateItem(item.id, { text: md })}
+          autoFocus
+          className={`todo-text${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}${item.strikethrough ? ' strike' : ''}`}
+          placeholder="タスクを入力…"
           onKeyDown={onKeyDown}
           onBlur={exitEdit}
-          onClick={(e) => e.stopPropagation()}
-          onDoubleClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          placeholder="タスクを入力…"
         />
       ) : (
         <div
@@ -576,9 +573,10 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
 }
 
 // ── Comment editor ────────────────────────────────────────────────────────────
-// Shared by normal items and headings. Adds:
-//   - Enter to save, Shift+Enter for a newline
-//   - a 🔗 button that wraps the selected text as [selected](url)
+// Uses RichTextEdit so links show as blue text while editing. Keys:
+//   Ctrl+Enter = save, Esc = cancel, Enter / Shift+Enter = newline.
+// Keydown is stopped from bubbling so the note window's global handler doesn't
+// steal Enter/Shift+Enter and switch focus to a task.
 function CommentEditor({
   value, setValue, onSave, onCancel, above,
 }: {
@@ -588,28 +586,7 @@ function CommentEditor({
   onCancel: () => void;
   above: boolean;
 }) {
-  const taRef = useRef<HTMLTextAreaElement>(null);
-  const [linkSel, setLinkSel] = useState<{ start: number; end: number } | null>(null);
-  const [linkUrl, setLinkUrl] = useState('');
-
-  const startLink = () => {
-    const ta = taRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart ?? 0;
-    const end = ta.selectionEnd ?? 0;
-    if (end <= start) return; // need a selection
-    setLinkSel({ start, end });
-    setLinkUrl('');
-  };
-  const applyLink = () => {
-    if (!linkSel) return;
-    const u = linkUrl.trim();
-    if (u) {
-      const label = value.slice(linkSel.start, linkSel.end);
-      setValue(value.slice(0, linkSel.start) + `[${label}](${u})` + value.slice(linkSel.end));
-    }
-    setLinkSel(null);
-  };
+  const insertRef = useRef<(() => void) | null>(null);
 
   return (
     <div className={`comment-popup${above ? ' comment-popup-above' : ''}`} onClick={(e) => e.stopPropagation()}>
@@ -618,41 +595,27 @@ function CommentEditor({
         <button
           className="comment-link-btn"
           title="選択した文字にリンクを設定（先に文字を選択）"
-          onMouseDown={(e) => { e.preventDefault(); startLink(); }}
+          onMouseDown={(e) => { e.preventDefault(); insertRef.current?.(); }}
         >🔗 リンク</button>
       </div>
-      <textarea
-        ref={taRef}
-        className="memo-textarea"
-        autoFocus
+      <RichTextEdit
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={setValue}
+        multiline
+        autoFocus
+        className="memo-textarea cl-multiline"
+        placeholder="コメントを入力…（Ctrl+Enterで保存／Enterで改行／文字を選んで🔗）"
+        registerInsert={(fn) => { insertRef.current = fn; }}
         onKeyDown={(e) => {
-          // Enter saves; Shift+Enter inserts a newline (default textarea behavior).
-          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSave(); }
-          if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+          // Keep all key events inside the comment editor.
+          e.stopPropagation();
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); onSave(); }
+          else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+          // Enter / Shift+Enter fall through to default (newline).
         }}
-        placeholder="コメントを入力…（Shift+Enterで改行 / 文字を選んで🔗でリンク）"
-        rows={4}
       />
-      {linkSel && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-          <input
-            autoFocus
-            className="memo-link-input"
-            value={linkUrl}
-            placeholder="https://… / C:\パス / 独自スキーム"
-            onChange={(e) => setLinkUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
-              if (e.key === 'Escape') { e.preventDefault(); setLinkSel(null); }
-            }}
-          />
-          <button className="btn-primary" style={{ fontSize: 11, padding: '2px 8px' }} onClick={applyLink}>OK</button>
-        </div>
-      )}
       <div className="memo-popup-actions">
-        <button className="btn-primary" onClick={onSave}>保存</button>
+        <button className="btn-primary" onClick={onSave}>保存 (Ctrl+Enter)</button>
         <button className="btn-secondary" onClick={onCancel}>キャンセル</button>
       </div>
     </div>

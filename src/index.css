@@ -432,13 +432,12 @@ ul { list-style: none; }
   color: #4338ca;
   font-weight: 600;
 }
-/* Hyperlink button — stand out clearly (not grayed). */
+/* Hyperlink button — same background as other buttons, but a bolder/larger
+   icon so it reads clearly without a loud fill. */
 .type-btn.link-btn {
-  background: #6366f1;
-  color: #fff;
-  font-weight: 700;
+  font-size: 14px;
+  filter: saturate(1.4) contrast(1.15);
 }
-.type-btn.link-btn:hover { background: #4f46e5; }
 .type-bar-spacer { flex: 1; }
 
 /* Group selector in note toolbar */
@@ -1303,6 +1302,7 @@ kbd {
 .comment-link-btn:hover { background: #4f46e5; }
 .memo-link-input {
   flex: 1;
+  width: 100%;
   border: 1px solid #c7d2fe;
   border-radius: 4px;
   padding: 4px 8px;
@@ -1311,6 +1311,39 @@ kbd {
   outline: none;
 }
 .memo-link-input:focus { border-color: #6366f1; }
+
+/* ── RichTextEdit (contentEditable) ── */
+.cl-edit { outline: none; }
+.cl-edit:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(30,30,46,.3);
+  pointer-events: none;
+}
+.cl-multiline {
+  min-height: 60px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Hyperlink shown as blue text while editing AND viewing. */
+.cl-link {
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.cl-link:hover { color: #1e40af; }
+/* Inline link editor popup anchored to the editor. */
+.cl-link-pop {
+  position: absolute;
+  z-index: 600;
+  left: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid #a5b4fc;
+  border-radius: 8px;
+  box-shadow: 0 6px 22px rgba(99,102,241,.3);
+  padding: 8px;
+  width: 260px;
+}
 .memo-textarea {
   width: 100%;
   border: 1px solid #ddd;

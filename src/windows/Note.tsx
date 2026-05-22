@@ -9,6 +9,7 @@ import { ClosingOverlay, SearchOverlay, CheatSheet } from './note/overlays';
 import { useReminders } from './note/useReminders';
 import { useCloseHandler } from './note/useCloseHandler';
 import { NoteToolbar } from './note/Toolbar';
+import { triggerActiveInsertLink } from '../components/todo/RichTextEdit';
 
 interface Props {
   noteId: string;
@@ -41,12 +42,6 @@ export function NoteWindow({ noteId }: Props) {
   // visible task list and supports up/down navigation between hits.
   const [showSearch, setShowSearch] = useState(false);
   const [searchMatchIdx, setSearchMatchIdx] = useState(0);
-  // Hyperlink dialog. Works for BOTH creating a link from selected text and
-  // re-editing an existing [label](url): start/end mark the range to replace,
-  // label & url are the editable fields.
-  const [linkDialog, setLinkDialog] = useState<
-    null | { itemId: string; start: number; end: number; label: string; url: string; editing: boolean }
-  >(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const appWin = getCurrentWindow();
   const closingRef = useRef(false);
@@ -442,48 +437,10 @@ export function NoteWindow({ noteId }: Props) {
     return id;
   };
 
-  // Open the link dialog. If the cursor sits inside an existing [label](url),
-  // pre-fill it for re-editing; otherwise wrap the current selection as a link.
-  // Called on the 🔗 button's mousedown (before focus moves).
-  const captureLinkSelection = () => {
-    const el = document.activeElement as HTMLInputElement | null;
-    if (!el || !el.hasAttribute?.('data-text-input')) return;
-    const row = el.closest('[data-item-id]');
-    const itemId = row?.getAttribute('data-item-id');
-    if (!itemId) return;
-    const value = el.value;
-    const start = el.selectionStart ?? 0;
-    const end = el.selectionEnd ?? 0;
-
-    // 1) Is the caret/selection inside an existing markdown link?
-    const re = /\[([^\]]+)\]\(([^)\s]+)\)/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(value)) !== null) {
-      const s = m.index, e = m.index + m[0].length;
-      if (start >= s && end <= e) {
-        setLinkDialog({ itemId, start: s, end: e, label: m[1], url: m[2], editing: true });
-        return;
-      }
-    }
-
-    // 2) Otherwise create a new link from the selection.
-    if (end <= start) return; // nothing selected and not on a link
-    setLinkDialog({ itemId, start, end, label: value.slice(start, end), url: '', editing: false });
-  };
-
-  const applyLink = () => {
-    if (!linkDialog) return;
-    const { itemId, start, end, label, url } = linkDialog;
-    const u = url.trim();
-    const lbl = (label.trim() || u);
-    const it = useNoteStore.getState().items.find((i) => i.id === itemId);
-    if (!it) { setLinkDialog(null); return; }
-    // Empty URL while editing → unlink (keep just the label text).
-    const replacement = u ? `[${lbl}](${u})` : lbl;
-    const next = it.text.slice(0, start) + replacement + it.text.slice(end);
-    useNoteStore.getState().updateItem(itemId, { text: next });
-    setLinkDialog(null);
-  };
+  // Toolbar 🔗 → ask the currently-focused RichTextEdit to turn the selection
+  // into a link (or it opens its own editor). Re-editing an existing link is
+  // done by clicking the blue link text directly.
+  const captureLinkSelection = () => { triggerActiveInsertLink(); };
 
   const addTyped = (type: ItemType) => {
     const after = anchorAfterSelection();
@@ -724,49 +681,6 @@ export function NoteWindow({ noteId }: Props) {
 
       {/* ── Cheat sheet (? key) ── */}
       {showCheatSheet && <CheatSheet onClose={() => setShowCheatSheet(false)} />}
-
-      {/* ── Hyperlink dialog (create / re-edit) ── */}
-      {linkDialog && (
-        <div className="modal-overlay" onClick={() => setLinkDialog(null)}>
-          <div className="modal" style={{ width: 400, maxWidth: '90vw' }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontSize: 16, marginBottom: 10 }}>{linkDialog.editing ? 'リンクを編集' : 'リンクを設定'}</h2>
-            <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>表示する文字</label>
-            <input
-              type="text"
-              value={linkDialog.label}
-              placeholder="表示テキスト"
-              onChange={(e) => setLinkDialog((d) => d ? { ...d, label: e.target.value } : d)}
-              onKeyDown={(e) => { if (e.key === 'Escape') setLinkDialog(null); }}
-              style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '6px 8px', fontSize: 13, marginBottom: 10 }}
-            />
-            <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>リンク先（URL / パス / 独自スキーム）</label>
-            <input
-              autoFocus
-              type="text"
-              value={linkDialog.url}
-              placeholder="https://… / C:\フォルダ / scheme://…"
-              onChange={(e) => setLinkDialog((d) => d ? { ...d, url: e.target.value } : d)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
-                if (e.key === 'Escape') setLinkDialog(null);
-              }}
-              style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '6px 8px', fontSize: 13 }}
-            />
-            <div className="modal-actions" style={{ marginTop: 12 }}>
-              <button className="btn-primary" onClick={applyLink}>{linkDialog.editing ? '更新' : 'リンクを設定'}</button>
-              {linkDialog.editing && (
-                <button className="btn-secondary" onClick={() => setLinkDialog((d) => d ? { ...d, url: '' } : d)} style={{ color: '#ef4444' }}>リンク解除</button>
-              )}
-              <button className="btn-secondary" onClick={() => setLinkDialog(null)}>キャンセル</button>
-            </div>
-            {linkDialog.editing && (
-              <p style={{ fontSize: 10, color: 'var(--muted)', marginTop: 8 }}>
-                ※ リンク文字内にカーソルを置いて 🔗 を押すと、この編集画面が開きます
-              </p>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
