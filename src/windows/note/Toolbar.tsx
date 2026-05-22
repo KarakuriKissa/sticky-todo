@@ -50,7 +50,13 @@ export function NoteToolbar(p: ToolbarProps) {
           the input keeps its selection before focus moves to the button. */}
       <button className="type-btn link-btn"
         onMouseDown={(e) => { e.preventDefault(); p.onInsertLink(); }}
-        title="リンクを設定／編集（文字を選択 か リンク内にカーソルを置いて押す）">🔗</button>
+        title="リンクを設定／編集（文字を選択 か リンク内にカーソルを置いて押す）">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+      </button>
       <button className="type-btn"
         onClick={() => { if (selCount > 0) [...p.selectedIds].forEach((id) => useNoteStore.getState().indent(id)); }}
         title="インデント (Tab)">→</button>
