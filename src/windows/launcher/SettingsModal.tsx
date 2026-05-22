@@ -370,7 +370,7 @@ export function SettingsModal({
             <section>
               <h3>ステータス管理</h3>
               <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
-                ダブルクリックで名前を編集
+                名前はダブルクリックで編集／左の丸をクリックで色を変更
               </p>
               <div className="status-list">
                 {statuses.map((s) => (
@@ -378,6 +378,7 @@ export function SettingsModal({
                     key={s.id}
                     status={s}
                     onEdit={(name) => saveStatus({ ...s, name })}
+                    onColor={(color) => saveStatus({ ...s, color })}
                     onDelete={() => deleteStatus(s.id)}
                   />
                 ))}
@@ -477,7 +478,13 @@ export function SettingsModal({
                       <div className="assignee-col-list">
                         {groupPersons.map((p) => (
                           <div key={p.id} className="assignee-group-item">
-                            <span className="status-dot" style={{ background: p.color }} />
+                            <input
+                              type="color"
+                              value={p.color}
+                              onChange={(e) => saveAssigneePerson({ ...p, color: e.target.value })}
+                              title="色を変更"
+                              style={{ width: 16, height: 16, padding: 0, border: 'none', borderRadius: '50%', cursor: 'pointer', flexShrink: 0, background: 'transparent' }}
+                            />
                             <span style={{ flex: 1 }}>{p.name}</span>
                             <button className="btn-icon" style={{ fontSize: 11 }} onClick={() => deleteAssigneePerson(p.id)}>×</button>
                           </div>
@@ -621,10 +628,12 @@ function BulkAssigneePaste({
 export function StatusRow({
   status,
   onEdit,
+  onColor,
   onDelete,
 }: {
   status: Status;
   onEdit: (name: string) => void;
+  onColor: (color: string) => void;
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -637,7 +646,14 @@ export function StatusRow({
 
   return (
     <div className="status-row">
-      <span className="status-dot" style={{ background: status.color }} />
+      {/* Color swatch is now an editable color picker. */}
+      <input
+        type="color"
+        value={status.color}
+        onChange={(e) => onColor(e.target.value)}
+        title="色を変更"
+        style={{ width: 18, height: 18, padding: 0, border: 'none', borderRadius: '50%', cursor: 'pointer', flexShrink: 0, background: 'transparent' }}
+      />
       {editing ? (
         <input
           autoFocus

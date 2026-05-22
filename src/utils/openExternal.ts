@@ -33,16 +33,17 @@ export async function openExternal(target: string): Promise<void> {
       try { await invoke('open_url_with', { url: t, browser }); return; }
       catch { /* fall through to default browser */ }
     }
-    shellOpen(t).catch(() => {});
-    return;
+    // open_uri uses the OS default handler (cmd start / open / xdg-open).
+    try { await invoke('open_uri', { target: t }); return; }
+    catch { shellOpen(t).catch(() => {}); return; }
   }
   if (isUrl(t)) {
-    // Custom protocol (e.g. company tools). Let the OS protocol handler open it.
-    shellOpen(t).catch(() => {});
-    return;
+    // Any custom protocol (slack://, company tools, etc). Use the OS handler
+    // directly — the shell plugin's allowlist may block non-http schemes.
+    try { await invoke('open_uri', { target: t }); return; }
+    catch { shellOpen(t).catch(() => {}); return; }
   }
-  // Filesystem path → open the file manager. shellOpen() is unreliable for
-  // bare folder paths on Windows, so use our explorer/open/xdg-open command.
+  // Filesystem path → open the file manager.
   try { await invoke('open_path', { path: t }); }
   catch { shellOpen(t).catch(() => {}); }
 }

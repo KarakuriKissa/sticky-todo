@@ -432,6 +432,13 @@ ul { list-style: none; }
   color: #4338ca;
   font-weight: 600;
 }
+/* Hyperlink button — stand out clearly (not grayed). */
+.type-btn.link-btn {
+  background: #6366f1;
+  color: #fff;
+  font-weight: 700;
+}
+.type-btn.link-btn:hover { background: #4f46e5; }
 .type-bar-spacer { flex: 1; }
 
 /* Group selector in note toolbar */
@@ -1220,10 +1227,10 @@ kbd {
   outline-offset: -1px;
 }
 
-/* Memo tooltip - Google Sheets style */
+/* Memo tooltip - shown near the 💬 icon (right side of the row) */
 .memo-tooltip {
   position: absolute;
-  left: 30px;
+  right: 4px;
   top: calc(100% + 4px);
   background: #fff;
   border: 1px solid #ddd;
@@ -1254,7 +1261,7 @@ kbd {
   white-space: pre-wrap;
 }
 
-/* Comment popup (was memo-popup) */
+/* Comment popup (was memo-popup) — anchored to the right, near the 💬 icon. */
 .memo-popup, .comment-popup {
   position: absolute;
   z-index: 200;
@@ -1264,7 +1271,7 @@ kbd {
   box-shadow: 0 4px 20px rgba(0,0,0,0.18);
   padding: 12px;
   width: 240px;
-  left: 0;
+  right: 4px;
   top: calc(100% + 6px);
 }
 

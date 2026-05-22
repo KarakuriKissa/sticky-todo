@@ -48,9 +48,9 @@ export function NoteToolbar(p: ToolbarProps) {
       <button className="type-btn" onClick={() => p.addTyped('separator')} title="区切り線">—</button>
       {/* Hyperlink: select text in a task, then click. mousedown (not click) so
           the input keeps its selection before focus moves to the button. */}
-      <button className="type-btn active-feature"
+      <button className="type-btn link-btn"
         onMouseDown={(e) => { e.preventDefault(); p.onInsertLink(); }}
-        title="選択した文字にリンクを設定（先にタスク内の文字を選択）">🔗</button>
+        title="リンクを設定／編集（文字を選択 か リンク内にカーソルを置いて押す）">🔗</button>
       <button className="type-btn"
         onClick={() => { if (selCount > 0) [...p.selectedIds].forEach((id) => useNoteStore.getState().indent(id)); }}
         title="インデント (Tab)">→</button>

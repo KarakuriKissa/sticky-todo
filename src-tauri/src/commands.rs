@@ -471,6 +471,28 @@ pub fn open_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
+// Open ANY URI (http, https, custom scheme like slack:// or company protocols)
+// using the OS default handler. Bypasses the shell plugin's URL allowlist so
+// non-http schemes still launch their registered handler.
+#[tauri::command]
+pub fn open_uri(target: String) -> Result<(), String> {
+    use std::process::Command;
+    #[cfg(target_os = "windows")]
+    {
+        // `cmd /C start "" "<uri>"` respects registered protocol handlers.
+        Command::new("cmd").args(["/C", "start", "", &target]).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(&target).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open").arg(&target).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // Open a URL with a specific browser executable (or app, on macOS).
 // `browser` is an absolute path to the browser binary, or on macOS an app name.
 #[tauri::command]
