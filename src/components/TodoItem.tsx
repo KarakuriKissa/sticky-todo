@@ -158,7 +158,10 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      inputRef.current?.blur();
+      // Confirm & leave edit mode. blur() alone is a no-op for the
+      // contentEditable task editor, so end editing explicitly too.
+      (document.activeElement as HTMLElement | null)?.blur();
+      exitEdit();
       return;
     }
 

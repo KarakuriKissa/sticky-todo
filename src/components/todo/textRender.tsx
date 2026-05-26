@@ -1,4 +1,10 @@
-import { openExternal } from '../../utils/openExternal';
+import { openExternal, isUrl } from '../../utils/openExternal';
+
+// Only custom URI schemes (slack://, onenote://, company-tool:// …) are launched.
+// http(s) URLs and local filesystem paths are NOT opened — those launch paths
+// proved unreliable, so they render as plain (non-clickable) text instead.
+const isHttp = (s: string) => /^https?:\/\//i.test(s);
+const canOpen = (s: string) => isUrl(s) && !isHttp(s);
 
 // Long links are visually noisy. Show a compact label that keeps BOTH the head
 // (so you can tell http vs which drive/scheme) AND the tail (the meaningful
@@ -86,6 +92,11 @@ export function renderTextWithLinks(text: string, searchTerm?: string): React.Re
       // For bare links keep the smart shortening; for markdown links show the
       // author-chosen label verbatim.
       const display = tok.label === tok.target ? shortLabel(tok.target) : tok.label;
+      if (!canOpen(tok.target)) {
+        // http / local path → not launchable; show as plain text.
+        result.push(<span key={key++} title={tok.target}>{display}</span>);
+        continue;
+      }
       result.push(
         <a
           key={key++}
