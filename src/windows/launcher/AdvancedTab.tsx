@@ -24,9 +24,15 @@ export function AdvancedTab({ draft, setDraft }: Props) {
   const toggleAutostart = async (on: boolean) => {
     setAutostartBusy(true);
     try {
-      const { enable, disable } = await import('@tauri-apps/plugin-autostart');
+      const { enable, disable, isEnabled } = await import('@tauri-apps/plugin-autostart');
       if (on) await enable(); else await disable();
-      setAutostart(on);
+      // Verify the OS actually applied it (the registry/LaunchAgent write can
+      // silently fail). Reflect the real state, not the requested one.
+      const actual = await isEnabled();
+      setAutostart(actual);
+      if (actual !== on) {
+        alert('自動起動の設定が反映されませんでした。OS の権限やセキュリティ設定をご確認ください。');
+      }
     } catch (e) {
       alert('自動起動の設定に失敗しました: ' + e);
     } finally {

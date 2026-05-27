@@ -112,9 +112,16 @@ pub struct AppSettings {
     pub priority_mode: String,
     #[serde(default = "default_reminder_interval")]
     pub reminder_interval_min: i64,
+    #[serde(default = "default_true")]
+    pub reopen_windows_on_start: bool,
+    #[serde(default = "default_backup_interval")]
+    pub backup_interval_min: i64,
+    #[serde(default)]
+    pub browser_path: Option<String>,
 }
 
 fn default_reminder_interval() -> i64 { 30 }
+fn default_backup_interval() -> i64 { 60 }
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -129,6 +136,9 @@ impl Default for AppSettings {
             deadline_warn_days: 3,
             priority_mode: "hml".to_string(),
             reminder_interval_min: 30,
+            reopen_windows_on_start: true,
+            backup_interval_min: 60,
+            browser_path: None,
         }
     }
 }

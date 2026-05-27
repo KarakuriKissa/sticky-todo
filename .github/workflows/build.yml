@@ -98,6 +98,8 @@ jobs:
 
       # ── 8. アプリをビルド ──────────────────────────────────────────────
       - name: アプリをビルド
+        env:
+          VITE_BUILD_NUMBER: ${{ github.run_number }}
         run: npm run tauri build
 
       # ── 9. 配布ファイル名を分かりやすくリネーム ──────────────────────
@@ -154,6 +156,8 @@ jobs:
         run: bunx tauri icon src-tauri/icons/icon-source.png
 
       - name: アプリをビルド（ユニバーサル）
+        env:
+          VITE_BUILD_NUMBER: ${{ github.run_number }}
         run: bunx tauri build --target universal-apple-darwin
 
       - name: 配布ファイル名を整える（Mac）

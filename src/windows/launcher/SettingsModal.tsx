@@ -125,18 +125,17 @@ export function HelpSection() {
   const checkUpdate = async () => {
     setUpdateState({ kind: 'checking' });
     try {
-      const seenKey = 'sticky-todo:last-seen-build';
-      const lastSeen = Number(localStorage.getItem(seenKey) ?? '0');
+      // The build number baked into THIS installed app at build time
+      // (GitHub Actions run number). 0 for local/dev builds.
+      const installed = Number(import.meta.env.VITE_BUILD_NUMBER ?? '0');
       const res = await fetch(
         'https://api.github.com/repos/KarakuriKissa/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success',
       );
       const json = await res.json();
       const run = json.workflow_runs?.[0];
       if (!run) { setUpdateState({ kind: 'error' }); return; }
-      // Record this run as "seen" on first check.
-      if (lastSeen === 0) localStorage.setItem(seenKey, String(run.run_number));
-      if (run.run_number > lastSeen && lastSeen > 0) {
-        // Link to Releases (user-friendly download page) not the build artifacts page.
+      // Compare the installed build number against the latest successful build.
+      if (installed > 0 && run.run_number > installed) {
         setUpdateState({ kind: 'update', runNumber: run.run_number, url: 'https://github.com/KarakuriKissa/sticky-todo/releases/latest' });
       } else {
         setUpdateState({ kind: 'latest' });
@@ -206,6 +205,10 @@ export function HelpSection() {
       </p>
 
       <h4 style={{ marginTop: 14 }}>🔄 アップデート確認</h4>
+      <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 6px' }}>
+        現在のビルド: {Number(import.meta.env.VITE_BUILD_NUMBER ?? 0) > 0 ? `#${import.meta.env.VITE_BUILD_NUMBER}` : '開発版'}
+        {appVersion && `（v${appVersion}）`}
+      </p>
       <div style={{ fontSize: 12, lineHeight: 1.8 }}>
         <button
           className="btn-secondary"
@@ -226,8 +229,6 @@ export function HelpSection() {
               style={{ fontSize: 12, padding: '4px 10px', marginTop: 6 }}
               onClick={async () => {
                 (await import('@tauri-apps/plugin-shell')).open(updateState.url);
-                localStorage.setItem('sticky-todo:last-seen-build', String(updateState.runNumber));
-                setUpdateState({ kind: 'latest' });
               }}
             >ダウンロードページを開く →</button>
           </div>
