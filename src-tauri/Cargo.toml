@@ -23,6 +23,11 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 
+# Windows のみ：自動起動をレジストリへ「引用符付き」で確実に登録するために使用。
+# （プラグインの auto-launch 0.5.0 は空白入りパスを引用符なしで書き失敗するため）
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+
 [profile.release]
 panic = "abort"
 codegen-units = 1

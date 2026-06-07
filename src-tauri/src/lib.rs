@@ -74,6 +74,8 @@ pub fn run() {
             commands::delete_assignee_person,
             commands::get_settings,
             commands::save_settings,
+            commands::set_launch_at_startup,
+            commands::get_launch_at_startup,
             commands::open_note_window,
             commands::close_note_window,
             commands::set_always_on_top,

@@ -215,6 +215,57 @@ pub fn save_settings(settings: AppSettings, db: State<'_, Database>) -> Result<(
     db.set_setting("app_settings", &json).map_err(|e| e.to_string())
 }
 
+// ── Autostart (Windows: 自前でレジストリへ「引用符付き」登録) ────────────────────
+// プラグインの auto-launch が空白入りパスを引用符なしで書き、起動失敗するため、
+// Windows では自前で HKCU\...\Run に "フルパス" 形式で登録/解除する。
+const AUTOSTART_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+const AUTOSTART_NAME: &str = "StickyTodo";
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn set_launch_at_startup(enabled: bool) -> Result<(), String> {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let (run, _) = hkcu
+        .create_subkey(AUTOSTART_KEY)
+        .map_err(|e| e.to_string())?;
+    if enabled {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        // パスは必ず引用符で囲む（空白入りパスでも確実に起動できるように）
+        let value = format!("\"{}\"", exe.display());
+        run.set_value(AUTOSTART_NAME, &value).map_err(|e| e.to_string())?;
+    } else {
+        // 無効化：エントリがあれば削除（無くてもエラーにしない）
+        let _ = run.delete_value(AUTOSTART_NAME);
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn get_launch_at_startup() -> Result<bool, String> {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    match hkcu.open_subkey(AUTOSTART_KEY) {
+        Ok(run) => Ok(run.get_value::<String, _>(AUTOSTART_NAME).is_ok()),
+        Err(_) => Ok(false),
+    }
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn set_launch_at_startup(_enabled: bool) -> Result<(), String> {
+    Err("unsupported_on_this_os".into())
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn get_launch_at_startup() -> Result<bool, String> {
+    Err("unsupported_on_this_os".into())
+}
+
 // ── Windows ────────────────────────────────────────────────────────────────────
 
 #[tauri::command]

@@ -15,23 +15,41 @@ export function AdvancedTab({ draft, setDraft }: Props) {
   // it directly via the autostart plugin.
   const [autostart, setAutostart] = useState(false);
   const [autostartBusy, setAutostartBusy] = useState(false);
-  useEffect(() => {
-    import('@tauri-apps/plugin-autostart')
-      .then(({ isEnabled }) => isEnabled())
-      .then(setAutostart)
-      .catch(() => {});
-  }, []);
+
+  // Read current autostart state. On Windows use our own Rust command
+  // (registry, properly quoted). On other OS fall back to the plugin.
+  const readAutostart = async (): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('get_launch_at_startup');
+    } catch {
+      try {
+        const { isEnabled } = await import('@tauri-apps/plugin-autostart');
+        return await isEnabled();
+      } catch { return false; }
+    }
+  };
+  useEffect(() => { readAutostart().then(setAutostart).catch(() => {}); }, []);
+
   const toggleAutostart = async (on: boolean) => {
     setAutostartBusy(true);
     try {
-      const { enable, disable, isEnabled } = await import('@tauri-apps/plugin-autostart');
-      if (on) await enable(); else await disable();
-      // Verify the OS actually applied it (the registry/LaunchAgent write can
-      // silently fail). Reflect the real state, not the requested one.
-      const actual = await isEnabled();
+      let usedRust = true;
+      try {
+        // Windows: 自前のレジストリ登録（引用符付きフルパス）で確実に。
+        await invoke('set_launch_at_startup', { enabled: on });
+      } catch {
+        // 非Windows等：プラグインへフォールバック。
+        usedRust = false;
+        const { enable, disable } = await import('@tauri-apps/plugin-autostart');
+        if (on) await enable(); else await disable();
+      }
+      // 反映後の実状態を読み戻して表示（書き込み失敗の検知）。
+      const actual = await readAutostart();
       setAutostart(actual);
       if (actual !== on) {
         alert('自動起動の設定が反映されませんでした。OS の権限やセキュリティ設定をご確認ください。');
+      } else if (on && usedRust) {
+        // 成功時の軽い確認（任意）。うるさければ削除可。
       }
     } catch (e) {
       alert('自動起動の設定に失敗しました: ' + e);
