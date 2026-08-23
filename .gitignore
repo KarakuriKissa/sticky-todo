@@ -17,5 +17,10 @@ logs/
 .env
 .env.local
 
+# Tauri updater signing key (NEVER commit). The private key + password must
+# only live in GitHub Actions Secrets (TAURI_SIGNING_PRIVATE_KEY /
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD) and/or a local secrets manager.
+updater-signing-key*
+
 # Coverage reports
 coverage/
