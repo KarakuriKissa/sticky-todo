@@ -36,49 +36,28 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      # ── 5. アイコン生成（PowerShell で PNG を作成）────────────────────
-      - name: アプリアイコンを生成
+      # ── 5. アイコン元画像の確認 ───────────────────────────────────────
+      #
+      # 以前はここで PowerShell が仮アイコン（黄色い付箋の簡易図形）を描いて
+      # icon-source.png を上書きしていた。そのため、リポジトリにコミットした
+      # 本物のアイコンがビルドの度に捨てられていた。
+      # いまは commit 済みの src-tauri/icons/icon-source.png をそのまま使う。
+      # アイコンを差し替えるときはその PNG を置き換えてコミットすること。
+      - name: アイコン元画像を確認
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force "src-tauri/icons" | Out-Null
+          $p = "src-tauri/icons/icon-source.png"
+          if (-not (Test-Path $p)) {
+            throw "$p がありません。アイコン元画像をコミットしてください。"
+          }
           Add-Type -AssemblyName System.Drawing
-
-          $size = 1240
-          $bmp  = New-Object System.Drawing.Bitmap $size, $size
-          $g    = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-
-          # 背景：付箋イエロー
-          $g.Clear([System.Drawing.Color]::FromArgb(254, 240, 138))
-
-          # 白い付箋本体
-          $white = New-Object System.Drawing.SolidBrush(
-            [System.Drawing.Color]::FromArgb(220, 255, 255, 255))
-          $g.FillRectangle($white, 155, 200, 930, 840)
-
-          # タスク行（3本）
-          $linePen = New-Object System.Drawing.Pen(
-            [System.Drawing.Color]::FromArgb(30, 30, 46), 52)
-          $linePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-          $linePen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
-          $g.DrawLine($linePen, 300, 420, 980, 420)
-          $g.DrawLine($linePen, 300, 570, 900, 570)
-          $g.DrawLine($linePen, 300, 720, 760, 720)
-
-          # チェックボックス（1つ塗りつぶし）
-          $cbPen = New-Object System.Drawing.Pen(
-            [System.Drawing.Color]::FromArgb(99, 102, 241), 38)
-          $g.DrawRectangle($cbPen, 230, 394, 52, 52)
-          $filled = New-Object System.Drawing.SolidBrush(
-            [System.Drawing.Color]::FromArgb(99, 102, 241))
-          $g.FillRectangle($filled, 234, 544, 44, 44)
-          $g.DrawRectangle($cbPen, 230, 694, 52, 52)
-
-          $g.Dispose()
-          $bmp.Save("src-tauri/icons/icon-source.png",
-            [System.Drawing.Imaging.ImageFormat]::Png)
+          $bmp = [System.Drawing.Bitmap]::FromFile((Resolve-Path $p))
+          Write-Host ("アイコン元画像: {0}x{1}" -f $bmp.Width, $bmp.Height)
+          if ($bmp.Width -lt 512 -or $bmp.Height -lt 512) {
+            $bmp.Dispose()
+            throw "アイコン元画像が小さすぎます（512x512 以上が必要）。"
+          }
           $bmp.Dispose()
-          Write-Host "✅ アイコン元画像を生成しました"
 
       # ── 6. 依存パッケージをインストール ───────────────────────────────
       - name: 依存パッケージをインストール

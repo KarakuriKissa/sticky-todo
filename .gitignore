@@ -19,3 +19,5 @@ logs/
 
 # Coverage reports
 coverage/
+
+src-tauri/icons_v1_backup/
