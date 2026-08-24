@@ -7,6 +7,11 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // reqwest(rustls)はプロセス全体で既定の暗号プロバイダが1つ必要。未登録のまま
+    // Client::builder().build() を呼ぶと "No provider set" でパニックするため、
+    // tauri-plugin-updater が使う前に(=起動直後に一度だけ)ここで登録しておく
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -101,6 +106,7 @@ pub fn run() {
             commands::backup_database,
             commands::list_backups,
             commands::search_all_items,
+            commands::preflight_update_check,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

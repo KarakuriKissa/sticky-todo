@@ -1,4 +1,5 @@
 use chrono::Utc;
+use serde::Serialize;
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use uuid::Uuid;
 
@@ -657,4 +658,137 @@ pub fn delete_database(app: AppHandle) -> Result<(), String> {
     app.restart();
     #[allow(unreachable_code)]
     Ok(())
+}
+
+// ── Update check diagnostics ──────────────────────────────────────────────────
+//
+// tauri-plugin-updater の check() は HTTP ステータスを握りつぶし、オフライン・
+// レート制限(403)・リリース未検出(404)のいずれも同じ「ReleaseNotFound」に
+// まとめてしまう。ここでは check() を呼ぶ前に同じ latest.json へ素の HTTP
+// リクエストを送り、失敗理由をユーザーに正しく説明できる形に分類する。
+// reqwest は tauri-plugin-updater が既に依存に含んでいるため新規の外部
+// ランタイム依存ではない。エンドポイント URL は tauri.conf.json の
+// plugins.updater.endpoints と同じ値を指すこと。
+
+const UPDATE_ENDPOINT: &str =
+    "https://github.com/KarakuriKissa/sticky-todo/releases/latest/download/latest.json";
+
+#[derive(Serialize)]
+#[serde(tag = "kind")]
+pub enum UpdatePreflight {
+    Ok,
+    Offline,
+    RateLimited { retry_after_secs: Option<u64> },
+    NotFound,
+    HttpError { status: u16 },
+}
+
+#[tauri::command]
+pub async fn preflight_update_check() -> Result<UpdatePreflight, String> {
+    preflight_check_url(UPDATE_ENDPOINT).await
+}
+
+// URL を引数に取る形にしておくことで、実際のGitHubエンドポイントに加えて
+// 「存在しないホスト」「存在しないパス」に対しても分岐を実測できる
+// (tests 参照。既定では #[ignore] 付きでネットワークに依存しない `cargo test` を保つ)
+async fn preflight_check_url(url: &str) -> Result<UpdatePreflight, String> {
+    // 通常は lib.rs の起動時に登録済みだが、テストなど run() を経由しない
+    // 呼び出し経路でも安全なように、ここでも(冪等に)確認しておく
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = match client.get(url).send().await {
+        Ok(res) => res,
+        Err(e) => {
+            // タイムアウト・DNS失敗・接続拒否はいずれも「オフライン」として扱う。
+            // それ以外(TLS等の予期しない失敗)は理由をそのまま呼び出し側へ返す。
+            if e.is_timeout() || e.is_connect() || e.is_request() {
+                return Ok(UpdatePreflight::Offline);
+            }
+            return Err(e.to_string());
+        }
+    };
+
+    let status = response.status();
+    if status.is_success() {
+        return Ok(UpdatePreflight::Ok);
+    }
+    if status.as_u16() == 403 {
+        // api.github.com の x-ratelimit-* とアセット配信側の Retry-After の
+        // 両方に対応しておく(どちらが付くかはエンドポイントの実装依存のため)。
+        let retry_after_secs = response
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .or_else(|| {
+                let remaining = response
+                    .headers()
+                    .get("x-ratelimit-remaining")
+                    .and_then(|v| v.to_str().ok());
+                if remaining != Some("0") {
+                    return None;
+                }
+                let reset_epoch = response
+                    .headers()
+                    .get("x-ratelimit-reset")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<i64>().ok())?;
+                let now = chrono::Utc::now().timestamp();
+                Some((reset_epoch - now).max(0) as u64)
+            });
+        return Ok(UpdatePreflight::RateLimited { retry_after_secs });
+    }
+    if status.as_u16() == 404 {
+        return Ok(UpdatePreflight::NotFound);
+    }
+    Ok(UpdatePreflight::HttpError { status: status.as_u16() })
+}
+
+#[cfg(test)]
+mod update_preflight_tests {
+    use super::*;
+
+    // 実ネットワークに依存するため既定の `cargo test` では実行されない
+    // (db.rs の e2e_sync_roundtrip_against_local_worker と同じ扱い)。
+    // `cargo test -- --ignored` で実測できる。
+
+    #[tokio::test]
+    #[ignore]
+    async fn unreachable_host_is_classified_as_offline() {
+        let result = preflight_check_url("https://this-host-does-not-exist.invalid/latest.json")
+            .await
+            .expect("should not hard-error, offline is a normal outcome");
+        assert!(matches!(result, UpdatePreflight::Offline));
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn missing_release_asset_is_classified_as_not_found() {
+        // 実在リポジトリだが存在しないファイル名 → GitHub は404を返す
+        let result = preflight_check_url(
+            "https://github.com/KarakuriKissa/sticky-todo/releases/latest/download/this-file-does-not-exist.json",
+        )
+        .await
+        .expect("request should complete with a 404, not a network error");
+        assert!(matches!(result, UpdatePreflight::NotFound));
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn nonexistent_repo_release_is_classified_as_not_found() {
+        // リポジトリ名を書き間違えたケースもGitHubは404を返す(オフラインと混同しない)
+        let result = preflight_check_url(
+            "https://github.com/KarakuriKissa/this-repo-does-not-exist/releases/latest/download/latest.json",
+        )
+        .await
+        .expect("request should complete with a 404, not a network error");
+        assert!(matches!(result, UpdatePreflight::NotFound));
+    }
 }

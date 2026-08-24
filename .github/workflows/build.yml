@@ -17,6 +17,13 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
 
+    # secrets コンテキストは step の if: では使えない (GitHub の仕様。使うと
+    # 「Unrecognized named-value: 'secrets'」でワークフロー自体が起動しない)。
+    # job の env: では使えるので、ここで一度 true/false の文字列へ落としてから
+    # 各 step で env.HAS_SIGNING_KEY を見る。
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+
     steps:
       # ── 1. ソースコードを取得 ──────────────────────────────────────────
       - name: コードを取得
@@ -53,7 +60,7 @@ jobs:
       #       (=今まで通り)ビルドを壊さない。TAURI_SIGNING_PRIVATE_KEY を
       #       Secrets に追加すると、次のビルドから自動でここが有効になる
       - name: 自己更新の署名を有効化 (Secrets設定時のみ)
-        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        if: env.HAS_SIGNING_KEY == 'true'
         shell: pwsh
         run: |
           $utf8NoBom = New-Object System.Text.UTF8Encoding $false
@@ -145,7 +152,7 @@ jobs:
       #        経由で読みに行き、埋め込み公開鍵で署名を検証してから更新する。
       #        Windows(NSISインストーラー)のみ対応。Mac は対象外(手動ダウンロードのまま)
       - name: latest.json を生成 (Secrets設定時のみ)
-        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        if: env.HAS_SIGNING_KEY == 'true'
         shell: pwsh
         run: |
           $sig = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe.sig | Select-Object -First 1
@@ -268,7 +275,12 @@ jobs:
               - Windows: SmartScreen →「詳細情報」→「実行」
               - Mac: アプリを右クリック →「開く」
           draft: false
-          prerelease: true
+          # prerelease: false が必須。GitHubの `releases/latest`（このリポジトリの
+          # tauri.conf.json の updater.endpoints が使っている「常に最新を指すURL」）は
+          # prerelease=true のリリースを一切対象にしない。過去ずっと true だったため、
+          # 自動更新エンドポイントは実際には一度も解決できていなかった(実測: 404)。
+          # 「β版」の告知はボディ本文の注記で十分伝わる
+          prerelease: false
           files: |
             out/*
         env:

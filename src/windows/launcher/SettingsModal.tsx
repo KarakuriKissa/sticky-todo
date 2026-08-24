@@ -9,6 +9,14 @@ import { useAppStore } from '../../store/appStore';
 import type { AppSettings, AssigneeGroup, AssigneePerson, Status } from '../../types';
 import { AdvancedTab } from './AdvancedTab';
 import { SyncTab } from './SyncTab';
+import {
+  DEV_APP_VERSION,
+  classifyCheckError,
+  classifyPreflight,
+  messageForUpdateFailure,
+  type UpdateCheckFailure,
+  type UpdatePreflight,
+} from '../../utils/updateCheck';
 
 // ── ステータス エクスポート/インポート ────────────────────────────────────────
 async function exportStatuses(statuses: Status[]) {
@@ -116,17 +124,24 @@ export function HelpSection() {
   const [appVersion, setAppVersion] = useState<string>('');
   useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
 
-  // 'idle' | 'checking' | 'latest' | 'update' | 'downloading' | 'error'
+  // 'idle' | 'dev' | 'checking' | 'latest' | 'update' | 'downloading' | 'error'
   const [updateState, setUpdateState] = useState<
     | { kind: 'idle' }
+    | { kind: 'dev' }
     | { kind: 'checking' }
     | { kind: 'latest' }
     | { kind: 'update'; update: Update }
     | { kind: 'downloading'; percent: number }
-    | { kind: 'error' }
+    | { kind: 'error'; failure: UpdateCheckFailure }
   >({ kind: 'idle' });
 
   const checkUpdate = async () => {
+    // 開発版(ローカルビルド)は常に v0.1.0 のまま。公式リリースは CI が
+    // 0.1.<run番号> を焼き込むため、この一致は「未リリースの開発版」の確実な判定になる
+    if (appVersion === DEV_APP_VERSION) {
+      setUpdateState({ kind: 'dev' });
+      return;
+    }
     setUpdateState({ kind: 'checking' });
     try {
       // Tauri updater plugin: 埋め込み公開鍵で署名検証したうえで
@@ -137,8 +152,21 @@ export function HelpSection() {
       } else {
         setUpdateState({ kind: 'latest' });
       }
-    } catch {
-      setUpdateState({ kind: 'error' });
+    } catch (e) {
+      // tauri-plugin-updater の check() は HTTPステータスを握りつぶし、オフライン・
+      // レート制限(403)・未検出(404)がすべて同じ汎用エラーになってしまう。
+      // 素のHTTPで同じURLへ再アクセスし、実際の理由を区別してから表示する
+      try {
+        const preflight = await invoke<UpdatePreflight>('preflight_update_check');
+        const failure = classifyPreflight(preflight);
+        if (failure) {
+          setUpdateState({ kind: 'error', failure });
+          return;
+        }
+      } catch {
+        // プリフライトも失敗した場合は元のエラーをそのまま出す
+      }
+      setUpdateState({ kind: 'error', failure: classifyCheckError(e) });
     }
   };
 
@@ -157,8 +185,8 @@ export function HelpSection() {
       });
       // インストール(NSISをサイレント実行)完了。再起動して新バージョンを反映する
       await relaunch();
-    } catch {
-      setUpdateState({ kind: 'error' });
+    } catch (e) {
+      setUpdateState({ kind: 'error', failure: classifyCheckError(e) });
     }
   };
 
@@ -234,6 +262,9 @@ export function HelpSection() {
         >
           {updateState.kind === 'checking' ? '確認中…' : '🔄 最新バージョンを確認'}
         </button>
+        {updateState.kind === 'dev' && (
+          <span style={{ marginLeft: 12, color: 'var(--muted)', fontSize: 11 }}>開発版なので更新確認は行いません</span>
+        )}
         {updateState.kind === 'latest' && (
           <span style={{ marginLeft: 12, color: '#4ade80', fontWeight: 600 }}>✓ 最新バージョンです</span>
         )}
@@ -256,7 +287,16 @@ export function HelpSection() {
           </span>
         )}
         {updateState.kind === 'error' && (
-          <span style={{ marginLeft: 12, color: 'var(--muted)', fontSize: 11 }}>確認できませんでした（オフライン？）</span>
+          <div style={{ marginTop: 8 }}>
+            <span style={{ color: '#f87171', fontSize: 11 }}>{messageForUpdateFailure(updateState.failure)}</span>
+            <button
+              className="btn-secondary"
+              style={{ fontSize: 11, padding: '3px 8px', marginLeft: 10 }}
+              onClick={async () => {
+                (await import('@tauri-apps/plugin-shell')).open('https://github.com/KarakuriKissa/sticky-todo/releases/latest');
+              }}
+            >手動でダウンロードページを開く →</button>
+          </div>
         )}
       </div>
 

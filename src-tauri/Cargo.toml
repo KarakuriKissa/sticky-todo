@@ -24,11 +24,31 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
+# reqwest はすでに tauri-plugin-updater が依存に含めているため新規の外部
+# ランタイム依存を増やすものではない。ここでは check() 呼び出し前に HTTP
+# ステータス/ヘッダーを見て失敗理由(オフライン/レート制限/404等)を区別する
+# プリフライトにだけ使う（実際のダウンロード・署名検証は updater プラグイン任せ）
+# TLS機能は指定しない: tauri-plugin-updater がすでに reqwest に rustls を
+# 要求しており、Cargoの機能統合でビルド全体に1つだけ適用される。ここで別の
+# TLSバックエンド(例: "rustls")を足すと暗号プロバイダが二重登録される恐れがある
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+# tauri-plugin-updater と同じ組み合わせ(rustls 0.23 + ring)を明示的に指定。
+# reqwest の rustls バックエンドはプロセス全体でデフォルトの暗号プロバイダが
+# 1つ登録されていることを要求する(未登録だと "No provider set" でパニックする)。
+# updater プラグインは自身が check()/download() を呼んだ時だけ遅延登録するため、
+# アプリ起動直後に本コマンドだけ呼ばれた場合に備えて lib.rs の起動時に明示登録する
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # Windows のみ：自動起動をレジストリへ「引用符付き」で確実に登録するために使用。
 # （プラグインの auto-launch 0.5.0 は空白入りパスを引用符なしで書き失敗するため）
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+
+[dev-dependencies]
+# preflight_update_check の #[ignore] 付き実ネットワークテスト専用。
+# tokio 自体は tauri がすでにランタイムとして使用しており、dev-dependencies
+# はリリースバイナリに含まれないため配布物への新規依存は増えない
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [profile.release]
 panic = "abort"

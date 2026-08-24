@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, KeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { CategoryList } from '../components/CategoryList';
@@ -7,6 +8,7 @@ import { NoteList } from '../components/NoteList';
 import { useAppStore } from '../store/appStore';
 import type { SortMode } from '../types';
 import { log } from '../utils/log';
+import { DEV_APP_VERSION } from '../utils/updateCheck';
 import { SettingsModal } from './launcher/SettingsModal';
 
 // Sort modes are ONE-SHOT: picking name_asc reorders the list NOW and then
@@ -97,12 +99,15 @@ export function Launcher() {
     const seenKey = 'sticky-todo:last-seen-version';
     const lastSeen = localStorage.getItem(seenKey) ?? '';
     let cancelled = false;
-    check()
-      .then((update) => {
-        if (cancelled || !update) return;
-        if (update.version !== lastSeen) {
-          setUpdateBanner(update);
-        }
+    getVersion()
+      .then((version) => {
+        if (cancelled || version === DEV_APP_VERSION) return; // 開発版では確認しない
+        return check().then((update) => {
+          if (cancelled || !update) return;
+          if (update.version !== lastSeen) {
+            setUpdateBanner(update);
+          }
+        });
       })
       .catch(() => {}); // オフライン等は静かに無視。起動を妨げない
     return () => { cancelled = true; };
