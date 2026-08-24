@@ -402,11 +402,16 @@ export function SettingsModal({
 
   const groupPersons = assigneePersons.filter((p) => p.group_id === selectedGroupId);
 
+  // 同期は作りかけ（クラウド方式を検討中）なので、配布版では隠しておく。
+  // コードは SyncTab.tsx / worker/ / src-tauri 側ともそのまま残してあるので、
+  // ここを true にすればタブが戻る。中途半端な機能を製品に出さないための蓋。
+  const SHOW_SYNC_TAB = false;
+
   const TABS: { id: SettingsTab; label: string }[] = [
     { id: 'statuses',  label: 'ステータス' },
     { id: 'assignees', label: '担当者' },
     { id: 'advanced',  label: '詳細設定' },
-    { id: 'sync',      label: '同期' },
+    ...(SHOW_SYNC_TAB ? [{ id: 'sync' as SettingsTab, label: '同期' }] : []),
     { id: 'help',      label: 'ヘルプ' },
   ];
 
