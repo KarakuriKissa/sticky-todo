@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "sticky-todo-sync",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-20",
+  "kv_namespaces": [
+    { "binding": "SYNC", "id": "REPLACE_WITH_REAL_KV_NAMESPACE_ID" }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

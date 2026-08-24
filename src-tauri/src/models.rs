@@ -123,6 +123,71 @@ pub struct AppSettings {
 fn default_reminder_interval() -> i64 { 30 }
 fn default_backup_interval() -> i64 { 60 }
 
+// ── Sync (Phase 1) ───────────────────────────────────────────────────────────
+// Wire-format structs for the note-scoped sync snapshot. Deliberately separate
+// from Note/TodoItem: those two are read/written on every ordinary edit via
+// upsert_note/upsert_item, which must NEVER touch deleted_at/rev — mixing them
+// into the same struct would reset sync state on every keystroke.
+// Local-only fields (window position/size, always_on_top, dirty) are excluded
+// on purpose — window geometry is per-device and dirty is local bookkeeping.
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SyncNoteMeta {
+    pub id: String,
+    pub title: String,
+    pub category_id: Option<String>,
+    pub color: String,
+    pub sort_order: i64,
+    pub locked: bool,
+    pub warn_days: Option<i64>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+    pub rev: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SyncItem {
+    pub id: String,
+    pub note_id: String,
+    pub parent_id: Option<String>,
+    pub text: String,
+    pub checked: bool,
+    pub indent: i32,
+    pub collapsed: bool,
+    pub locked: bool,
+    pub status: Option<String>,
+    pub assignees: String,
+    pub assignee_person_id: Option<String>,
+    pub memo: Option<String>,
+    pub bold: bool,
+    pub priority: Option<String>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub limit_date: Option<String>,
+    pub item_type: String,
+    pub sort_order: i64,
+    pub archived: bool,
+    pub strikethrough: bool,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NoteSnapshot {
+    pub note: SyncNoteMeta,
+    pub items: Vec<SyncItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NoteRevInfo {
+    pub id: String,
+    pub rev: i64,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+    pub dirty: bool,
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {

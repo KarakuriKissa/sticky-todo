@@ -1,0 +1,20 @@
+{
+  "name": "sticky-todo-sync",
+  "version": "1.0.0",
+  "description": "Sticky ToDo — note-scoped snapshot sync worker (Cloudflare Workers + KV)",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "node --test",
+    "deploy": "wrangler deploy"
+  },
+  "type": "module",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "wrangler": "^4.112.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260820.1": true
+  }
+}

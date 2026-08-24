@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://api.github.com; img-src 'self' data: blob:; font-src 'self' data:"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://api.github.com https://*.workers.dev http://localhost:8787; img-src 'self' data: blob:; font-src 'self' data:"
     }
   },
   "bundle": {

@@ -664,11 +664,31 @@ ul { list-style: none; }
    :has() rule below — that keeps non-empty rows visually aligned. */
 .badge-col-status   { min-width: 0; display: flex; justify-content: flex-end; }
 .badge-col-date     { width: auto; min-width: 0; }
-.badge-col-priority { min-width: 0; display: flex; justify-content: center; }
-/* When the cell actually contains a badge, reserve enough room so colors
-   line up across rows. Empty cells stay collapsed. */
+/* Priority column keeps a fixed width no matter what is inside it.
+   Previously the width came from the content, so the row reflowed in three
+   different ways (reported by TOM):
+     - empty shows the "！＋" hint (2 full-width chars) but a set value shows
+       one character, so setting or clearing a priority moved everything
+     - 高/中/低 are full-width glyphs while A/B/C are half-width, so flipping
+       priority_mode changed the width again
+     - the old `:has(.priority-badge)` min-width only applied when a badge
+       existed, so empty cells collapsed to zero
+   26px fits the widest state ("！＋" at 10px) without clipping. */
 .badge-col-status:has(.status-badge) { min-width: 64px; }
-.badge-col-priority:has(.priority-badge) { min-width: 22px; }
+.badge-col-priority {
+  width: 26px;
+  min-width: 26px;
+  flex: 0 0 26px;
+  display: flex;
+  justify-content: center;
+}
+/* Both states (badge and empty picker) fill the column, so the coloured pill
+   lines up across rows and nothing moves when the value changes. */
+.badge-col-priority > * {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+}
 /* Status badge itself fills the column so colors line up across rows. */
 .badge-col-status .status-badge { width: 100%; text-align: center; }
 
@@ -750,12 +770,15 @@ ul { list-style: none; }
 
 .priority-badge {
   font-size: 10px;
-  padding: 1px 6px;
+  /* 左右の padding は 0。幅は .badge-col-priority > * の width:100% で決まる。
+     ここに横 padding を入れると、全角(高)と半角(A)で丸の大きさが変わってしまう */
+  padding: 1px 0;
   border-radius: 10px;
   color: #fff;
   cursor: pointer;
   white-space: nowrap;
   font-weight: 700;
+  display: inline-block;
 }
 /* Toolbar-level dropdowns (still absolute, inside relative containers in the toolbar) */
 .status-dropdown {

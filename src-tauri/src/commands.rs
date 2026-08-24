@@ -108,7 +108,7 @@ pub fn save_note(note: Note, db: State<'_, Database>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn delete_note(id: String, db: State<'_, Database>) -> Result<(), String> {
-    db.delete_note(&id).map_err(|e| e.to_string())
+    db.delete_note(&id, &now()).map_err(|e| e.to_string())
 }
 
 // ── Items ───────────────────────────────────────────────────────────────────────
@@ -128,7 +128,7 @@ pub fn save_items(items: Vec<TodoItem>, db: State<'_, Database>) -> Result<(), S
 
 #[tauri::command]
 pub fn delete_item(id: String, db: State<'_, Database>) -> Result<(), String> {
-    db.delete_item(&id).map_err(|e| e.to_string())
+    db.delete_item(&id, &now()).map_err(|e| e.to_string())
 }
 
 // ── Categories ─────────────────────────────────────────────────────────────────
@@ -330,20 +330,35 @@ pub async fn start_dragging(app: AppHandle, note_id: String) -> Result<(), Strin
     Ok(())
 }
 
-// ── Sync ───────────────────────────────────────────────────────────────────────
+// ── Sync (Phase 1) ───────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_dirty_data(
-    db: State<'_, Database>,
-) -> Result<(Vec<Note>, Vec<TodoItem>), String> {
-    let notes = db.get_dirty_notes().map_err(|e| e.to_string())?;
-    let items = db.get_dirty_items().map_err(|e| e.to_string())?;
-    Ok((notes, items))
+pub fn list_note_revs(db: State<'_, Database>) -> Result<Vec<NoteRevInfo>, String> {
+    db.list_note_revs().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn mark_synced(db: State<'_, Database>) -> Result<(), String> {
-    db.mark_all_clean().map_err(|e| e.to_string())
+pub fn get_note_snapshot(note_id: String, db: State<'_, Database>) -> Result<NoteSnapshot, String> {
+    db.get_note_snapshot(&note_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn apply_remote_note(
+    snapshot: NoteSnapshot,
+    mark_dirty: bool,
+    db: State<'_, Database>,
+) -> Result<(), String> {
+    db.apply_remote_note(&snapshot, mark_dirty).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn mark_note_synced(
+    note_id: String,
+    rev: i64,
+    synced_at: String,
+    db: State<'_, Database>,
+) -> Result<(), String> {
+    db.mark_note_synced(&note_id, rev, &synced_at).map_err(|e| e.to_string())
 }
 
 // ── Utility ────────────────────────────────────────────────────────────────────
@@ -417,7 +432,8 @@ pub fn search_all_items(
                     i.start_date,i.end_date,i.limit_date,i.item_type,i.sort_order,i.archived,
                     i.updated_at,i.dirty,i.strikethrough,n.title
              FROM todo_items i JOIN notes n ON n.id = i.note_id
-             WHERE i.archived = 0 AND lower(i.text) LIKE '%' || ?1 || '%'
+             WHERE i.archived = 0 AND i.deleted_at IS NULL AND n.deleted_at IS NULL
+                   AND lower(i.text) LIKE '%' || ?1 || '%'
              LIMIT 200",
         )
         .map_err(|e| e.to_string())?;

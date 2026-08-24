@@ -21,3 +21,6 @@ logs/
 coverage/
 
 src-tauri/icons_v1_backup/
+
+worker/node_modules/
+worker/.wrangler/

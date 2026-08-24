@@ -6,6 +6,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { useAppStore } from '../../store/appStore';
 import type { AppSettings, AssigneeGroup, AssigneePerson, Status } from '../../types';
 import { AdvancedTab } from './AdvancedTab';
+import { SyncTab } from './SyncTab';
 
 // ── ステータス エクスポート/インポート ────────────────────────────────────────
 async function exportStatuses(statuses: Status[]) {
@@ -274,7 +275,7 @@ export function HelpSection() {
 }
 
 // ── Settings Modal ────────────────────────────────────────────────────────────
-type SettingsTab = 'statuses' | 'assignees' | 'advanced' | 'help';
+type SettingsTab = 'statuses' | 'assignees' | 'advanced' | 'sync' | 'help';
 
 export function SettingsModal({
   settings,
@@ -344,6 +345,7 @@ export function SettingsModal({
     { id: 'statuses',  label: 'ステータス' },
     { id: 'assignees', label: '担当者' },
     { id: 'advanced',  label: '詳細設定' },
+    { id: 'sync',      label: '同期' },
     { id: 'help',      label: 'ヘルプ' },
   ];
 
@@ -516,8 +518,11 @@ export function SettingsModal({
             </section>
           )}
 
-          {/* ── Advanced tab (deadline + language + sync + db) ── */}
+          {/* ── Advanced tab (deadline + language + db) ── */}
           {tab === 'advanced' && <AdvancedTab draft={draft} setDraft={setDraft} />}
+
+          {/* ── Sync tab ── */}
+          {tab === 'sync' && <SyncTab />}
 
           {/* ── Help / About ── */}
           {tab === 'help' && <HelpSection />}
