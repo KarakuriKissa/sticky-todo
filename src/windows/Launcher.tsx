@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, KeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { check, type Update } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { CategoryList } from '../components/CategoryList';
 import { NoteList } from '../components/NoteList';
 import { useAppStore } from '../store/appStore';
@@ -85,28 +87,25 @@ export function Launcher() {
     return () => { if (moveTimer) clearTimeout(moveTimer); unlisten?.(); };
   }, []);
 
-  // Background update check on launcher open. Compares the latest GitHub
-  // Actions build run number against the one we last seen and shows a banner
-  // if a newer build is available.
-  const [updateBanner, setUpdateBanner] = useState<{ runNumber: number; url: string } | null>(null);
+  // Background update check on launcher open. Tauri updater plugin verifies
+  // a signed latest.json (GitHub Releases) against the running version and
+  // shows a banner if a newer one is available. Dismissing/updating remembers
+  // the version so the same release doesn't nag again.
+  const [updateBanner, setUpdateBanner] = useState<Update | null>(null);
+  const [updating, setUpdating] = useState(false);
   useEffect(() => {
-    const seenKey = 'sticky-todo:last-seen-build';
-    const lastSeen = Number(localStorage.getItem(seenKey) ?? '0');
-    const ac = new AbortController();
-    fetch('https://api.github.com/repos/KarakuriKissa/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success', { signal: ac.signal })
-      .then((r) => r.json())
-      .then((j) => {
-        const run = j.workflow_runs?.[0];
-        if (run && run.run_number > lastSeen + 0) {
-          if (lastSeen === 0) {
-            localStorage.setItem(seenKey, String(run.run_number));
-          } else if (run.run_number > lastSeen) {
-            setUpdateBanner({ runNumber: run.run_number, url: 'https://github.com/KarakuriKissa/sticky-todo/releases/latest' });
-          }
+    const seenKey = 'sticky-todo:last-seen-version';
+    const lastSeen = localStorage.getItem(seenKey) ?? '';
+    let cancelled = false;
+    check()
+      .then((update) => {
+        if (cancelled || !update) return;
+        if (update.version !== lastSeen) {
+          setUpdateBanner(update);
         }
       })
-      .catch(() => {}); // includes AbortError on unmount
-    return () => ac.abort();
+      .catch(() => {}); // オフライン等は静かに無視。起動を妨げない
+    return () => { cancelled = true; };
   }, []);
 
   // The launcher search is GLOBAL: it filters notes by title AND by task content.
@@ -263,24 +262,32 @@ export function Launcher() {
 
   return (
     <div className="launcher">
-      {/* Update banner — appears when a newer GitHub build is available. */}
+      {/* Update banner — appears when a newer signed release is available. */}
       {updateBanner && (
         <div className="update-banner" role="alert">
-          🆙 新しいビルド <b>#{updateBanner.runNumber}</b> が利用可能です
+          🆙 新しいバージョン <b>v{updateBanner.version}</b> が利用可能です
           <button
             className="btn-secondary"
             style={{ marginLeft: 10, fontSize: 11, padding: '3px 10px' }}
+            disabled={updating}
             onClick={async () => {
-              (await import('@tauri-apps/plugin-shell')).open(updateBanner.url);
-              localStorage.setItem('sticky-todo:last-seen-build', String(updateBanner.runNumber));
-              setUpdateBanner(null);
+              setUpdating(true);
+              try {
+                await updateBanner.downloadAndInstall();
+                localStorage.setItem('sticky-todo:last-seen-version', updateBanner.version);
+                await relaunch();
+              } catch {
+                // ダウンロード失敗。バナーは残し、設定画面から再確認できるようにする
+                setUpdating(false);
+              }
             }}
-          >ダウンロードページを開く</button>
+          >{updating ? '更新中…' : '今すぐ更新'}</button>
           <button
             className="btn-secondary"
             style={{ marginLeft: 6, fontSize: 11, padding: '3px 8px' }}
+            disabled={updating}
             onClick={() => {
-              localStorage.setItem('sticky-todo:last-seen-build', String(updateBanner.runNumber));
+              localStorage.setItem('sticky-todo:last-seen-version', updateBanner.version);
               setUpdateBanner(null);
             }}
           >閉じる</button>

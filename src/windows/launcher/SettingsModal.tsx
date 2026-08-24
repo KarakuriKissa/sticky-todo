@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
+import { check, type Update } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { useAppStore } from '../../store/appStore';
 import type { AppSettings, AssigneeGroup, AssigneePerson, Status } from '../../types';
 import { AdvancedTab } from './AdvancedTab';
@@ -114,33 +116,47 @@ export function HelpSection() {
   const [appVersion, setAppVersion] = useState<string>('');
   useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
 
-  // 'idle' | 'checking' | 'latest' | 'update' | 'error'
+  // 'idle' | 'checking' | 'latest' | 'update' | 'downloading' | 'error'
   const [updateState, setUpdateState] = useState<
     | { kind: 'idle' }
     | { kind: 'checking' }
     | { kind: 'latest' }
-    | { kind: 'update'; runNumber: number; url: string }
+    | { kind: 'update'; update: Update }
+    | { kind: 'downloading'; percent: number }
     | { kind: 'error' }
   >({ kind: 'idle' });
 
   const checkUpdate = async () => {
     setUpdateState({ kind: 'checking' });
     try {
-      // The build number baked into THIS installed app at build time
-      // (GitHub Actions run number). 0 for local/dev builds.
-      const installed = Number(import.meta.env.VITE_BUILD_NUMBER ?? '0');
-      const res = await fetch(
-        'https://api.github.com/repos/KarakuriKissa/sticky-todo/actions/workflows/build.yml/runs?per_page=1&status=success',
-      );
-      const json = await res.json();
-      const run = json.workflow_runs?.[0];
-      if (!run) { setUpdateState({ kind: 'error' }); return; }
-      // Compare the installed build number against the latest successful build.
-      if (installed > 0 && run.run_number > installed) {
-        setUpdateState({ kind: 'update', runNumber: run.run_number, url: 'https://github.com/KarakuriKissa/sticky-todo/releases/latest' });
+      // Tauri updater plugin: 埋め込み公開鍵で署名検証したうえで
+      // latest.json (GitHub Releases) と現在のバージョンを比較する
+      const update = await check();
+      if (update) {
+        setUpdateState({ kind: 'update', update });
       } else {
         setUpdateState({ kind: 'latest' });
       }
+    } catch {
+      setUpdateState({ kind: 'error' });
+    }
+  };
+
+  const installUpdate = async (update: Update) => {
+    setUpdateState({ kind: 'downloading', percent: 0 });
+    try {
+      let total = 0;
+      let received = 0;
+      await update.downloadAndInstall((event) => {
+        if (event.event === 'Started') {
+          total = event.data.contentLength ?? 0;
+        } else if (event.event === 'Progress') {
+          received += event.data.chunkLength;
+          setUpdateState({ kind: 'downloading', percent: total > 0 ? Math.round((received / total) * 100) : 0 });
+        }
+      });
+      // インストール(NSISをサイレント実行)完了。再起動して新バージョンを反映する
+      await relaunch();
     } catch {
       setUpdateState({ kind: 'error' });
     }
@@ -207,15 +223,14 @@ export function HelpSection() {
 
       <h4 style={{ marginTop: 14 }}>🔄 アップデート確認</h4>
       <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 6px' }}>
-        現在のビルド: {Number(import.meta.env.VITE_BUILD_NUMBER ?? 0) > 0 ? `#${import.meta.env.VITE_BUILD_NUMBER}` : '開発版'}
-        {appVersion && `（v${appVersion}）`}
+        現在のバージョン: {appVersion ? `v${appVersion}` : '確認中…'}
       </p>
       <div style={{ fontSize: 12, lineHeight: 1.8 }}>
         <button
           className="btn-secondary"
           style={{ fontSize: 12, padding: '5px 12px' }}
           onClick={checkUpdate}
-          disabled={updateState.kind === 'checking'}
+          disabled={updateState.kind === 'checking' || updateState.kind === 'downloading'}
         >
           {updateState.kind === 'checking' ? '確認中…' : '🔄 最新バージョンを確認'}
         </button>
@@ -224,15 +239,21 @@ export function HelpSection() {
         )}
         {updateState.kind === 'update' && (
           <div style={{ marginTop: 10, padding: 10, background: 'rgba(251,191,36,.12)', borderRadius: 6, borderLeft: '3px solid #fbbf24' }}>
-            <b>⬆ 新しいバージョンがあります（#{updateState.runNumber}）</b><br />
+            <b>⬆ 新しいバージョンがあります（v{updateState.update.version}）</b>
+            {updateState.update.body && (
+              <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0', whiteSpace: 'pre-wrap' }}>{updateState.update.body}</p>
+            )}
             <button
               className="btn-secondary"
               style={{ fontSize: 12, padding: '4px 10px', marginTop: 6 }}
-              onClick={async () => {
-                (await import('@tauri-apps/plugin-shell')).open(updateState.url);
-              }}
-            >ダウンロードページを開く →</button>
+              onClick={() => installUpdate(updateState.update)}
+            >今すぐ更新して再起動 →</button>
           </div>
+        )}
+        {updateState.kind === 'downloading' && (
+          <span style={{ marginLeft: 12, color: 'var(--muted)' }}>
+            ダウンロード中… {updateState.percent > 0 ? `${updateState.percent}%` : ''}
+          </span>
         )}
         {updateState.kind === 'error' && (
           <span style={{ marginLeft: 12, color: 'var(--muted)', fontSize: 11 }}>確認できませんでした（オフライン？）</span>
