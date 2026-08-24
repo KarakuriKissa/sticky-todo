@@ -3,6 +3,8 @@
 デスクトップに付箋を貼るように、タスクを管理できる Windows アプリです。  
 複数のリストを画面に並べて、見ながら作業できます。
 
+> 英語対応は本体に統合済みです。sticky-todo-intl リポジトリは廃止予定です。
+
 > **β版です。** 使ってみた感想・不具合は [Issues](../../issues) へ！
 
 ![status](https://img.shields.io/badge/status-beta-orange)

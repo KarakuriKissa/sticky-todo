@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../../store/appStore';
 import type { AppSettings } from '../../types';
+import { useT, useI18nStore, type Lang } from '../../i18n';
 
 interface Props {
   draft: AppSettings;
@@ -11,6 +12,10 @@ interface Props {
 // Advanced settings — deadline warning, desktop notification interval,
 // autostart, DB export/import/delete actions.
 export function AdvancedTab({ draft, setDraft }: Props) {
+  const t = useT();
+  const lang = useI18nStore((s) => s.lang);
+  const setLang = useI18nStore((s) => s.setLang);
+
   // PC autostart — managed by the OS, not part of AppSettings, so we read/write
   // it directly via the autostart plugin.
   const [autostart, setAutostart] = useState(false);
@@ -47,12 +52,12 @@ export function AdvancedTab({ draft, setDraft }: Props) {
       const actual = await readAutostart();
       setAutostart(actual);
       if (actual !== on) {
-        alert('自動起動の設定が反映されませんでした。OS の権限やセキュリティ設定をご確認ください。');
+        alert(t('adv.autostartFailedAlert'));
       } else if (on && usedRust) {
         // 成功時の軽い確認（任意）。うるさければ削除可。
       }
     } catch (e) {
-      alert('自動起動の設定に失敗しました: ' + e);
+      alert(t('adv.autostartErrorAlert', { error: String(e) }));
     } finally {
       setAutostartBusy(false);
     }
@@ -71,67 +76,67 @@ export function AdvancedTab({ draft, setDraft }: Props) {
     const { save } = await import('@tauri-apps/plugin-dialog');
     const ts = new Date().toISOString().slice(0, 10);
     const path = await save({
-      title: 'データベースをエクスポート',
+      title: t('adv.exportDialogTitle'),
       defaultPath: `sticky-todo-${ts}.db`,
       filters: [{ name: 'SQLite Database', extensions: ['db'] }],
     });
     if (!path) return;
     try {
       await invoke('export_database', { destPath: path });
-      alert('エクスポートが完了しました');
+      alert(t('adv.exportedAlert'));
     } catch (e) {
-      alert('エクスポート失敗: ' + e);
+      alert(t('adv.exportFailedAlert', { error: String(e) }));
     }
   };
 
   const onImport = async () => {
     const { open, confirm } = await import('@tauri-apps/plugin-dialog');
     const path = await open({
-      title: 'データベースをインポート',
+      title: t('adv.importDialogTitle'),
       multiple: false,
       directory: false,
       filters: [{ name: 'SQLite Database', extensions: ['db'] }],
     });
     if (!path || typeof path !== 'string') return;
     const ok = await confirm(
-      '現在のデータをインポートしたデータで完全に置き換えます。\nこの操作は取り消せません。続行しますか？',
-      { title: 'インポートの確認', kind: 'warning' },
+      t('adv.importConfirmBody'),
+      { title: t('adv.importConfirmTitle'), kind: 'warning' },
     );
     if (!ok) return;
     try { await invoke('import_database', { srcPath: path }); }
-    catch (e) { alert('インポート失敗: ' + e); }
+    catch (e) { alert(t('adv.importFailedAlert', { error: String(e) })); }
   };
 
   const onBackupNow = async () => {
     try {
       await invoke<string>('backup_database');
       await refreshBackups();
-      alert('バックアップを作成しました');
+      alert(t('adv.backupCreatedAlert'));
     } catch (e) {
-      alert('バックアップ失敗: ' + e);
+      alert(t('adv.backupFailedAlert', { error: String(e) }));
     }
   };
 
   const onRestoreBackup = async (path: string, name: string) => {
     const { confirm } = await import('@tauri-apps/plugin-dialog');
     const ok = await confirm(
-      `現在のデータを「${name}」で完全に置き換えます。\nこの操作は取り消せません。続行しますか？`,
-      { title: 'バックアップから復元', kind: 'warning' },
+      t('adv.restoreConfirmBody', { name }),
+      { title: t('adv.restoreConfirmTitle'), kind: 'warning' },
     );
     if (!ok) return;
     try { await invoke('import_database', { srcPath: path }); }
-    catch (e) { alert('復元失敗: ' + e); }
+    catch (e) { alert(t('adv.restoreFailedAlert', { error: String(e) })); }
   };
 
   const onDelete = async () => {
     const { confirm } = await import('@tauri-apps/plugin-dialog');
     const ok = await confirm(
-      'すべてのリスト・タスク・設定が完全に削除されます。\nこの操作は取り消せません。本当に削除しますか？',
-      { title: 'データベース削除の確認', kind: 'warning' },
+      t('adv.deleteConfirmBody'),
+      { title: t('adv.deleteConfirmTitle'), kind: 'warning' },
     );
     if (!ok) return;
     try { await invoke('delete_database'); }
-    catch (e) { alert('削除失敗: ' + e); }
+    catch (e) { alert(t('adv.deleteFailedAlert', { error: String(e) })); }
   };
 
   const onResetTutorial = async () => {
@@ -142,7 +147,7 @@ export function AdvancedTab({ draft, setDraft }: Props) {
       localStorage.removeItem('sticky-todo:last-seen-build');
       await invoke('delete_database'); // ← アプリが即座に再起動される
     } catch (e) {
-      alert('初期化失敗: ' + e);
+      alert(t('adv.resetFailedAlert', { error: String(e) }));
     }
   };
 
@@ -151,66 +156,75 @@ export function AdvancedTab({ draft, setDraft }: Props) {
 
   return (
     <section>
-      <h3>期日警告</h3>
+      <h3>{t('adv.langTitle')}</h3>
+      <p style={para}>{t('adv.langDesc')}</p>
+      <label className="toggle-row" style={{ gap: 6, marginBottom: 4 }}>
+        <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}
+          style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '3px 8px', fontSize: 12 }}>
+          <option value="ja">{t('lang.ja')}</option>
+          <option value="en">{t('lang.en')}</option>
+        </select>
+      </label>
+
+      <h3 style={{ marginTop: 20 }}>{t('adv.deadlineTitle')}</h3>
       <p style={para}>
-        期日が近いタスクに警告色を表示します。各リストで個別に上書き可能です。
+        {t('adv.deadlineDesc')}
       </p>
       <label className="toggle-row" style={{ gap: 6, marginBottom: 4 }}>
-        期限の
+        {t('adv.deadlinePrefix')}
         <input type="number" min={0} max={30}
           value={draft.deadline_warn_days}
           onChange={(e) => setDraft((d) => ({ ...d, deadline_warn_days: Number(e.target.value) }))}
           style={numberInput} />
-        日前から警告色を表示
+        {t('adv.deadlineSuffix')}
       </label>
 
-      <h3 style={{ marginTop: 20 }}>デスクトップ通知</h3>
+      <h3 style={{ marginTop: 20 }}>{t('adv.notifTitle')}</h3>
       <p style={para}>
-        リストを開いている間、期限切れ・期日が近いタスクを Windows 通知で知らせます。<br />
-        <strong>0 にすると通知を無効化</strong>します。
+        {t('adv.notifDescLine1')}<br />
+        <strong>{t('adv.notifDescLine2Bold')}</strong>{t('adv.notifDescLine2Suffix')}
       </p>
       <label className="toggle-row" style={{ gap: 6 }}>
-        チェック間隔
+        {t('adv.checkInterval')}
         <input type="number" min={0} max={1440}
           value={draft.reminder_interval_min ?? 30}
           onChange={(e) => setDraft((d) => ({ ...d, reminder_interval_min: Number(e.target.value) }))}
           style={{ ...numberInput, width: 64 }} />
-        分ごと（0 で無効）
+        {t('adv.minutesSuffix')}
       </label>
 
-      <h3 style={{ marginTop: 20 }}>起動時の動作</h3>
+      <h3 style={{ marginTop: 20 }}>{t('adv.startupTitle')}</h3>
       <p style={para}>
-        アプリを起動したとき、前回開いていたリストウィンドウを自動で再表示します。
+        {t('adv.startupDesc')}
       </p>
       <label className="toggle-row">
         <input type="checkbox"
           checked={draft.reopen_windows_on_start ?? true}
           onChange={(e) => setDraft((d) => ({ ...d, reopen_windows_on_start: e.target.checked }))} />
-        前回開いていたリストを起動時に復元する
+        {t('adv.reopenLabel')}
       </label>
       <label className="toggle-row" style={{ marginTop: 4 }}>
         <input type="checkbox"
           checked={autostart}
           disabled={autostartBusy}
           onChange={(e) => toggleAutostart(e.target.checked)} />
-        Windows 起動時に自動でアプリを立ち上げる
+        {t('adv.autostartLabel')}
       </label>
 
-      <h3 style={{ marginTop: 20 }}>データベース</h3>
+      <h3 style={{ marginTop: 20 }}>{t('adv.dbTitle')}</h3>
       <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
-        すべてのデータはローカルの SQLite データベースに保存されています。<br />
-        エクスポートでバックアップを作成、インポートで別のデータベースに置き換えできます。
+        {t('adv.dbDescLine1')}<br />
+        {t('adv.dbDescLine2')}
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onExport}>📤 エクスポート</button>
-        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onImport}>📥 インポート</button>
-        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }} onClick={onDelete}>🗑️ データベースを削除</button>
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onExport}>{t('adv.export')}</button>
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onImport}>{t('adv.import')}</button>
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px', color: '#ef4444', borderColor: '#ef4444' }} onClick={onDelete}>{t('adv.deleteDb')}</button>
       </div>
 
-      <h3 style={{ marginTop: 20 }}>サンプルリスト</h3>
+      <h3 style={{ marginTop: 20 }}>{t('adv.sampleTitle')}</h3>
       <p style={para}>
-        初回起動時のチュートリアル用サンプルリスト（ようこそ／今週のタスク／買い物リスト）を
-        既存のデータを残したまま追加します。
+        {t('adv.sampleDesc')}
       </p>
       <button
         className="btn-secondary"
@@ -218,70 +232,70 @@ export function AdvancedTab({ draft, setDraft }: Props) {
         onClick={async () => {
           try {
             await useAppStore.getState().reseedTutorial();
-            alert('サンプルリストを追加しました');
+            alert(t('adv.sampleAddedAlert'));
           } catch (e) {
-            alert('追加に失敗: ' + e);
+            alert(t('adv.sampleFailedAlert', { error: String(e) }));
           }
         }}
-      >📝 サンプルリストを追加</button>
+      >{t('adv.addSample')}</button>
 
-      <h3 style={{ marginTop: 20 }}>リンクを開くブラウザ</h3>
+      <h3 style={{ marginTop: 20 }}>{t('adv.browserTitle')}</h3>
       <p style={para}>
-        タスクやコメント内の URL をクリックしたとき、ここで指定したブラウザで開きます。<br />
-        <strong>空欄なら OS の既定ブラウザ</strong>で開きます。<br />
-        例（Windows）: <code>C:\Program Files\Google\Chrome\Application\chrome.exe</code><br />
-        例（Mac）: <code>Google Chrome</code>（アプリ名）
+        {t('adv.browserDescLine1')}<br />
+        <strong>{t('adv.browserDescLine2Bold')}</strong>{t('adv.browserDescLine2Suffix')}<br />
+        {t('adv.browserExampleWin')} <code>C:\Program Files\Google\Chrome\Application\chrome.exe</code><br />
+        {t('adv.browserExampleMac')} <code>Google Chrome</code>{t('adv.browserExampleMacSuffix')}
       </p>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input
           type="text"
           value={draft.browser_path ?? ''}
-          placeholder="（空欄 = 既定のブラウザ）"
+          placeholder={t('adv.browserPlaceholder')}
           onChange={(e) => setDraft((d) => ({ ...d, browser_path: e.target.value }))}
           style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '4px 8px', fontSize: 12 }}
         />
         <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }}
           onClick={async () => {
             const { open } = await import('@tauri-apps/plugin-dialog');
-            const path = await open({ title: 'ブラウザの実行ファイルを選択', multiple: false, directory: false });
+            const path = await open({ title: t('adv.browserDialogTitle'), multiple: false, directory: false });
             if (typeof path === 'string') setDraft((d) => ({ ...d, browser_path: path }));
-          }}>参照…</button>
+          }}>{t('adv.browse')}</button>
       </div>
 
-      <h3 style={{ marginTop: 20 }}>自動バックアップ</h3>
+      <h3 style={{ marginTop: 20 }}>{t('adv.backupTitle')}</h3>
       <p style={para}>
-        一定間隔でデータベースのバックアップを自動作成します（最新3つを保持）。<br />
-        <strong>0 にすると自動バックアップを無効化</strong>します。
+        {t('adv.backupDescLine1')}<br />
+        <strong>{t('adv.backupDescLine2Bold')}</strong>{t('adv.notifDescLine2Suffix')}
       </p>
       <label className="toggle-row" style={{ gap: 6 }}>
-        バックアップ間隔
+        {t('adv.backupInterval')}
         <input type="number" min={0} max={1440}
           value={draft.backup_interval_min ?? 60}
           onChange={(e) => setDraft((d) => ({ ...d, backup_interval_min: Number(e.target.value) }))}
           style={{ ...numberInput, width: 64 }} />
-        分ごと（0 で無効）
+        {t('adv.minutesSuffix')}
       </label>
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onBackupNow}>💾 今すぐバックアップ</button>
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={onBackupNow}>{t('adv.backupNow')}</button>
       </div>
       {backups.length > 0 && (
         <div style={{ marginTop: 8 }}>
-          <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>保存済みバックアップ（クリックで復元）:</p>
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{t('adv.savedBackups')}</p>
           {backups.map(([path, name]) => (
             <div key={path} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '3px 0' }}>
               <span style={{ flex: 1, fontFamily: 'monospace' }}>{name}</span>
               <button className="btn-secondary" style={{ fontSize: 11, padding: '2px 8px' }}
-                onClick={() => onRestoreBackup(path, name)}>復元</button>
+                onClick={() => onRestoreBackup(path, name)}>{t('adv.restore')}</button>
             </div>
           ))}
         </div>
       )}
 
-      <h3 style={{ marginTop: 20 }}>⚠️ アプリの初期化</h3>
+      <h3 style={{ marginTop: 20 }}>{t('adv.dangerTitle')}</h3>
       <div style={{ fontSize: 12, lineHeight: 1.7, padding: '10px 12px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 6, marginBottom: 10 }}>
-        <strong style={{ color: '#ef4444' }}>作成したリスト・タスクがすべて消えます。</strong><br />
-        初期化すると今まで入力したメモやタスクは復元できません。<br />
-        初期化後はサンプルデータが表示されます（アプリを初めて起動したときと同じ状態）。
+        <strong style={{ color: '#ef4444' }}>{t('adv.dangerBold')}</strong><br />
+        {t('adv.dangerLine2')}<br />
+        {t('adv.dangerLine3')}
       </div>
       <button
         className="btn-secondary"
@@ -289,13 +303,13 @@ export function AdvancedTab({ draft, setDraft }: Props) {
         onClick={async () => {
           const { confirm } = await import('@tauri-apps/plugin-dialog');
           const ok = await confirm(
-            '作成したリスト・タスクがすべて削除されます。\nこの操作は取り消せません。本当に初期化しますか？',
-            { title: 'アプリの初期化', kind: 'warning' },
+            t('adv.resetConfirmBody'),
+            { title: t('adv.resetConfirmTitle'), kind: 'warning' },
           );
           if (ok) onResetTutorial();
         }}
       >
-        🗑️ アプリを初期化する
+        {t('adv.resetApp')}
       </button>
     </section>
   );

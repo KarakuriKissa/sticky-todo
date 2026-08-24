@@ -83,6 +83,7 @@ pub fn run() {
             commands::save_settings,
             commands::set_launch_at_startup,
             commands::get_launch_at_startup,
+            commands::get_install_language,
             commands::open_note_window,
             commands::close_note_window,
             commands::set_always_on_top,

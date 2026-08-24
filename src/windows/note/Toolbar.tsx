@@ -2,6 +2,7 @@
 // archive. Extracted from Note.tsx so the main file focuses on hooks + layout.
 import type { AppSettings, AssigneeGroup, ItemType, TodoItem } from '../../types';
 import { useNoteStore } from '../../store/noteStore';
+import { useT } from '../../i18n';
 
 export interface ToolbarProps {
   settings: AppSettings;
@@ -24,14 +25,15 @@ export interface ToolbarProps {
   onInsertLink: () => void;
 }
 
-const PRIORITY_OPTIONS = [
-  { value: null, label: '（なし）' },
-  { value: 'high', label: '高' },
-  { value: 'medium', label: '中' },
-  { value: 'low', label: '低' },
+const PRIORITY_VALUES = [
+  { value: null as null, key: 'tb.priorityNone' },
+  { value: 'high', key: 'tb.priorityHigh' },
+  { value: 'medium', key: 'tb.priorityMedium' },
+  { value: 'low', key: 'tb.priorityLow' },
 ] as const;
 
 export function NoteToolbar(p: ToolbarProps) {
+  const t = useT();
   const selCount = p.selectedIds.size;
   // Priority can only be applied to normal tasks — headings/separators have none.
   // The ★ button stays visible at all times (so the toolbar layout never jumps)
@@ -43,14 +45,14 @@ export function NoteToolbar(p: ToolbarProps) {
   });
   return (
     <div className="note-type-bar">
-      <button className="type-btn" onClick={() => p.addItem()} title="項目追加">＋</button>
-      <button className="type-btn" onClick={() => p.addTyped('heading')} title="見出し">H</button>
-      <button className="type-btn" onClick={() => p.addTyped('separator')} title="区切り線">—</button>
+      <button className="type-btn" onClick={() => p.addItem()} title={t('tb.add')}>＋</button>
+      <button className="type-btn" onClick={() => p.addTyped('heading')} title={t('tb.heading')}>H</button>
+      <button className="type-btn" onClick={() => p.addTyped('separator')} title={t('tb.separator')}>—</button>
       {/* Hyperlink: select text in a task, then click. mousedown (not click) so
           the input keeps its selection before focus moves to the button. */}
       <button className="type-btn link-btn"
         onMouseDown={(e) => { e.preventDefault(); p.onInsertLink(); }}
-        title="リンクを設定／編集（文字を選択 か リンク内にカーソルを置いて押す）">
+        title={t('tb.link')}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
@@ -59,16 +61,16 @@ export function NoteToolbar(p: ToolbarProps) {
       </button>
       <button className="type-btn"
         onClick={() => { if (selCount > 0) [...p.selectedIds].forEach((id) => useNoteStore.getState().indent(id)); }}
-        title="インデント (Tab)">→</button>
+        title={t('tb.indent')}>→</button>
       <button className="type-btn"
         onClick={() => { if (selCount > 0) [...p.selectedIds].forEach((id) => useNoteStore.getState().dedent(id)); }}
-        title="アウトデント (Shift+Tab)">←</button>
+        title={t('tb.outdent')}>←</button>
 
       {p.settings.feature_assignee && p.assigneeGroups.length > 0 && (
         <select className="group-selector"
           value={p.activeGroupId}
           onChange={(e) => p.setActiveGroupId(e.target.value)}
-          title="担当者グループ"
+          title={t('tb.group')}
           onClick={(e) => e.stopPropagation()}>
           {p.assigneeGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
@@ -79,7 +81,7 @@ export function NoteToolbar(p: ToolbarProps) {
           <button
             className={`type-btn${hasNormalSelected ? ' active-feature' : ''}`}
             disabled={!hasNormalSelected}
-            title={hasNormalSelected ? '選択タスクの優先度を設定' : 'タスクを選択すると優先度を設定できます'}
+            title={hasNormalSelected ? t('tb.priorityOn') : t('tb.priorityOff')}
             onClick={(e) => {
               e.stopPropagation();
               if (hasNormalSelected) p.setShowPriorityPicker((o) => !o);
@@ -89,10 +91,10 @@ export function NoteToolbar(p: ToolbarProps) {
             <div className="status-dropdown"
               style={{ top: '100%', left: 0, bottom: 'auto' }}
               onClick={(e) => e.stopPropagation()}>
-              {PRIORITY_OPTIONS.map((opt) => (
+              {PRIORITY_VALUES.map((opt) => (
                 <div key={String(opt.value)} className="status-option"
                   onClick={() => { p.applyToSelected({ priority: opt.value ?? null }); p.setShowPriorityPicker(() => false); }}>
-                  {opt.label}
+                  {t(opt.key)}
                 </div>
               ))}
             </div>
@@ -105,31 +107,31 @@ export function NoteToolbar(p: ToolbarProps) {
       {p.settings.feature_priority && (
         <button className="type-btn"
           onClick={() => p.setPriorityMode((m) => m === 'hml' ? 'abc' : 'hml')}
-          title={p.priorityMode === 'hml' ? 'ABC表記に切替' : '高中低表記に切替'}
+          title={p.priorityMode === 'hml' ? t('tb.priorityModeToAbc') : t('tb.priorityModeToHml')}
           style={{ fontSize: 10 }}>
-          {p.priorityMode === 'hml' ? '高中低' : 'ABC'}
+          {p.priorityMode === 'hml' ? t('tb.priorityHml') : 'ABC'}
         </button>
       )}
 
       {/* Always reserve a fixed-width slot so the rest of the toolbar doesn't
           shift when a selection appears/disappears. */}
-      <span className="sel-count">{selCount > 0 ? `${selCount}件` : ''}</span>
+      <span className="sel-count">{selCount > 0 ? t('tb.selCount', { n: selCount }) : ''}</span>
 
       <button className="type-btn"
         onClick={() => useNoteStore.getState().checkSelected(true)}
-        title="選択をチェック">☑</button>
+        title={t('tb.checkSelected')}>☑</button>
       <button className="type-btn"
         onClick={() => useNoteStore.getState().checkSelected(false)}
-        title="選択のチェックを外す">☐</button>
+        title={t('tb.uncheckSelected')}>☐</button>
 
       <button className="type-btn"
         onClick={p.archiveCheckedAll}
         disabled={p.checkedNonArchived.length === 0}
-        title={`チェック済を一括アーカイブ (${p.checkedNonArchived.length}件)`}>📥</button>
+        title={t('tb.archiveSelected', { n: p.checkedNonArchived.length })}>📥</button>
 
       <button className={`type-btn${p.showArchived ? ' active-feature' : ''}`}
         onClick={() => p.setShowArchived((v) => !v)}
-        title={p.showArchived ? '通常表示に戻る' : `アーカイブを表示 (${p.archivedCount}件)`}>
+        title={p.showArchived ? t('tb.showNormal') : t('tb.showArchived', { n: p.archivedCount })}>
         🗄️{p.archivedCount > 0 && <sup style={{ fontSize: 8 }}>{p.archivedCount}</sup>}
       </button>
     </div>

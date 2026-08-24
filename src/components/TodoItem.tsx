@@ -9,6 +9,7 @@ import { InlineStatusPicker, InlineAssigneePicker, InlineDatePicker, InlinePrior
 import { buildContextMenu } from './todo/contextMenu';
 import { makeRowKeyDown } from './todo/rowKeyboard';
 import { RichTextEdit } from './todo/RichTextEdit';
+import { useT } from '../i18n';
 
 interface Props {
   item: Item;
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMode, activeGroupId, searchTerm, isCurrentMatch }: Props) {
+  const t = useT();
   const {
     updateItem, deleteItem, toggleCheck, toggleBold, toggleStrike, toggleLock, toggleCollapse,
     indent, dedent, addItem, selectedIds, toggleSelected, moveItem,
@@ -324,7 +326,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
             onPointerMove={onGripPointerMove}
             onPointerUp={onGripPointerUp}
             onPointerCancel={endDrag}
-            title="ドラッグで並び替え"
+            title={t('item.dragHandle')}
           >⠿</span>
         )}
         <hr />
@@ -368,7 +370,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
             onPointerMove={onGripPointerMove}
             onPointerUp={onGripPointerUp}
             onPointerCancel={endDrag}
-            title="ドラッグで並び替え"
+            title={t('item.dragHandle')}
           >⠿</span>
         )}
         {item.locked && <span className="item-lock-icon">🔒</span>}
@@ -383,7 +385,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           onBlur={exitEdit}
           onDoubleClick={(e) => { e.stopPropagation(); enterEdit(); }}
           onMouseDown={(e) => e.stopPropagation()}
-          placeholder="見出し"
+          placeholder={t('tb.heading')}
         />
         {/* Memo indicator — identical to normal items so headings can carry
             comments too (prevents losing notes when toggling task↔heading). */}
@@ -465,7 +467,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           onChange={(md) => !item.locked && updateItem(item.id, { text: md })}
           autoFocus
           className={`todo-text${item.checked ? ' done' : ''}${item.bold ? ' bold' : ''}${item.strikethrough ? ' strike' : ''}`}
-          placeholder="タスクを入力…"
+          placeholder={t('item.taskPlaceholder')}
           onKeyDown={onKeyDown}
           onBlur={exitEdit}
         />
@@ -544,7 +546,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
             }}
             onMouseLeave={() => setHoverMemo(null)}
             onClick={(e) => { e.stopPropagation(); setMemoPinned((p) => !p); }}
-            title="クリックで固定表示 / 右クリックで編集"
+            title={t('item.memoTitle')}
           >💬</span>
         )}
       </div>
@@ -589,17 +591,18 @@ function CommentEditor({
   onCancel: () => void;
   above: boolean;
 }) {
+  const t = useT();
   const insertRef = useRef<(() => void) | null>(null);
 
   return (
     <div className={`comment-popup${above ? ' comment-popup-above' : ''}`} onClick={(e) => e.stopPropagation()}>
       <div className="memo-popup-title">
-        コメント
+        {t('comment.title')}
         <button
           className="comment-link-btn"
-          title="選択した文字にリンクを設定（先に文字を選択）"
+          title={t('comment.linkTitle')}
           onMouseDown={(e) => { e.preventDefault(); insertRef.current?.(); }}
-        >🔗 リンク</button>
+        >{t('comment.linkBtn')}</button>
       </div>
       <RichTextEdit
         value={value}
@@ -607,7 +610,7 @@ function CommentEditor({
         multiline
         autoFocus
         className="memo-textarea cl-multiline"
-        placeholder="コメントを入力…（Ctrl+Enterで保存／Enterで改行／文字を選んで🔗）"
+        placeholder={t('comment.placeholder')}
         registerInsert={(fn) => { insertRef.current = fn; }}
         onKeyDown={(e) => {
           // Keep all key events inside the comment editor.
@@ -618,8 +621,8 @@ function CommentEditor({
         }}
       />
       <div className="memo-popup-actions">
-        <button className="btn-primary" onClick={onSave}>保存 (Ctrl+Enter)</button>
-        <button className="btn-secondary" onClick={onCancel}>キャンセル</button>
+        <button className="btn-primary" onClick={onSave}>{t('comment.save')}</button>
+        <button className="btn-secondary" onClick={onCancel}>{t('btn.cancel')}</button>
       </div>
     </div>
   );

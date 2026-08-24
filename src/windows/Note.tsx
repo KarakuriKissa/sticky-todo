@@ -10,6 +10,7 @@ import { useReminders } from './note/useReminders';
 import { useCloseHandler } from './note/useCloseHandler';
 import { NoteToolbar } from './note/Toolbar';
 import { triggerActiveInsertLink } from '../components/todo/RichTextEdit';
+import { useT } from '../i18n';
 
 interface Props {
   noteId: string;
@@ -21,6 +22,7 @@ const NOTE_COLORS = [
 ];
 
 export function NoteWindow({ noteId }: Props) {
+  const t = useT();
   const {
     load, items, note, setNote, addItem, flush, undo, redo,
     selectAll, clearSelection, selectedIds, searchQuery, setSearchQuery,
@@ -500,9 +502,9 @@ export function NoteWindow({ noteId }: Props) {
               e.stopPropagation();
               startTitleEdit();
             }}
-            title="右クリックで編集"
+            title={t('note.editTitle')}
           >
-            {titleText || 'タイトルなし'}
+            {titleText || t('note.titlebarUntitled')}
           </span>
         )}
 
@@ -513,7 +515,7 @@ export function NoteWindow({ noteId }: Props) {
           {/* Save indicator */}
           <span
             className={`save-indicator save-${saveStatus}`}
-            title={lastSavedAt ? `最終保存: ${new Date(lastSavedAt).toLocaleTimeString()}` : '未保存'}
+            title={lastSavedAt ? t('note.lastSaved', { time: new Date(lastSavedAt).toLocaleTimeString() }) : t('note.unsaved')}
           >
             {saveStatus === 'saving' ? '💾…' : saveStatus === 'saved' ? '✓' : saveStatus === 'error' ? '⚠' : ''}
           </span>
@@ -522,7 +524,7 @@ export function NoteWindow({ noteId }: Props) {
           <button
             className="pin-btn"
             onClick={() => { invoke('show_launcher').catch(() => {}); }}
-            title="ランチャーを開く"
+            title={t('note.openLauncher')}
             style={{ fontSize: 13 }}
           >
             🗂
@@ -532,7 +534,7 @@ export function NoteWindow({ noteId }: Props) {
           <button
             className={`pin-btn${alwaysOnTop ? ' pinned' : ''}`}
             onClick={togglePin}
-            title={alwaysOnTop ? '最前面固定: ON（クリックで解除）' : '最前面固定: OFF'}
+            title={alwaysOnTop ? t('note.pinOn') : t('note.pinOff')}
           >
             {alwaysOnTop ? '📍' : '📌'}
           </button>
@@ -543,7 +545,7 @@ export function NoteWindow({ noteId }: Props) {
               className="color-swatch-btn"
               style={{ background: noteColor }}
               onClick={(e) => { e.stopPropagation(); setShowColorPicker((o) => !o); }}
-              title="色を変更"
+              title={t('note.changeColor')}
             />
             {showColorPicker && (
               <div className="color-picker" onClick={(e) => e.stopPropagation()}>
@@ -559,7 +561,7 @@ export function NoteWindow({ noteId }: Props) {
             )}
           </div>
 
-          <button className="close-btn" onClick={close} title="閉じる">✕</button>
+          <button className="close-btn" onClick={close} title={t('note.close')}>✕</button>
         </div>
       </div>
 
@@ -600,7 +602,7 @@ export function NoteWindow({ noteId }: Props) {
         <div className="quick-add-bar quick-add-bar-top">
           <input
             className="quick-add-input"
-            placeholder={`✏️ 新しいタスクを入力して Enter で追加…${quickAddIndent > 0 ? `  (インデント+${quickAddIndent})` : ''}`}
+            placeholder={`${t('note.quickAddPlaceholder')}${quickAddIndent > 0 ? `  ${t('note.quickAddIndentSuffix', { n: quickAddIndent })}` : ''}`}
             value={quickAddText}
             onChange={(e) => setQuickAddText(e.target.value)}
             onPaste={(e) => {
@@ -626,7 +628,7 @@ export function NoteWindow({ noteId }: Props) {
           />
           {/* Per-note deadline warn days kept here so it is still reachable. */}
           {settings.feature_date && (
-            <span className="warn-days-setting" title="期日警告の日数（このリストの設定）">
+            <span className="warn-days-setting" title={t('note.warnDaysTitle')}>
               ⚠
               <input
                 type="number"
@@ -636,9 +638,9 @@ export function NoteWindow({ noteId }: Props) {
                 max={30}
                 onChange={(e) => setNoteWarnDays(Number(e.target.value))}
                 onClick={(e) => e.stopPropagation()}
-                title="期日の何日前から警告するか"
+                title={t('note.warnDaysInputTitle')}
               />
-              日前
+              {t('note.warnDaysSuffix')}
             </span>
           )}
         </div>
@@ -661,7 +663,7 @@ export function NoteWindow({ noteId }: Props) {
       <div className="note-items" onClick={() => clearSelection()}>
         {visibleItems.length === 0 && (
           <div className="note-items-empty" onClick={(e) => { e.stopPropagation(); addItem(); }}>
-            {searchQuery ? '該当するタスクがありません' : 'クリックして追加…'}
+            {searchQuery ? t('note.emptySearch') : t('note.emptyClickToAdd')}
           </div>
         )}
         {visibleItems.map((item) => (

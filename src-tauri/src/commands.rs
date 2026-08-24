@@ -267,6 +267,32 @@ pub fn get_launch_at_startup() -> Result<bool, String> {
     Err("unsupported_on_this_os".into())
 }
 
+// ── Installer language handoff (Windows: NSIS installerHooks writes this) ──────
+// The NSIS installer's language-selector dialog (see src-tauri/installer/
+// language-hook.nsh) writes the chosen language into HKCU on install. The
+// frontend reads it once, on the very first launch only (see src/i18n.ts),
+// to pick the app's starting language. Never errors — just returns None when
+// the key isn't there (e.g. app wasn't installed via the NSIS installer).
+const INSTALL_LANG_KEY: &str = r"Software\KarakuriKissa\StickyTodo";
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn get_install_language() -> Result<Option<String>, String> {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    match hkcu.open_subkey(INSTALL_LANG_KEY) {
+        Ok(key) => Ok(key.get_value::<String, _>("Language").ok()),
+        Err(_) => Ok(None),
+    }
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn get_install_language() -> Result<Option<String>, String> {
+    Ok(None)
+}
+
 // ── Windows ────────────────────────────────────────────────────────────────────
 
 #[tauri::command]

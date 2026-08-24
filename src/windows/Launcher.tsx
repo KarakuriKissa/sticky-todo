@@ -10,22 +10,16 @@ import type { SortMode } from '../types';
 import { log } from '../utils/log';
 import { DEV_APP_VERSION } from '../utils/updateCheck';
 import { SettingsModal } from './launcher/SettingsModal';
+import { useT } from '../i18n';
 
 // Sort modes are ONE-SHOT: picking name_asc reorders the list NOW and then
 // the dropdown returns to "保存された順" (i.e. the persisted manual order).
 // This stops the previous behavior where dragging a list under a sort mode
 // silently snapped back to alphabetical / date order.
-const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'manual',       label: '保存された順' },
-  { value: 'name_asc',     label: '名前 昇順' },
-  { value: 'name_desc',    label: '名前 降順' },
-  { value: 'created_asc',  label: '作成日 古い順' },
-  { value: 'created_desc', label: '作成日 新しい順' },
-  { value: 'group_asc',    label: 'グループ 昇順' },
-  { value: 'group_desc',   label: 'グループ 降順' },
-];
+const SORT_VALUES: SortMode[] = ['manual', 'name_asc', 'name_desc', 'created_asc', 'created_desc', 'group_asc', 'group_desc'];
 
 export function Launcher() {
+  const t = useT();
   const {
     load, reopenSavedWindows, createNote,
     searchQuery, setSearchQuery, settings, saveSettings,
@@ -270,7 +264,7 @@ export function Launcher() {
       {/* Update banner — appears when a newer signed release is available. */}
       {updateBanner && (
         <div className="update-banner" role="alert">
-          🆙 新しいバージョン <b>v{updateBanner.version}</b> が利用可能です
+          {t('upd.bannerPrefix')} <b>v{updateBanner.version}</b> {t('upd.bannerSuffix')}
           <button
             className="btn-secondary"
             style={{ marginLeft: 10, fontSize: 11, padding: '3px 10px' }}
@@ -286,7 +280,7 @@ export function Launcher() {
                 setUpdating(false);
               }
             }}
-          >{updating ? '更新中…' : '今すぐ更新'}</button>
+          >{updating ? t('upd.updating') : t('upd.updateNow')}</button>
           <button
             className="btn-secondary"
             style={{ marginLeft: 6, fontSize: 11, padding: '3px 8px' }}
@@ -295,7 +289,7 @@ export function Launcher() {
               localStorage.setItem('sticky-todo:last-seen-version', updateBanner.version);
               setUpdateBanner(null);
             }}
-          >閉じる</button>
+          >{t('upd.dismiss')}</button>
         </div>
       )}
 
@@ -309,7 +303,7 @@ export function Launcher() {
           <input
             ref={searchRef}
             className="search-input"
-            placeholder="🌐 リスト名・タスクを横断検索… (Ctrl+F)"
+            placeholder={t('launcher.search')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleSearchKey}
@@ -318,26 +312,26 @@ export function Launcher() {
           <button
             className="btn-new"
             onClick={handleNew}
-            title="新規リスト作成"
+            title={t('launcher.new')}
           >＋</button>
 
           <select
             className="sort-select"
             value={(settings.sort_mode as string) === 'name' ? 'name_asc' : settings.sort_mode}
             onChange={(e) => setSort(e.target.value as SortMode)}
-            title="並び替え"
+            title={t('launcher.sort')}
           >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+            {SORT_VALUES.map((v) => (
+              <option key={v} value={v}>{t('sort.' + v)}</option>
             ))}
           </select>
 
           <button
             className="btn-icon"
             onClick={() => invoke('center_launcher').catch(() => {})}
-            title="画面中央に移動 (Ctrl+Shift+G)"
+            title={t('launcher.center')}
           >🎯</button>
-          <button className="btn-icon" onClick={() => setShowSettings(true)} title="設定">⚙</button>
+          <button className="btn-icon" onClick={() => setShowSettings(true)} title={t('settings.title')}>⚙</button>
         </header>
 
         {/* The note list always renders. Search results pop up as an overlay
@@ -360,6 +354,7 @@ export function Launcher() {
 
 // ── Search results popup (overlay anchored under the search bar) ─────────────
 function SearchPopup({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const { itemMatches, searchQuery, notes, openNote, filteredNotes } = useAppStore();
   const matchedNotes = filteredNotes();
 
@@ -367,14 +362,14 @@ function SearchPopup({ onClose }: { onClose: () => void }) {
     <div className="search-popup-backdrop" onClick={onClose}>
       <div className="search-popup" onClick={(e) => e.stopPropagation()}>
         <div className="search-popup-header">
-          🔍 <strong>「{searchQuery}」</strong> の検索結果：
-          リスト <b>{matchedNotes.length}</b> / タスク <b>{itemMatches.length}</b>
-          <button className="search-popup-close" onClick={onClose} title="閉じる (Esc)">✕</button>
+          🔍 <strong>{t('search.queryOpen')}{searchQuery}{t('search.queryClose')}</strong> {t('search.resultsSuffix')}
+          {t('search.listsLabel')} <b>{matchedNotes.length}</b> / {t('search.tasksLabel')} <b>{itemMatches.length}</b>
+          <button className="search-popup-close" onClick={onClose} title={t('search.close')}>✕</button>
         </div>
         <div className="search-popup-body">
           {matchedNotes.length > 0 && (
             <>
-              <div className="search-popup-section-label">📋 リスト</div>
+              <div className="search-popup-section-label">{t('search.listsSection')}</div>
               {matchedNotes.map((n) => (
                 <div
                   key={n.id}
@@ -382,14 +377,14 @@ function SearchPopup({ onClose }: { onClose: () => void }) {
                   style={{ borderLeft: `3px solid ${n.color || '#fef08a'}` }}
                   onClick={() => openNote(n)}    /* keep popup open after click */
                 >
-                  📋 {n.title || '(無題)'}
+                  📋 {n.title || t('search.untitled')}
                 </div>
               ))}
             </>
           )}
           {itemMatches.length > 0 && (
             <>
-              <div className="search-popup-section-label">✅ タスク</div>
+              <div className="search-popup-section-label">{t('search.tasksSection')}</div>
               {itemMatches.map(({ item, noteTitle }) => {
                 const note = notes.find((nn) => nn.id === item.note_id);
                 return (
@@ -421,7 +416,7 @@ function SearchPopup({ onClose }: { onClose: () => void }) {
             </>
           )}
           {matchedNotes.length === 0 && itemMatches.length === 0 && (
-            <div className="search-popup-empty">該当するリスト・タスクがありません</div>
+            <div className="search-popup-empty">{t('search.noResults')}</div>
           )}
         </div>
       </div>

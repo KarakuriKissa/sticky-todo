@@ -17,18 +17,19 @@ import {
   type UpdateCheckFailure,
   type UpdatePreflight,
 } from '../../utils/updateCheck';
+import { useT, t } from '../../i18n';
 
 // ── ステータス エクスポート/インポート ────────────────────────────────────────
 async function exportStatuses(statuses: Status[]) {
   const { save } = await import('@tauri-apps/plugin-dialog');
   const path = await save({
-    title: 'ステータスをエクスポート',
+    title: t('status.exportDialogTitle'),
     defaultPath: `statuses-${new Date().toISOString().slice(0, 10)}.json`,
     filters: [{ name: 'JSON', extensions: ['json'] }],
   });
   if (!path) return;
   await invoke('write_text_file', { path, content: JSON.stringify({ version: 1, statuses }, null, 2) });
-  alert('ステータスをエクスポートしました');
+  alert(t('status.exportedAlert'));
 }
 
 async function importStatuses(
@@ -36,12 +37,12 @@ async function importStatuses(
   saveStatus: (s: Status) => Promise<void>,
 ) {
   const { open } = await import('@tauri-apps/plugin-dialog');
-  const path = await open({ title: 'ステータスをインポート', filters: [{ name: 'JSON', extensions: ['json'] }] });
+  const path = await open({ title: t('status.importDialogTitle'), filters: [{ name: 'JSON', extensions: ['json'] }] });
   if (!path || typeof path !== 'string') return;
   const text = await invoke<string>('read_text_file', { path });
   let data: any;
-  try { data = JSON.parse(text); } catch { alert('JSONとして読み込めませんでした'); return; }
-  if (!data?.statuses || !Array.isArray(data.statuses)) { alert('形式が正しくありません'); return; }
+  try { data = JSON.parse(text); } catch { alert(t('status.jsonParseError')); return; }
+  if (!data?.statuses || !Array.isArray(data.statuses)) { alert(t('status.invalidFormat')); return; }
   let added = 0, skipped = 0;
   // Compute next sort_order from the actual max, not array length (which could
   // be stale if items were deleted earlier).
@@ -55,14 +56,14 @@ async function importStatuses(
     await saveStatus({ id, name: s.name, color: s.color ?? '#94a3b8', sort_order: maxOrder + 1 + added });
     added++;
   }
-  alert(`インポート完了: ${added}件追加, ${skipped}件スキップ（重複・不正データ）`);
+  alert(t('status.importResult', { added, skipped }));
 }
 
 // ── 担当者 エクスポート/インポート ──────────────────────────────────────────
 async function exportAssignees(groups: AssigneeGroup[], persons: AssigneePerson[]) {
   const { save } = await import('@tauri-apps/plugin-dialog');
   const path = await save({
-    title: '担当者をエクスポート',
+    title: t('assignee.exportDialogTitle'),
     defaultPath: `assignees-${new Date().toISOString().slice(0, 10)}.json`,
     filters: [{ name: 'JSON', extensions: ['json'] }],
   });
@@ -72,7 +73,7 @@ async function exportAssignees(groups: AssigneeGroup[], persons: AssigneePerson[
     persons: persons.filter(p => p.group_id === g.id).map(p => ({ name: p.name, color: p.color })),
   }));
   await invoke('write_text_file', { path, content: JSON.stringify({ version: 1, groups: payload }, null, 2) });
-  alert('担当者をエクスポートしました');
+  alert(t('assignee.exportedAlert'));
 }
 
 async function importAssignees(
@@ -82,12 +83,12 @@ async function importAssignees(
   saveAssigneePerson: (p: AssigneePerson) => Promise<void>,
 ) {
   const { open } = await import('@tauri-apps/plugin-dialog');
-  const path = await open({ title: '担当者をインポート', filters: [{ name: 'JSON', extensions: ['json'] }] });
+  const path = await open({ title: t('assignee.importDialogTitle'), filters: [{ name: 'JSON', extensions: ['json'] }] });
   if (!path || typeof path !== 'string') return;
   const text = await invoke<string>('read_text_file', { path });
   let data: any;
-  try { data = JSON.parse(text); } catch { alert('JSONとして読み込めませんでした'); return; }
-  if (!data?.groups || !Array.isArray(data.groups)) { alert('形式が正しくありません'); return; }
+  try { data = JSON.parse(text); } catch { alert(t('status.jsonParseError')); return; }
+  if (!data?.groups || !Array.isArray(data.groups)) { alert(t('status.invalidFormat')); return; }
   // Maintain a running local snapshot — otherwise filters against
   // existingPersons miss everyone added earlier in this loop, breaking sort_order.
   const localGroups = [...existingGroups];
@@ -117,10 +118,11 @@ async function importAssignees(
       personAdded++;
     }
   }
-  alert(`インポート完了: グループ${groupAdded}件追加, メンバー${personAdded}件追加, ${personSkipped}件スキップ`);
+  alert(t('assignee.importResult', { groupAdded, personAdded, personSkipped }));
 }
 
 export function HelpSection() {
+  const t = useT();
   const [appVersion, setAppVersion] = useState<string>('');
   useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
 
@@ -249,9 +251,9 @@ export function HelpSection() {
         インターネットへの接続はアップデート確認ボタンを押したときだけです。
       </p>
 
-      <h4 style={{ marginTop: 14 }}>🔄 アップデート確認</h4>
+      <h4 style={{ marginTop: 14 }}>{t('upd.heading')}</h4>
       <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 6px' }}>
-        現在のバージョン: {appVersion ? `v${appVersion}` : '確認中…'}
+        {t('upd.currentVersionLabel')}: {appVersion ? `v${appVersion}` : t('upd.checking')}
       </p>
       <div style={{ fontSize: 12, lineHeight: 1.8 }}>
         <button
@@ -260,17 +262,17 @@ export function HelpSection() {
           onClick={checkUpdate}
           disabled={updateState.kind === 'checking' || updateState.kind === 'downloading'}
         >
-          {updateState.kind === 'checking' ? '確認中…' : '🔄 最新バージョンを確認'}
+          {updateState.kind === 'checking' ? t('upd.checking') : t('upd.checkButton')}
         </button>
         {updateState.kind === 'dev' && (
-          <span style={{ marginLeft: 12, color: 'var(--muted)', fontSize: 11 }}>開発版なので更新確認は行いません</span>
+          <span style={{ marginLeft: 12, color: 'var(--muted)', fontSize: 11 }}>{t('upd.devNotice')}</span>
         )}
         {updateState.kind === 'latest' && (
-          <span style={{ marginLeft: 12, color: '#4ade80', fontWeight: 600 }}>✓ 最新バージョンです</span>
+          <span style={{ marginLeft: 12, color: '#4ade80', fontWeight: 600 }}>{t('upd.latest')}</span>
         )}
         {updateState.kind === 'update' && (
           <div style={{ marginTop: 10, padding: 10, background: 'rgba(251,191,36,.12)', borderRadius: 6, borderLeft: '3px solid #fbbf24' }}>
-            <b>⬆ 新しいバージョンがあります（v{updateState.update.version}）</b>
+            <b>{t('upd.found', { version: updateState.update.version })}</b>
             {updateState.update.body && (
               <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0', whiteSpace: 'pre-wrap' }}>{updateState.update.body}</p>
             )}
@@ -278,16 +280,19 @@ export function HelpSection() {
               className="btn-secondary"
               style={{ fontSize: 12, padding: '4px 10px', marginTop: 6 }}
               onClick={() => installUpdate(updateState.update)}
-            >今すぐ更新して再起動 →</button>
+            >{t('upd.installRestart')}</button>
           </div>
         )}
         {updateState.kind === 'downloading' && (
           <span style={{ marginLeft: 12, color: 'var(--muted)' }}>
-            ダウンロード中… {updateState.percent > 0 ? `${updateState.percent}%` : ''}
+            {t('upd.downloading')} {updateState.percent > 0 ? `${updateState.percent}%` : ''}
           </span>
         )}
         {updateState.kind === 'error' && (
           <div style={{ marginTop: 8 }}>
+            {/* messageForUpdateFailure() text comes from utils/updateCheck.ts,
+                which stays Japanese-only regardless of UI language (out of
+                scope for this i18n pass — see task notes). */}
             <span style={{ color: '#f87171', fontSize: 11 }}>{messageForUpdateFailure(updateState.failure)}</span>
             <button
               className="btn-secondary"
@@ -295,7 +300,7 @@ export function HelpSection() {
               onClick={async () => {
                 (await import('@tauri-apps/plugin-shell')).open('https://github.com/KarakuriKissa/sticky-todo/releases/latest');
               }}
-            >手動でダウンロードページを開く →</button>
+            >{t('upd.manualDownload')}</button>
           </div>
         )}
       </div>
@@ -347,6 +352,7 @@ export function SettingsModal({
   onSave: (s: AppSettings) => Promise<void>;
   onClose: () => void;
 }) {
+  const tr = useT();
   const [tab, setTab] = useState<SettingsTab>('statuses');
   const [draft, setDraft] = useState<AppSettings>({ ...settings });
 
@@ -407,27 +413,27 @@ export function SettingsModal({
   // ここを true にすればタブが戻る。中途半端な機能を製品に出さないための蓋。
   const SHOW_SYNC_TAB = false;
 
-  const TABS: { id: SettingsTab; label: string }[] = [
-    { id: 'statuses',  label: 'ステータス' },
-    { id: 'assignees', label: '担当者' },
-    { id: 'advanced',  label: '詳細設定' },
-    ...(SHOW_SYNC_TAB ? [{ id: 'sync' as SettingsTab, label: '同期' }] : []),
-    { id: 'help',      label: 'ヘルプ' },
+  const TABS: { id: SettingsTab; key: string }[] = [
+    { id: 'statuses',  key: 'tab.statuses' },
+    { id: 'assignees', key: 'tab.assignees' },
+    { id: 'advanced',  key: 'tab.advanced' },
+    ...(SHOW_SYNC_TAB ? [{ id: 'sync' as SettingsTab, key: 'tab.sync' }] : []),
+    { id: 'help',      key: 'tab.help' },
   ];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal settings-modal" onClick={(e) => e.stopPropagation()}>
-        <h2>設定</h2>
+        <h2>{tr('settings.title')}</h2>
 
         <div className="settings-tabs">
-          {TABS.map((t) => (
+          {TABS.map((tb) => (
             <button
-              key={t.id}
-              className={`settings-tab${tab === t.id ? ' active' : ''}`}
-              onClick={() => setTab(t.id)}
+              key={tb.id}
+              className={`settings-tab${tab === tb.id ? ' active' : ''}`}
+              onClick={() => setTab(tb.id)}
             >
-              {t.label}
+              {tr(tb.key)}
             </button>
           ))}
         </div>
@@ -437,9 +443,9 @@ export function SettingsModal({
           {/* ── Status tab ── */}
           {tab === 'statuses' && (
             <section>
-              <h3>ステータス管理</h3>
+              <h3>{tr('status.manageTitle')}</h3>
               <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
-                名前はダブルクリックで編集／左の丸をクリックで色を変更
+                {tr('status.editHint')}
               </p>
               <div className="status-list">
                 {statuses.map((s) => (
@@ -456,17 +462,17 @@ export function SettingsModal({
                 <input
                   value={newStatusName}
                   onChange={(e) => setNewStatusName(e.target.value)}
-                  placeholder="ステータス名"
+                  placeholder={tr('status.namePlaceholder')}
                   onKeyDown={(e) => e.key === 'Enter' && addStatus()}
                 />
                 <input type="color" value={newStatusColor} onChange={(e) => setNewStatusColor(e.target.value)} />
-                <button className="btn-primary" onClick={addStatus}>追加</button>
+                <button className="btn-primary" onClick={addStatus}>{tr('btn.add')}</button>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
-                  onClick={() => exportStatuses(statuses)}>📤 エクスポート</button>
+                  onClick={() => exportStatuses(statuses)}>{tr('status.export')}</button>
                 <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
-                  onClick={() => importStatuses(statuses, saveStatus)}>📥 インポート</button>
+                  onClick={() => importStatuses(statuses, saveStatus)}>{tr('status.import')}</button>
               </div>
             </section>
           )}
@@ -474,7 +480,10 @@ export function SettingsModal({
           {/* ── Assignee tab ── */}
           {tab === 'assignees' && (
             <section>
-              <h3>担当者グループとメンバー</h3>
+              <h3>{tr('assignee.manageTitle')}</h3>
+              {/* NOTE: this instructional paragraph (with inline bold spans)
+                  is intentionally left Japanese-only for now — see task
+                  notes on remaining i18n scope. */}
               <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 8 }}>
                 タスクに「誰が担当するか」を設定できる機能です。<br />
                 まず<b>グループ</b>（チームや部署など）を作り、その中に<b>メンバー</b>を追加してください。<br />
@@ -482,11 +491,11 @@ export function SettingsModal({
               </p>
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                 <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
-                  onClick={() => exportAssignees(assigneeGroups, assigneePersons)}>📤 エクスポート</button>
+                  onClick={() => exportAssignees(assigneeGroups, assigneePersons)}>{tr('adv.export')}</button>
                 <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
-                  onClick={() => importAssignees(assigneeGroups, assigneePersons, saveAssigneeGroup, saveAssigneePerson)}>📥 インポート</button>
+                  onClick={() => importAssignees(assigneeGroups, assigneePersons, saveAssigneeGroup, saveAssigneePerson)}>{tr('adv.import')}</button>
                 <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
-                  onClick={() => setShowBulkPaste((v) => !v)}>📋 スプレッドシートから一括入力</button>
+                  onClick={() => setShowBulkPaste((v) => !v)}>{tr('assignee.bulkPasteBtn')}</button>
               </div>
               {showBulkPaste && (
                 <BulkAssigneePaste
@@ -500,7 +509,7 @@ export function SettingsModal({
               <div className="assignee-split">
                 {/* LEFT: group list */}
                 <div className="assignee-col">
-                  <div className="assignee-col-header">グループ</div>
+                  <div className="assignee-col-header">{tr('assignee.groupHeader')}</div>
                   <div className="assignee-col-list">
                     {assigneeGroups.map((g) => (
                       <div
@@ -514,7 +523,7 @@ export function SettingsModal({
                           style={{ fontSize: 11 }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`グループ「${g.name}」を削除しますか？`)) {
+                            if (window.confirm(tr('assignee.deleteGroupConfirm', { name: g.name }))) {
                               deleteAssigneeGroup(g.id);
                               if (selectedGroupId === g.id) setSelectedGroupId(assigneeGroups.filter(x => x.id !== g.id)[0]?.id ?? '');
                             }
@@ -527,11 +536,11 @@ export function SettingsModal({
                     <input
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
-                      placeholder="グループ名"
+                      placeholder={tr('assignee.groupNamePlaceholder')}
                       className="assignee-input"
                       onKeyDown={(e) => e.key === 'Enter' && addGroup()}
                     />
-                    <button className="btn-primary" onClick={addGroup} style={{ fontSize: 12, padding: '3px 10px', flexShrink: 0 }}>追加</button>
+                    <button className="btn-primary" onClick={addGroup} style={{ fontSize: 12, padding: '3px 10px', flexShrink: 0 }}>{tr('btn.add')}</button>
                   </div>
                 </div>
 
@@ -539,8 +548,8 @@ export function SettingsModal({
                 <div className="assignee-col">
                   <div className="assignee-col-header">
                     {selectedGroupId
-                      ? `${assigneeGroups.find((g) => g.id === selectedGroupId)?.name ?? ''} のメンバー`
-                      : 'グループを選択'}
+                      ? tr('assignee.membersOf', { group: assigneeGroups.find((g) => g.id === selectedGroupId)?.name ?? '' })
+                      : tr('assignee.selectGroupHeader')}
                   </div>
                   {selectedGroupId ? (
                     <>
@@ -551,7 +560,7 @@ export function SettingsModal({
                               type="color"
                               value={p.color}
                               onChange={(e) => saveAssigneePerson({ ...p, color: e.target.value })}
-                              title="色を変更"
+                              title={tr('note.changeColor')}
                               style={{ width: 16, height: 16, padding: 0, border: 'none', borderRadius: '50%', cursor: 'pointer', flexShrink: 0, background: 'transparent' }}
                             />
                             <span style={{ flex: 1 }}>{p.name}</span>
@@ -559,24 +568,24 @@ export function SettingsModal({
                           </div>
                         ))}
                         {groupPersons.length === 0 && (
-                          <div style={{ color: 'var(--muted)', fontSize: 12, padding: '8px 10px' }}>メンバーなし</div>
+                          <div style={{ color: 'var(--muted)', fontSize: 12, padding: '8px 10px' }}>{tr('assignee.noMembers')}</div>
                         )}
                       </div>
                       <div className="assignee-col-add">
                         <input
                           value={newPersonName}
                           onChange={(e) => setNewPersonName(e.target.value)}
-                          placeholder="メンバー名"
+                          placeholder={tr('assignee.memberNamePlaceholder')}
                           className="assignee-input"
                           onKeyDown={(e) => e.key === 'Enter' && addPerson()}
                         />
                         <input type="color" value={newPersonColor} onChange={(e) => setNewPersonColor(e.target.value)} style={{ width: 32, height: 28, cursor: 'pointer', border: 'none', borderRadius: 4, flexShrink: 0 }} />
-                        <button className="btn-primary" onClick={addPerson} style={{ fontSize: 12, padding: '3px 10px', flexShrink: 0 }}>追加</button>
+                        <button className="btn-primary" onClick={addPerson} style={{ fontSize: 12, padding: '3px 10px', flexShrink: 0 }}>{tr('btn.add')}</button>
                       </div>
                     </>
                   ) : (
                     <div className="assignee-col-list" style={{ color: 'var(--muted)', fontSize: 12, padding: '8px 10px' }}>
-                      グループを選択してください
+                      {tr('assignee.selectGroupBody')}
                     </div>
                   )}
                 </div>
@@ -596,8 +605,8 @@ export function SettingsModal({
         </div>{/* /settings-body */}
 
         <div className="modal-actions">
-          <button className="btn-primary" onClick={save}>保存</button>
-          <button className="btn-secondary" onClick={onClose}>キャンセル</button>
+          <button className="btn-primary" onClick={save}>{tr('btn.save')}</button>
+          <button className="btn-secondary" onClick={onClose}>{tr('btn.cancel')}</button>
         </div>
       </div>
     </div>
@@ -616,6 +625,7 @@ function BulkAssigneePaste({
   saveAssigneePerson: (p: AssigneePerson) => Promise<void>;
   onClose: () => void;
 }) {
+  const t = useT();
   const [text, setText] = useState('');
   const [preview, setPreview] = useState<{ group: string; name: string; color: string }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -660,12 +670,14 @@ function BulkAssigneePaste({
       added++;
     }
     setBusy(false);
-    alert(`インポート完了: ${added}件追加, ${skipped}件スキップ（重複）`);
+    alert(t('bulk.importResult', { added, skipped }));
     onClose();
   };
 
   return (
     <div style={{ marginBottom: 12, padding: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6 }}>
+      {/* NOTE: this format-instruction paragraph (with inline bold) is
+          intentionally left Japanese-only for now — see task notes. */}
       <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
         ExcelやGoogleスプレッドシートからコピーして貼り付けてください。<br />
         <b>形式：グループ名 [Tab] メンバー名 [Tab] 色(#hex, 省略可)</b> — 1行1人
@@ -679,18 +691,18 @@ function BulkAssigneePaste({
       />
       {preview.length > 0 && (
         <div style={{ marginTop: 8, fontSize: 11, color: 'var(--muted)' }}>
-          プレビュー: {preview.length}件 —
+          {t('bulk.previewLabel', { n: preview.length })}
           {preview.slice(0, 5).map((r, i) => (
             <span key={i}> <span style={{ color: r.color }}>●</span> {r.group}/{r.name}</span>
           ))}
-          {preview.length > 5 && <span> …他{preview.length - 5}件</span>}
+          {preview.length > 5 && <span> {t('bulk.previewMore', { n: preview.length - 5 })}</span>}
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <button className="btn-primary" style={{ fontSize: 12 }} onClick={doImport} disabled={busy || preview.length === 0}>
-          {busy ? '処理中…' : `${preview.length}件をインポート`}
+          {busy ? t('bulk.processing') : t('bulk.importBtn', { n: preview.length })}
         </button>
-        <button className="btn-secondary" style={{ fontSize: 12 }} onClick={onClose}>キャンセル</button>
+        <button className="btn-secondary" style={{ fontSize: 12 }} onClick={onClose}>{t('btn.cancel')}</button>
       </div>
     </div>
   );
@@ -708,6 +720,7 @@ export function StatusRow({
   onColor: (color: string) => void;
   onDelete: () => void;
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(status.name);
 
@@ -723,7 +736,7 @@ export function StatusRow({
         type="color"
         value={status.color}
         onChange={(e) => onColor(e.target.value)}
-        title="色を変更"
+        title={t('note.changeColor')}
         style={{ width: 18, height: 18, padding: 0, border: 'none', borderRadius: '50%', cursor: 'pointer', flexShrink: 0, background: 'transparent' }}
       />
       {editing ? (
