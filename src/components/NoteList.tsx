@@ -4,6 +4,7 @@ import { emitTo } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/appStore';
 import type { Note, TodoItem } from '../types';
 import { log } from '../utils/log';
+import { useT, useI18nStore, t } from '../i18n';
 
 // ── リスト エクスポート ───────────────────────────────────────────────────────
 async function exportNote(note: Note) {
@@ -11,21 +12,21 @@ async function exportNote(note: Note) {
   if (items.length === 0) {
     const { confirm } = await import('@tauri-apps/plugin-dialog');
     const proceed = await confirm(
-      `「${note.title}」にはタスクが1件もありません。\n空のリストとしてエクスポートしますか？`,
-      { title: '空のリストです', kind: 'info', okLabel: 'エクスポート', cancelLabel: 'キャンセル' },
+      t('notelist.exportEmptyBody', { title: note.title }),
+      { title: t('notelist.exportEmptyTitle'), kind: 'info', okLabel: t('notelist.exportOk'), cancelLabel: t('btn.cancel') },
     );
     if (!proceed) return;
   }
   const { save } = await import('@tauri-apps/plugin-dialog');
   const safe = note.title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
   const path = await save({
-    title: 'リストをエクスポート',
+    title: t('notelist.exportDialogTitle'),
     defaultPath: `${safe}-${new Date().toISOString().slice(0, 10)}.json`,
     filters: [{ name: 'JSON', extensions: ['json'] }],
   });
   if (!path) return;
   await invoke('write_text_file', { path, content: JSON.stringify({ version: 1, note, items }, null, 2) });
-  alert(`エクスポートしました（${items.length}件のタスク）`);
+  alert(t('notelist.exportedAlert', { n: items.length }));
 }
 
 // ── リストをテキスト(.txt)でエクスポート ──────────────────────────────────────
@@ -50,13 +51,13 @@ async function exportNoteAsText(note: Note) {
   const { save } = await import('@tauri-apps/plugin-dialog');
   const safe = note.title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 60) || 'todo';
   const path = await save({
-    title: 'テキストでエクスポート',
+    title: t('notelist.exportTextDialogTitle'),
     defaultPath: `${safe}.txt`,
-    filters: [{ name: 'テキスト', extensions: ['txt'] }],
+    filters: [{ name: t('notelist.textFilterName'), extensions: ['txt'] }],
   });
   if (!path) return;
   await invoke('write_text_file', { path, content: lines.join('\r\n') });
-  alert('テキストでエクスポートしました');
+  alert(t('notelist.exportedTextAlert'));
 }
 
 // ── リスト インポート ─────────────────────────────────────────────────────────
@@ -66,13 +67,13 @@ async function importNote(
   updateNote: (n: Note) => void,
 ) {
   const { open } = await import('@tauri-apps/plugin-dialog');
-  const path = await open({ title: 'リストをインポート', filters: [{ name: 'JSON', extensions: ['json'] }] });
+  const path = await open({ title: t('notelist.importDialogTitle'), filters: [{ name: 'JSON', extensions: ['json'] }] });
   if (!path || typeof path !== 'string') return;
   const text = await invoke<string>('read_text_file', { path });
   let data: any;
-  try { data = JSON.parse(text); } catch { alert('JSONとして読み込めませんでした'); return; }
+  try { data = JSON.parse(text); } catch { alert(t('status.jsonParseError')); return; }
   if (!data?.note || !Array.isArray(data?.items) || typeof data.note.title !== 'string') {
-    alert('形式が正しくありません');
+    alert(t('status.invalidFormat'));
     return;
   }
   const srcNote: Note = data.note;
@@ -84,11 +85,11 @@ async function importNote(
   if (sameName.length > 0) {
     const { confirm } = await import('@tauri-apps/plugin-dialog');
     const overwrite = await confirm(
-      `「${srcNote.title}」という名前のリストが既に${sameName.length}件あります。\n別名（コピー）として追加しますか？`,
-      { title: 'リストの重複', kind: 'warning', okLabel: 'コピーとして追加', cancelLabel: 'キャンセル' },
+      t('notelist.importDupBody', { title: srcNote.title, n: sameName.length }),
+      { title: t('notelist.importDupTitle'), kind: 'warning', okLabel: t('notelist.importDupOk'), cancelLabel: t('btn.cancel') },
     );
     if (!overwrite) return;
-    title = `${srcNote.title} のコピー`;
+    title = t('notelist.copyTitle', { title: srcNote.title });
   }
 
   // 新規リストとして作成（新IDを発行）
@@ -149,6 +150,8 @@ interface Props {
 }
 
 export function NoteList({ onNew }: Props) {
+  const t = useT();
+  const lang = useI18nStore((s) => s.lang);
   const { notes: allNotes, filteredNotes, openNote, deleteNote, duplicateNote, updateNote, createNote, categories, reorderNotes, itemMatches, searchQuery } =
     useAppStore();
   const notes = filteredNotes();
@@ -196,7 +199,7 @@ export function NoteList({ onNew }: Props) {
 
   // Returns the category name, or null for "no category" (rendered separately).
   const catInfo = (id: string | null): { name: string; noCat: boolean } => {
-    if (!id) return { name: 'カテゴリー無し', noCat: true };
+    if (!id) return { name: t('notelist.noCategory'), noCat: true };
     return { name: categories.find((c) => c.id === id)?.name ?? '', noCat: false };
   };
 
@@ -325,17 +328,17 @@ export function NoteList({ onNew }: Props) {
     <div className="note-list">
       {notes.length === 0 && (
         <div className="note-list-empty">
-          <p>リストがありません</p>
-          <button className="btn-primary" onClick={onNew}>＋ 新規作成</button>
+          <p>{t('notelist.emptyTitle')}</p>
+          <button className="btn-primary" onClick={onNew}>{t('notelist.newBtn')}</button>
           <button className="btn-secondary" style={{ marginTop: 8, fontSize: 12 }}
-            onClick={() => importNote(allNotes, createNote, updateNote)}>📥 インポート</button>
+            onClick={() => importNote(allNotes, createNote, updateNote)}>{t('notelist.importBtn')}</button>
         </div>
       )}
       {notes.length > 0 && (
         <div style={{ padding: '4px 8px 0', display: 'flex', justifyContent: 'flex-end' }}>
           <button className="btn-secondary" style={{ fontSize: 11, padding: '2px 8px', opacity: 0.7 }}
             onClick={() => importNote(allNotes, createNote, updateNote)}
-            title="JSONファイルからリストをインポート">📥 インポート</button>
+            title={t('notelist.importBtnTitle')}>{t('notelist.importBtn')}</button>
         </div>
       )}
       {notes.map((note) => (
@@ -361,11 +364,11 @@ export function NoteList({ onNew }: Props) {
               onPointerMove={onGripPointerMove}
               onPointerUp={onGripPointerUp}
               onPointerCancel={() => setNoteDrag(null)}
-              title="ドラッグで並び替え"
+              title={t('item.dragHandle')}
             >⠿</span>
           )}
           {note.locked && (
-            <span className="note-card-grip locked" title="ロック中">🔒</span>
+            <span className="note-card-grip locked" title={t('notelist.lockedTitle')}>🔒</span>
           )}
 
           {/* Title */}
@@ -387,9 +390,9 @@ export function NoteList({ onNew }: Props) {
               <div
                 className="note-card-title"
                 onDoubleClick={(e) => startEdit(note, e)}
-                title="ダブルクリックで編集"
+                title={t('notelist.dblClickEditTitle')}
               >
-                {note.title || '（無題）'}
+                {note.title || t('notelist.untitled')}
                 {newNoteIds.has(note.id) && <span className="new-item-badge" style={{ marginLeft: 6 }}>NEW</span>}
               </div>
             )}
@@ -404,12 +407,12 @@ export function NoteList({ onNew }: Props) {
                 ) : null;
               })()}
               <span className="note-card-date">
-                {new Date(note.updated_at).toLocaleDateString('ja-JP')}
+                {new Date(note.updated_at).toLocaleDateString(lang === 'en' ? 'en-US' : 'ja-JP')}
               </span>
             </div>
             {/* Global-search match hint: shows the matching task text inside this note */}
             {matchHintByNote.has(note.id) && (
-              <div className="note-card-match-hint" title="検索一致タスク">
+              <div className="note-card-match-hint" title={t('notelist.matchHintTitle')}>
                 🔍 {matchHintByNote.get(note.id)?.slice(0, 60)}
                 {(matchHintByNote.get(note.id)?.length ?? 0) > 60 ? '…' : ''}
               </div>
@@ -420,21 +423,21 @@ export function NoteList({ onNew }: Props) {
           <div className="note-card-actions">
             <button
               className={`btn-icon note-action-btn${note.locked ? ' active' : ''}`}
-              title={note.locked ? 'ロック解除' : 'ロック'}
+              title={note.locked ? t('ctx.unlock') : t('ctx.lock')}
               onClick={(e) => { e.stopPropagation(); updateNote({ ...note, locked: !note.locked }); }}
             >
               {note.locked ? '🔒' : '🔓'}
             </button>
             <button
               className="btn-icon note-action-btn"
-              title="複製"
+              title={t('ctx.duplicate')}
               onClick={(e) => { e.stopPropagation(); duplicateNote(note.id).catch(log.error); }}
             >
               📋
             </button>
             <button
               className="btn-icon note-action-btn danger"
-              title="削除"
+              title={t('ctx.delete')}
               onClick={(e) => { e.stopPropagation(); setDeleteTarget(note); }}
             >
               🗑
@@ -446,17 +449,17 @@ export function NoteList({ onNew }: Props) {
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
           <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <p>「{deleteTarget.title || '（無題）'}」を削除しますか？</p>
+            <p>{t('notelist.deleteConfirm', { title: deleteTarget.title || t('notelist.untitled') })}</p>
             <div className="modal-actions">
               <button
                 className="btn-danger"
                 autoFocus
                 onClick={() => { deleteNote(deleteTarget.id); setDeleteTarget(null); }}
               >
-                削除
+                {t('ctx.delete')}
               </button>
               <button className="btn-secondary" onClick={() => setDeleteTarget(null)}>
-                キャンセル
+                {t('btn.cancel')}
               </button>
             </div>
           </div>
@@ -478,10 +481,10 @@ export function NoteList({ onNew }: Props) {
             }}
           >
             <span className="ctx-icon">✕</span>
-            <span className="ctx-label">リストを閉じる</span>
+            <span className="ctx-label">{t('notelist.ctxCloseList')}</span>
           </button>
           <div className="context-menu-sep" />
-          <div style={{ padding: '4px 12px 2px', fontSize: 10, color: 'var(--muted)' }}>カテゴリを変更</div>
+          <div style={{ padding: '4px 12px 2px', fontSize: 10, color: 'var(--muted)' }}>{t('notelist.ctxChangeCategory')}</div>
           {categories.map((c) => (
             <button
               key={c.id}
@@ -501,14 +504,14 @@ export function NoteList({ onNew }: Props) {
             onClick={() => { exportNote(noteCtx.note); setNoteCtx(null); }}
           >
             <span className="ctx-icon">📤</span>
-            <span className="ctx-label">エクスポート（JSON・再インポート用）</span>
+            <span className="ctx-label">{t('notelist.ctxExportJson')}</span>
           </button>
           <button
             className="context-menu-item"
             onClick={() => { exportNoteAsText(noteCtx.note); setNoteCtx(null); }}
           >
             <span className="ctx-icon">📝</span>
-            <span className="ctx-label">テキストで保存（.txt）</span>
+            <span className="ctx-label">{t('notelist.ctxExportText')}</span>
           </button>
           <div className="context-menu-sep" />
           <button
@@ -519,7 +522,7 @@ export function NoteList({ onNew }: Props) {
             }}
           >
             <span className="ctx-icon">🗑</span>
-            <span className="ctx-label">リストの削除</span>
+            <span className="ctx-label">{t('notelist.ctxDeleteList')}</span>
           </button>
         </div>
       )}

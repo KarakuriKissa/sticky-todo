@@ -2,8 +2,10 @@ import { useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { Category } from '../types';
 import { useAppStore } from '../store/appStore';
+import { useT } from '../i18n';
 
 export function CategoryList() {
+  const t = useT();
   const {
     categories, selectedCategoryId, setSelectedCategory,
     saveCategory, deleteCategory, reorderCategories,
@@ -87,8 +89,8 @@ export function CategoryList() {
   return (
     <aside className="category-list">
       <div className="category-header">
-        <span>カテゴリ</span>
-        <button className="btn-icon" onClick={startAdd} title="追加">＋</button>
+        <span>{t('catlist.header')}</span>
+        <button className="btn-icon" onClick={startAdd} title={t('btn.add')}>＋</button>
       </div>
 
       <ul>
@@ -97,7 +99,7 @@ export function CategoryList() {
           onClick={() => setSelectedCategory(null)}
         >
           <span className="cat-dot" style={{ background: '#6366f1' }} />
-          <span className="cat-name">すべて</span>
+          <span className="cat-name">{t('catlist.all')}</span>
         </li>
 
         {categories.map((cat) => (
@@ -115,7 +117,7 @@ export function CategoryList() {
               onPointerMove={onGripPointerMove}
               onPointerUp={onGripPointerUp}
               onPointerCancel={() => setCatDrag(null)}
-              title="ドラッグで並び替え"
+              title={t('item.dragHandle')}
             >⠿</span>
             <span className="cat-dot" style={{ background: cat.color }} />
             {editing === cat.id ? (
@@ -137,7 +139,7 @@ export function CategoryList() {
             <button
               className="btn-icon cat-del"
               onClick={(e) => { e.stopPropagation(); deleteCategory(cat.id); }}
-              title="削除"
+              title={t('ctx.delete')}
             >
               ×
             </button>
@@ -156,7 +158,7 @@ export function CategoryList() {
               if (e.key === 'Enter') confirmAdd();
               if (e.key === 'Escape') setAdding(false);
             }}
-            placeholder="カテゴリ名"
+            placeholder={t('catlist.namePlaceholder')}
             className="cat-input"
           />
         </div>

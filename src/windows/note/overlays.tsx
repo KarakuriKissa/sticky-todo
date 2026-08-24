@@ -2,16 +2,18 @@
 //   - ClosingOverlay: shows "saving / failed" while flush() runs on close
 //   - SearchOverlay: in-note Ctrl+F bar with up/down nav and match counter
 //   - CheatSheet: "?" key shortcut list
+import { useT } from '../../i18n';
 
 interface ClosingOverlayProps { state: null | 'saving' | 'failed'; }
 export function ClosingOverlay({ state }: ClosingOverlayProps) {
+  const t = useT();
   if (!state) return null;
   return (
     <div className="closing-overlay">
       <div className="closing-overlay-box">
         {state === 'saving'
-          ? <><div className="spinner" />保存中…<br />しばらくお待ちください</>
-          : <>⚠ 保存に失敗しました</>}
+          ? <><div className="spinner" />{t('overlay.savingLine1')}<br />{t('overlay.savingLine2')}</>
+          : <>{t('overlay.saveFailed')}</>}
       </div>
     </div>
   );
@@ -29,11 +31,12 @@ interface SearchOverlayProps {
 export function SearchOverlay({
   query, onQueryChange, onClose, onNav, matchCount, matchIdx, findMode,
 }: SearchOverlayProps) {
+  const t = useT();
   return (
     <div className="search-overlay-bar" onClick={(e) => e.stopPropagation()}>
       <input
         className="search-overlay-input"
-        placeholder="🔍 このリスト内を検索"
+        placeholder={t('overlay.searchPlaceholder')}
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
         onKeyDown={(e) => {
@@ -43,47 +46,48 @@ export function SearchOverlay({
         autoFocus
       />
       <span className="search-overlay-count">
-        {findMode ? (matchCount > 0 ? `${matchIdx + 1} / ${matchCount}` : '0 件') : ''}
+        {findMode ? (matchCount > 0 ? `${matchIdx + 1} / ${matchCount}` : t('overlay.zeroMatches')) : ''}
       </span>
-      <button className="search-overlay-nav" onClick={() => onNav(-1)} title="前の一致 (Shift+Enter)" disabled={matchCount === 0}>↑</button>
-      <button className="search-overlay-nav" onClick={() => onNav(1)} title="次の一致 (Enter)" disabled={matchCount === 0}>↓</button>
-      <button className="search-overlay-close" onClick={onClose} title="閉じる (Esc)">✕</button>
+      <button className="search-overlay-nav" onClick={() => onNav(-1)} title={t('overlay.prevMatch')} disabled={matchCount === 0}>↑</button>
+      <button className="search-overlay-nav" onClick={() => onNav(1)} title={t('overlay.nextMatch')} disabled={matchCount === 0}>↓</button>
+      <button className="search-overlay-close" onClick={onClose} title={t('search.close')}>✕</button>
     </div>
   );
 }
 
 interface CheatSheetProps { onClose: () => void; }
 export function CheatSheet({ onClose }: CheatSheetProps) {
+  const t = useT();
   const rows: [string, string][] = [
-    ['元に戻す', 'Ctrl+Z'],
-    ['やり直し', 'Ctrl+Y'],
-    ['全選択', 'Ctrl+A'],
-    ['検索', 'Ctrl+F'],
-    ['タスクをコピー', 'Ctrl+C'],
-    ['タスクを貼り付け', 'Ctrl+V'],
-    ['インデント', 'Tab'],
-    ['アウトデント', 'Shift+Tab'],
-    ['太字', 'Ctrl+B'],
-    ['打ち消し線', 'Ctrl+Alt+S'],
-    ['複製', 'Ctrl+D'],
-    ['ロック', 'Ctrl+L'],
-    ['コメント', 'Ctrl+M'],
-    ['見出しに変更 / 戻す', 'Ctrl+H / Ctrl+Shift+H'],
-    ['アーカイブ', 'Ctrl+E'],
-    ['上に項目を追加', 'Ctrl+Shift+Enter'],
-    ['下に項目を追加', 'Shift+Enter'],
-    ['選択を上下に移動', '↑ / ↓'],
-    ['複数選択', 'Shift+↑/↓'],
-    ['行を移動', 'Ctrl+Shift+↑/↓'],
-    ['削除', 'Delete'],
-    ['キャンセル / 閉じる', 'Esc'],
-    ['ハイパーリンク', '[表示文字](URL)'],
-    ['この一覧を表示', '?'],
+    [t('cheat.undo'), 'Ctrl+Z'],
+    [t('cheat.redo'), 'Ctrl+Y'],
+    [t('cheat.selectAll'), 'Ctrl+A'],
+    [t('cheat.search'), 'Ctrl+F'],
+    [t('cheat.copyTask'), 'Ctrl+C'],
+    [t('cheat.pasteTask'), 'Ctrl+V'],
+    [t('ctx.indent'), 'Tab'],
+    [t('ctx.outdent'), 'Shift+Tab'],
+    [t('ctx.bold'), 'Ctrl+B'],
+    [t('ctx.strike'), 'Ctrl+Alt+S'],
+    [t('ctx.duplicate'), 'Ctrl+D'],
+    [t('ctx.lock'), 'Ctrl+L'],
+    [t('ctx.comment'), 'Ctrl+M'],
+    [t('cheat.headingToggle'), 'Ctrl+H / Ctrl+Shift+H'],
+    [t('ctx.archive'), 'Ctrl+E'],
+    [t('ctx.addAbove'), 'Ctrl+Shift+Enter'],
+    [t('ctx.addBelow'), 'Shift+Enter'],
+    [t('cheat.moveSelection'), '↑ / ↓'],
+    [t('cheat.multiSelect'), 'Shift+↑/↓'],
+    [t('cheat.moveRow'), 'Ctrl+Shift+↑/↓'],
+    [t('ctx.delete'), 'Delete'],
+    [t('cheat.cancelClose'), 'Esc'],
+    [t('cheat.hyperlink'), t('cheat.hyperlinkFormat')],
+    [t('cheat.showThisList'), '?'],
   ];
   return (
     <div className="cheat-sheet-backdrop" onClick={onClose}>
       <div className="cheat-sheet" onClick={(e) => e.stopPropagation()}>
-        <h4>キーボードショートカット</h4>
+        <h4>{t('cheat.heading')}</h4>
         {rows.map(([label, key]) => (
           <div key={key} className="cheat-sheet-row">
             <span>{label}</span>

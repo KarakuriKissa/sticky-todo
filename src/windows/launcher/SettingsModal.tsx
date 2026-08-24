@@ -194,61 +194,60 @@ export function HelpSection() {
 
   return (
     <section>
-      <h3>ヘルプ</h3>
+      <h3>{t('help.title')}</h3>
       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
-        使い方でわからないことがあればここを確認してください。
+        {t('help.intro')}
       </p>
 
-      <h4 style={{ marginTop: 14 }}>📋 基本的な使い方</h4>
+      <h4 style={{ marginTop: 14 }}>{t('help.h.basicUsage')}</h4>
       <ul className="help-list">
-        <li><b>＋ボタン</b>：新しいリストを作成します</li>
-        <li>リストを<b>ダブルクリック</b>：タスクウィンドウを開きます</li>
-        <li>リストを<b>右クリック</b>：閉じる・削除・カテゴリ変更</li>
-        <li>リストを<b>左のカテゴリへドラッグ</b>：カテゴリを変更します</li>
+        <li><b>{t('help.basic.li1Bold')}</b>{t('help.basic.li1Suffix')}</li>
+        <li>{t('help.basic.li2Prefix')}<b>{t('help.basic.li2Bold')}</b>{t('help.basic.li2Suffix')}</li>
+        <li>{t('help.basic.li3Prefix')}<b>{t('help.basic.li3Bold')}</b>{t('help.basic.li3Suffix')}</li>
+        <li>{t('help.basic.li4Prefix')}<b>{t('help.basic.li4Bold')}</b>{t('help.basic.li4Suffix')}</li>
       </ul>
 
-      <h4 style={{ marginTop: 14 }}>📝 タスクウィンドウ</h4>
+      <h4 style={{ marginTop: 14 }}>{t('help.h.taskWindow')}</h4>
       <ul className="help-list">
-        <li>上の入力欄に文字を入れて <kbd>Enter</kbd>：タスクを追加</li>
-        <li><kbd>Tab</kbd> キー：インデントを1段深く（最大6段）</li>
-        <li>タスクを<b>右クリック</b>：太字・複製・アーカイブ・削除など</li>
-        <li>左の<b>⠿マークをドラッグ</b>：タスクを並び替え</li>
-        <li>テキスト内の URL は<b>クリックで開けます</b></li>
-        <li>タイトルバーを<b>右クリック</b>：リスト名を編集</li>
+        <li>{t('help.task.li1Prefix')}<kbd>Enter</kbd>{t('help.task.li1Suffix')}</li>
+        <li><kbd>Tab</kbd>{t('help.task.li2Suffix')}</li>
+        <li>{t('help.task.li3Prefix')}<b>{t('help.task.li3Bold')}</b>{t('help.task.li3Suffix')}</li>
+        <li>{t('help.task.li4Prefix')}<b>{t('help.task.li4Bold')}</b>{t('help.task.li4Suffix')}</li>
+        <li>{t('help.task.li5Prefix')}<b>{t('help.task.li5Bold')}</b></li>
+        <li>{t('help.task.li6Prefix')}<b>{t('help.task.li6Bold')}</b>{t('help.task.li6Suffix')}</li>
       </ul>
 
-      <h4 style={{ marginTop: 14 }}>⌨ ショートカット（タスクウィンドウ）</h4>
+      <h4 style={{ marginTop: 14 }}>{t('help.h.shortcuts')}</h4>
       <table className="help-shortcut-table">
         <tbody>
-          <tr><td>Ctrl+Z / Ctrl+Y</td><td>元に戻す / やり直し</td></tr>
-          <tr><td>Ctrl+A</td><td>全選択</td></tr>
-          <tr><td>Ctrl+F</td><td>このリスト内を検索</td></tr>
-          <tr><td>Tab / Shift+Tab</td><td>インデント / アウトデント</td></tr>
-          <tr><td>Ctrl+B</td><td>太字</td></tr>
-          <tr><td>Ctrl+D</td><td>複製</td></tr>
-          <tr><td>Ctrl+L</td><td>ロック / 解除</td></tr>
-          <tr><td>Ctrl+M</td><td>コメント編集</td></tr>
-          <tr><td>Ctrl+H / Ctrl+Shift+H</td><td>見出し化 / 通常に戻す</td></tr>
-          <tr><td>Ctrl+E</td><td>アーカイブ</td></tr>
-          <tr><td>Shift+Enter</td><td>下に新規行追加</td></tr>
-          <tr><td>Ctrl+Shift+Enter</td><td>上に新規行追加</td></tr>
-          <tr><td>?</td><td>ショートカット一覧表示</td></tr>
+          <tr><td>Ctrl+Z / Ctrl+Y</td><td>{t('help.shortcut.undoRedo')}</td></tr>
+          <tr><td>Ctrl+A</td><td>{t('cheat.selectAll')}</td></tr>
+          <tr><td>Ctrl+F</td><td>{t('help.shortcut.searchInList')}</td></tr>
+          <tr><td>Tab / Shift+Tab</td><td>{t('help.shortcut.indentOutdent')}</td></tr>
+          <tr><td>Ctrl+B</td><td>{t('ctx.bold')}</td></tr>
+          <tr><td>Ctrl+D</td><td>{t('ctx.duplicate')}</td></tr>
+          <tr><td>Ctrl+L</td><td>{t('help.shortcut.lockUnlock')}</td></tr>
+          <tr><td>Ctrl+M</td><td>{t('help.shortcut.editComment')}</td></tr>
+          <tr><td>Ctrl+H / Ctrl+Shift+H</td><td>{t('help.shortcut.headingToggle')}</td></tr>
+          <tr><td>Ctrl+E</td><td>{t('ctx.archive')}</td></tr>
+          <tr><td>Shift+Enter</td><td>{t('help.shortcut.addBelow')}</td></tr>
+          <tr><td>Ctrl+Shift+Enter</td><td>{t('help.shortcut.addAbove')}</td></tr>
+          <tr><td>?</td><td>{t('help.shortcut.showList')}</td></tr>
         </tbody>
       </table>
 
-      <h4 style={{ marginTop: 14 }}>🔍 横断検索</h4>
+      <h4 style={{ marginTop: 14 }}>{t('help.h.globalSearch')}</h4>
       <ul className="help-list">
-        <li>画面上部の検索欄にキーワードを入力するとすべてのリストを同時に検索できます</li>
-        <li>閉じているリストのタスクも検索対象になります</li>
-        <li>結果をクリックするとそのタスクへ直接ジャンプします</li>
-        <li><kbd>Esc</kbd> または ✕ で検索を閉じます</li>
+        <li>{t('help.search.li1')}</li>
+        <li>{t('help.search.li2')}</li>
+        <li>{t('help.search.li3')}</li>
+        <li><kbd>Esc</kbd>{t('help.search.li4Suffix')}</li>
       </ul>
 
-      <h4 style={{ marginTop: 14 }}>🔒 プライバシー</h4>
+      <h4 style={{ marginTop: 14 }}>{t('help.h.privacy')}</h4>
       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
-        入力したタスクや個人情報はすべて<b>このパソコンの中だけ</b>に保存されます。
-        外部のサーバーには一切送信しません。<br />
-        インターネットへの接続はアップデート確認ボタンを押したときだけです。
+        {t('help.privacy.prefix')}<b>{t('help.privacy.bold')}</b>{t('help.privacy.suffix')}<br />
+        {t('help.privacy.line2')}
       </p>
 
       <h4 style={{ marginTop: 14 }}>{t('upd.heading')}</h4>
@@ -305,36 +304,36 @@ export function HelpSection() {
         )}
       </div>
 
-      <h4 style={{ marginTop: 18 }}>🆕 更新履歴</h4>
+      <h4 style={{ marginTop: 18 }}>{t('help.h.changelog')}</h4>
       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 6 }}>
-        最近の主な変更点です。全文は GitHub の CHANGELOG をご覧ください。
+        {t('help.changelog.intro')}
       </p>
       <ul className="help-list" style={{ fontSize: 12 }}>
-        <li>🔗 ハイパーリンク：文字を選んで 🔗 ボタンでリンク化（タスク・コメント両対応）</li>
-        <li>📂 URL・フォルダパス・独自スキームをクリックで開ける（開くブラウザも指定可）</li>
-        <li>💬 コメント：アイコンのホバーで表示／クリックで固定、Shift+Enterで改行</li>
-        <li>📋 タスクのコピペ・複数行貼り付け・打ち消し線・矢印キー移動</li>
-        <li>🍎 Mac版（.dmg）の配布を開始</li>
-        <li>💾 自動バックアップ・起動時復元・PC自動起動</li>
-        <li>🐛 保存のたびにタスクが消える重大バグを修正</li>
+        <li>{t('help.changelog.li1')}</li>
+        <li>{t('help.changelog.li2')}</li>
+        <li>{t('help.changelog.li3')}</li>
+        <li>{t('help.changelog.li4')}</li>
+        <li>{t('help.changelog.li5')}</li>
+        <li>{t('help.changelog.li6')}</li>
+        <li>{t('help.changelog.li7')}</li>
       </ul>
       <p style={{ fontSize: 12, marginTop: 4 }}>
         <a href="#" onClick={async (e) => {
           e.preventDefault();
           (await import('@tauri-apps/plugin-shell')).open('https://github.com/KarakuriKissa/sticky-todo/blob/main/CHANGELOG.md');
-        }} style={{ color: '#a5b4fc' }}>更新履歴の全文を見る →</a>
+        }} style={{ color: '#a5b4fc' }}>{t('help.changelog.linkText')}</a>
       </p>
 
-      <h4 style={{ marginTop: 18 }}>📄 このアプリについて</h4>
+      <h4 style={{ marginTop: 18 }}>{t('help.h.about')}</h4>
       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.9 }}>
-        StickyTodo は<b>完全無料</b>で使えるデスクトップ向けタスク管理アプリです。<br />
+        {t('help.about.prefix')}<b>{t('help.about.bold')}</b>{t('help.about.suffix')}<br />
         {appVersion && (
-          <span>バージョン: <strong style={{ color: 'var(--text)' }}>v{appVersion}</strong><br /></span>
+          <span>{t('help.about.versionLabel')}<strong style={{ color: 'var(--text)' }}>v{appVersion}</strong><br /></span>
         )}
         <a href="#" onClick={async (e) => {
           e.preventDefault();
           (await import('@tauri-apps/plugin-shell')).open('https://github.com/KarakuriKissa/sticky-todo');
-        }} style={{ color: '#a5b4fc' }}>GitHub でソースコードを見る →</a>
+        }} style={{ color: '#a5b4fc' }}>{t('help.about.githubLinkText')}</a>
       </p>
     </section>
   );
@@ -481,13 +480,10 @@ export function SettingsModal({
           {tab === 'assignees' && (
             <section>
               <h3>{tr('assignee.manageTitle')}</h3>
-              {/* NOTE: this instructional paragraph (with inline bold spans)
-                  is intentionally left Japanese-only for now — see task
-                  notes on remaining i18n scope. */}
               <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 8 }}>
-                タスクに「誰が担当するか」を設定できる機能です。<br />
-                まず<b>グループ</b>（チームや部署など）を作り、その中に<b>メンバー</b>を追加してください。<br />
-                タスクウィンドウでタスクを右クリック →「担当者」から割り当てられます。
+                {tr('settings.assignee.introLine1')}<br />
+                {tr('settings.assignee.introLine2Prefix')}<b>{tr('settings.assignee.groupWord')}</b>{tr('settings.assignee.introLine2Middle')}<b>{tr('settings.assignee.memberWord')}</b>{tr('settings.assignee.introLine2Suffix')}<br />
+                {tr('settings.assignee.introLine3')}
               </p>
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                 <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
@@ -676,11 +672,9 @@ function BulkAssigneePaste({
 
   return (
     <div style={{ marginBottom: 12, padding: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6 }}>
-      {/* NOTE: this format-instruction paragraph (with inline bold) is
-          intentionally left Japanese-only for now — see task notes. */}
       <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.6 }}>
-        ExcelやGoogleスプレッドシートからコピーして貼り付けてください。<br />
-        <b>形式：グループ名 [Tab] メンバー名 [Tab] 色(#hex, 省略可)</b> — 1行1人
+        {t('bulk.instructions')}<br />
+        <b>{t('bulk.formatBold')}</b>{t('bulk.formatSuffix')}
       </p>
       <textarea
         style={{ width: '100%', height: 120, fontFamily: 'monospace', fontSize: 12, resize: 'vertical',

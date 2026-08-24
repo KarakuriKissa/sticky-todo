@@ -3,6 +3,7 @@
 // rendering and keyboard handlers.
 import type { TodoItem as Item } from '../../types';
 import type { ContextMenuItem } from '../ContextMenu';
+import { t } from '../../i18n';
 
 export interface CtxBuilderDeps {
   item: Item;
@@ -39,38 +40,38 @@ export function buildContextMenu(d: CtxBuilderDeps): ContextMenuItem[] {
 
   return [
     {
-      label: '上に項目を追加', icon: '↑', shortcut: 'Ctrl+Shift+Enter',
+      label: t('ctx.addAbove'), icon: '↑', shortcut: 'Ctrl+Shift+Enter',
       action: () => focusNew(d.addItem(item.id, undefined, 'before')),
     },
     {
-      label: '下に項目を追加', icon: '↓', shortcut: 'Shift+Enter',
+      label: t('ctx.addBelow'), icon: '↓', shortcut: 'Shift+Enter',
       action: () => focusNew(d.addItem(item.id)),
     },
     { label: '', separator: true, action: () => {} },
     {
-      label: `${item.bold ? '太字を解除' : '太字'}${selSuffix}`,
+      label: `${item.bold ? t('ctx.boldOff') : t('ctx.bold')}${selSuffix}`,
       icon: 'B', shortcut: 'Ctrl+B',
       action: () => d.toggleBold(item.id),
     },
     {
-      label: `${item.strikethrough ? '打ち消し線を解除' : '打ち消し線'}${selSuffix}`,
+      label: `${item.strikethrough ? t('ctx.strikeOff') : t('ctx.strike')}${selSuffix}`,
       icon: 'S', shortcut: 'Ctrl+Alt+S',
       action: () => d.toggleStrike(item.id),
     },
     {
-      label: 'コメント', icon: '💬', shortcut: 'Ctrl+M',
+      label: t('ctx.comment'), icon: '💬', shortcut: 'Ctrl+M',
       action: d.openMemoEditor,
     },
     { label: '', separator: true, action: () => {} },
     {
-      label: `見出しに変更${selSuffix}`, icon: 'H', shortcut: 'Ctrl+H',
+      label: `${t('ctx.toHeading')}${selSuffix}`, icon: 'H', shortcut: 'Ctrl+H',
       action: () => {
         const ids = isInSel ? [...selectedIds] : [item.id];
         ids.forEach((id) => d.updateItem(id, { item_type: 'heading' }));
       },
     },
     {
-      label: `通常に変更${selSuffix}`, icon: '•', shortcut: 'Ctrl+Shift+H',
+      label: `${t('ctx.toNormal')}${selSuffix}`, icon: '•', shortcut: 'Ctrl+Shift+H',
       action: () => {
         const ids = isInSel ? [...selectedIds] : [item.id];
         ids.forEach((id) => d.updateItem(id, { item_type: 'normal' }));
@@ -79,7 +80,7 @@ export function buildContextMenu(d: CtxBuilderDeps): ContextMenuItem[] {
     {
       // ADD a separator below (not convert) — converting a task to a separator
       // destroys its text and is an easy mis-click, so this inserts instead.
-      label: '区切り線を追加（下に）', icon: '—',
+      label: t('ctx.addSeparatorBelow'), icon: '—',
       action: () => {
         const newId = d.addItem(item.id, item.indent, 'after');
         if (newId) d.updateItem(newId, { item_type: 'separator' });
@@ -87,35 +88,35 @@ export function buildContextMenu(d: CtxBuilderDeps): ContextMenuItem[] {
     },
     { label: '', separator: true, action: () => {} },
     {
-      label: `インデント${selSuffix}`, icon: '→', shortcut: 'Tab',
+      label: `${t('ctx.indent')}${selSuffix}`, icon: '→', shortcut: 'Tab',
       action: () => isInSel ? d.indentSelected() : d.indent(item.id),
       disabled: !isInSel && (item.indent >= 6 || item.locked),
     },
     {
-      label: `アウトデント${selSuffix}`, icon: '←', shortcut: 'Shift+Tab',
+      label: `${t('ctx.outdent')}${selSuffix}`, icon: '←', shortcut: 'Shift+Tab',
       action: () => isInSel ? d.dedentSelected() : d.dedent(item.id),
       disabled: !isInSel && (item.indent <= 0 || item.locked),
     },
     { label: '', separator: true, action: () => {} },
     {
-      label: `${item.locked ? 'ロック解除' : 'ロック'}${selSuffix}`,
+      label: `${item.locked ? t('ctx.unlock') : t('ctx.lock')}${selSuffix}`,
       icon: item.locked ? '🔓' : '🔒', shortcut: 'Ctrl+L',
       action: () => isInSel ? d.lockSelected(!item.locked) : d.toggleLock(item.id),
     },
     {
-      label: `コピー${selSuffix}`, icon: '⧉', shortcut: 'Ctrl+C',
+      label: `${t('ctx.copy')}${selSuffix}`, icon: '⧉', shortcut: 'Ctrl+C',
       action: () => d.copyToClipboard(),
     },
     {
-      label: '貼り付け（このタスクの下に）', icon: '📋', shortcut: 'Ctrl+V',
+      label: t('ctx.pasteBelow'), icon: '📋', shortcut: 'Ctrl+V',
       action: () => d.pasteFromClipboard(),
     },
     {
-      label: `複製${selSuffix}`, icon: '🔁', shortcut: 'Ctrl+D',
+      label: `${t('ctx.duplicate')}${selSuffix}`, icon: '🔁', shortcut: 'Ctrl+D',
       action: () => isInSel ? d.duplicateSelected() : d.duplicateItem(item.id),
     },
     {
-      label: item.archived ? `アーカイブから戻す${selSuffix}` : `アーカイブ${selSuffix}`,
+      label: item.archived ? `${t('ctx.unarchive')}${selSuffix}` : `${t('ctx.archive')}${selSuffix}`,
       icon: item.archived ? '↩' : '🗄', shortcut: 'Ctrl+E',
       action: () => {
         const next = !item.archived;
@@ -124,7 +125,7 @@ export function buildContextMenu(d: CtxBuilderDeps): ContextMenuItem[] {
       },
     },
     {
-      label: `削除${selSuffix}`, icon: '🗑', shortcut: 'Del',
+      label: `${t('ctx.delete')}${selSuffix}`, icon: '🗑', shortcut: 'Del',
       action: () => isInSel ? d.deleteSelected() : d.deleteItem(item.id),
       danger: true,
     },

@@ -63,7 +63,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
 
   // Context menu — bulk-aware when right-clicked item is part of a multi-selection
   const isInSel = selectedIds.has(item.id) && selectedIds.size > 1;
-  const selSuffix = isInSel ? ` (${selectedIds.size}件)` : '';
+  const selSuffix = isInSel ? t('ctx.selSuffix', { n: selectedIds.size }) : '';
 
   const ctxItems: ContextMenuItem[] = buildContextMenu({
     item, isInSel, selSuffix, selectedIds,
@@ -433,7 +433,7 @@ export function TodoItemRow({ item, visibleItems, allItems, warnDays, priorityMo
           onPointerMove={onGripPointerMove}
           onPointerUp={onGripPointerUp}
           onPointerCancel={endDrag}
-          title="ドラッグで並び替え"
+          title={t('item.dragHandle')}
         >⠿</span>
       )}
 
