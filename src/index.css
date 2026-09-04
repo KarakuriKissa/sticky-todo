@@ -601,10 +601,15 @@ ul { list-style: none; }
   flex: 1;
   min-width: 0;
   text-overflow: ellipsis;
-  background: transparent;
+  /* White background + black text while editing — makes the "this row is
+     being edited" state visible regardless of the note's background color
+     (pastel note colors, warn/overdue tints, selection highlight, etc). */
+  background: #fff;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08);
   border: none;
   outline: none;
-  color: #1e1e2e;
+  color: #000;
   font-size: 13px;
   min-width: 0;
   cursor: text;
@@ -730,6 +735,13 @@ ul { list-style: none; }
   font-size: 13px;
 }
 .todo-heading-input[readonly] { cursor: default; color: rgba(30,30,46,.6); }
+/* Editing (not readonly) — same white-bg/black-text edit indicator as tasks. */
+.todo-heading-input:not([readonly]) {
+  background: #fff;
+  color: #000;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08);
+}
 
 .todo-separator { padding: 4px 0; position: relative; }
 .todo-separator.drag-before { border-top: 2px solid #6366f1; }

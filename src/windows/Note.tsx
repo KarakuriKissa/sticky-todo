@@ -10,6 +10,7 @@ import { useReminders } from './note/useReminders';
 import { useCloseHandler } from './note/useCloseHandler';
 import { NoteToolbar } from './note/Toolbar';
 import { triggerActiveInsertLink } from '../components/todo/RichTextEdit';
+import { isEditableTarget } from '../utils/keyboardTarget';
 import { useT } from '../i18n';
 
 interface Props {
@@ -165,9 +166,12 @@ export function NoteWindow({ noteId }: Props) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Don't intercept when typing inside a text field, except for shortcuts that
-      // are explicitly modifier-based (Ctrl/Meta).
-      const target = e.target as HTMLElement | null;
-      const isInputFocused = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+      // are explicitly modifier-based (Ctrl/Meta). This must also cover the
+      // contentEditable task/comment editor (RichTextEdit) — a plain tagName
+      // check misses it, which used to let Ctrl+A/Ctrl+C hijack mid-edit
+      // keystrokes into "select all tasks" / "copy tasks" instead of leaving
+      // native text selection/copy alone.
+      const isInputFocused = isEditableTarget(e.target);
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); return; }
