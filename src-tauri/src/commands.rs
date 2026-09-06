@@ -309,7 +309,14 @@ pub async fn open_note_window(
         win.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
     }
-    WebviewWindowBuilder::new(
+
+    // Startup rescue: a saved position that no longer lands on any connected
+    // monitor (e.g. a second monitor was unplugged) would otherwise open the
+    // window somewhere unreachable. Recenter it on the primary monitor instead.
+    #[cfg(windows)]
+    let (x, y) = crate::win_system_menu::rescue_position_if_offscreen(x, y, width, height);
+
+    let win = WebviewWindowBuilder::new(
         &app,
         label,
         WebviewUrl::App(format!("/?window=note&id={}", note_id).into()),
@@ -323,6 +330,12 @@ pub async fn open_note_window(
     .min_inner_size(200.0, 150.0)
     .build()
     .map_err(|e| e.to_string())?;
+
+    #[cfg(windows)]
+    crate::win_system_menu::install(&win);
+    #[cfg(not(windows))]
+    let _ = win;
+
     Ok(())
 }
 
@@ -526,7 +539,7 @@ pub async fn show_launcher(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     // Launcher was destroyed — rebuild it.
-    WebviewWindowBuilder::new(&app, "launcher", WebviewUrl::App("/".into()))
+    let win = WebviewWindowBuilder::new(&app, "launcher", WebviewUrl::App("/".into()))
         .title("PetaCheck β")
         .inner_size(960.0, 720.0)
         .min_inner_size(600.0, 480.0)
@@ -534,6 +547,12 @@ pub async fn show_launcher(app: AppHandle) -> Result<(), String> {
         .visible(true)
         .build()
         .map_err(|e| e.to_string())?;
+
+    #[cfg(windows)]
+    crate::win_system_menu::install(&win);
+    #[cfg(not(windows))]
+    let _ = win;
+
     Ok(())
 }
 

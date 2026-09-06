@@ -1,6 +1,8 @@
 mod commands;
 mod db;
 mod models;
+#[cfg(windows)]
+mod win_system_menu;
 
 use db::Database;
 use tauri::Manager;
@@ -53,6 +55,12 @@ pub fn run() {
             let db = Database::new(db_path.to_str().unwrap())
                 .expect("Failed to initialize database");
             app.manage(db);
+
+            #[cfg(windows)]
+            if let Some(win) = app.get_webview_window("launcher") {
+                win_system_menu::install(&win);
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

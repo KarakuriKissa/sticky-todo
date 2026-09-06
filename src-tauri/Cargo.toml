@@ -41,8 +41,16 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # Windows のみ：自動起動をレジストリへ「引用符付き」で確実に登録するために使用。
 # （プラグインの auto-launch 0.5.0 は空白入りパスを引用符なしで書き失敗するため）
+# windows: tauri自身が同じ 0.61 系を既に使っており(HWND等の型を共有する必要が
+# あるため必須)、新規の外部ランタイム依存を増やすものではない。システムメニュー
+# へ「画面の中心に移動」を追加する処理(win_system_menu.rs)専用
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+] }
 
 [dev-dependencies]
 # preflight_update_check の #[ignore] 付き実ネットワークテスト専用。
