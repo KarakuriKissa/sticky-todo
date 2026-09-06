@@ -404,7 +404,7 @@ const ja: Dict = {
   'help.changelog.linkText': '更新履歴の全文を見る →',
 
   'help.h.about': '📄 このアプリについて',
-  'help.about.prefix': 'StickyTodo は',
+  'help.about.prefix': 'PetaCheck は',
   'help.about.bold': '完全無料',
   'help.about.suffix': 'で使えるデスクトップ向けタスク管理アプリです。',
   'help.about.versionLabel': 'バージョン: ',
@@ -779,7 +779,7 @@ const en: Dict = {
   'help.changelog.linkText': 'View the full changelog →',
 
   'help.h.about': '📄 About this app',
-  'help.about.prefix': 'StickyTodo is a ',
+  'help.about.prefix': 'PetaCheck is a ',
   'help.about.bold': 'completely free',
   'help.about.suffix': ' desktop task-manager app.',
   'help.about.versionLabel': 'Version: ',

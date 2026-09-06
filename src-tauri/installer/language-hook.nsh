@@ -21,6 +21,6 @@
   StrCpy $0 "ja"
   StrCmp $LANGUAGE 1033 0 +2
     StrCpy $0 "en"
-  WriteRegStr HKCU "Software\KarakuriKissa\StickyTodo" "Language" "$0"
+  WriteRegStr HKCU "Software\KarakuriKissa\PetaCheck" "Language" "$0"
   Pop $0
 !macroend

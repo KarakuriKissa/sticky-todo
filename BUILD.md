@@ -1,6 +1,6 @@
-# StickyTodo — ビルド & 検証手順
+# PetaCheck — ビルド & 検証手順
 
-このドキュメントは StickyTodo を**自分の手元でビルドし、配布物が正しく動くか確認するため**の手順をまとめたものです。
+このドキュメントは PetaCheck を**自分の手元でビルドし、配布物が正しく動くか確認するため**の手順をまとめたものです。
 
 ---
 
@@ -34,8 +34,8 @@ pwsh ./scripts/build-clean.ps1
 6. `bun run tauri build` で MSI / NSIS / 単体 EXE を生成
 
 成功すると以下が出力されます:
-- `src-tauri/target/release/bundle/nsis/StickyTodo_x.y.z_x64-setup.exe`
-- `src-tauri/target/release/bundle/msi/StickyTodo_x.y.z_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/PetaCheck_x.y.z_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/PetaCheck_x.y.z_x64_en-US.msi`
 - `src-tauri/target/release/sticky-todo.exe`
 
 ---
@@ -63,7 +63,7 @@ bun run icons
 
 ## CI でのビルド確認
 
-GitHub Actions の `🚀 StickyTodo をビルド` ワークフロー (`.github/workflows/build.yml`) が、push と手動 dispatch のたびに同じ手順を実行します。
+GitHub Actions の `🚀 PetaCheck をビルド` ワークフロー (`.github/workflows/build.yml`) が、push と手動 dispatch のたびに同じ手順を実行します。
 
 CI はローカルとは別に:
 - **アーティファクトとして 90 日間ダウンロード可能**
@@ -81,18 +81,18 @@ CI はローカルとは別に:
 
 ビルド成果物がユーザーに届けられる状態かを確認するため、以下の手動チェックを通します。
 
-### 1. インストーラー版 (`StickyTodo_x.y.z_x64-setup.exe`)
+### 1. インストーラー版 (`PetaCheck_x.y.z_x64-setup.exe`)
 1. ダブルクリック → Windows SmartScreen が出る
 2. 「詳細情報」→「実行」
 3. インストーラー UI が起動 → 既定パスで「インストール」
-4. 「StickyTodo を起動」チェック → 完了
+4. 「PetaCheck を起動」チェック → 完了
 5. ランチャーが起動し、サンプルリスト 3 つが見える
 
-### 2. MSI 版 (`StickyTodo_x.y.z_x64_en-US.msi`)
+### 2. MSI 版 (`PetaCheck_x.y.z_x64_en-US.msi`)
 1. ダブルクリック
 2. 「実行」許可
 3. インストーラー進行 → 「Finish」
-4. スタートメニューから StickyTodo を起動
+4. スタートメニューから PetaCheck を起動
 5. 同上の起動確認
 
 ### 3. 単体 EXE 版 (`sticky-todo.exe`)
@@ -102,7 +102,7 @@ CI はローカルとは別に:
 
 ### 4. 動作確認チェックリスト
 - [ ] 起動時にランチャーが表示される
-- [ ] 「📚 ようこそ — StickyTodo の使い方」リストをダブルクリックで開ける
+- [ ] 「📚 ようこそ — PetaCheck の使い方」リストをダブルクリックで開ける
 - [ ] タスクを追加 → 閉じる → 再起動 → タスクが残っている
 - [ ] Ctrl+F でリスト内検索が動く
 - [ ] ランチャーの検索欄でグローバル検索が動く

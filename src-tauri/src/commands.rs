@@ -273,7 +273,7 @@ pub fn get_launch_at_startup() -> Result<bool, String> {
 // frontend reads it once, on the very first launch only (see src/i18n.ts),
 // to pick the app's starting language. Never errors — just returns None when
 // the key isn't there (e.g. app wasn't installed via the NSIS installer).
-const INSTALL_LANG_KEY: &str = r"Software\KarakuriKissa\StickyTodo";
+const INSTALL_LANG_KEY: &str = r"Software\KarakuriKissa\PetaCheck";
 
 #[cfg(windows)]
 #[tauri::command]
@@ -527,7 +527,7 @@ pub async fn show_launcher(app: AppHandle) -> Result<(), String> {
     }
     // Launcher was destroyed — rebuild it.
     WebviewWindowBuilder::new(&app, "launcher", WebviewUrl::App("/".into()))
-        .title("Sticky ToDo β")
+        .title("PetaCheck β")
         .inner_size(960.0, 720.0)
         .min_inner_size(600.0, 480.0)
         .decorations(true)

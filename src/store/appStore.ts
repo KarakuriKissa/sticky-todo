@@ -167,14 +167,14 @@ async function _doSeedTutorial(categories: Category[], statuses: Status[]) {
 
   // ── Note 1: tutorial guide ──────────────────────────────────────────────
   const guide = await invoke<Note>('create_note', {
-    title: '📚 ようこそ — StickyTodo の使い方',
+    title: '📚 ようこそ — PetaCheck の使い方',
     categoryId: personalCat?.id ?? null,
   });
   const guideNote: Note = { ...guide, color: '#bfdbfe', warn_days: 3 };
   await invoke('save_note', { note: guideNote });
   const guideItems = buildItems(guide.id, [
     { text: '👋 はじめに',                                              item_type: 'heading' },
-    { text: 'これは StickyTodo のチュートリアル付箋です' },
+    { text: 'これは PetaCheck のチュートリアル付箋です' },
     { text: '☑ チェックボックスで完了マーク (このタスクは完了済み)',     checked: true },
     { text: '',                                                          item_type: 'separator' },
 
