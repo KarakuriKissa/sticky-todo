@@ -1,4 +1,4 @@
-name: 🚀 PetaCheck をビルド
+name: 🚀 PetaMemo をビルド
 
 on:
   workflow_dispatch: # GitHub上のボタンから手動実行
@@ -38,7 +38,7 @@ jobs:
         shell: pwsh
         run: |
           # Get-Content/Set-Content は既定でシステムのANSIコードページを使うため、
-          # 日本語(tauri.conf.jsonの "PetaCheck β" 等)を経由すると文字化けする。
+          # 日本語(tauri.conf.jsonの "PetaMemo β" 等)を経由すると文字化けする。
           # .NET の File.ReadAllText/WriteAllText(UTF8, BOM無し)で明示的に扱うこと
           $utf8NoBom = New-Object System.Text.UTF8Encoding $false
           function Update-FileText($path, $pattern, $replacement) {
@@ -143,9 +143,9 @@ jobs:
           $nsis = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
           $msi  = Get-ChildItem src-tauri/target/release/bundle/msi/*.msi  | Select-Object -First 1
           # ASCII filenames only — Japanese characters break GitHub release asset upload.
-          if ($nsis) { Copy-Item $nsis.FullName "release-files/PetaCheck-Windows-Setup.exe" -Force }
-          if ($msi)  { Copy-Item $msi.FullName  "release-files/PetaCheck-Windows.msi" -Force }
-          Copy-Item src-tauri/target/release/sticky-todo.exe "release-files/PetaCheck-Windows-Portable.exe" -Force
+          if ($nsis) { Copy-Item $nsis.FullName "release-files/PetaMemo-Windows-Setup.exe" -Force }
+          if ($msi)  { Copy-Item $msi.FullName  "release-files/PetaMemo-Windows.msi" -Force }
+          Copy-Item src-tauri/target/release/sticky-todo.exe "release-files/PetaMemo-Windows-Portable.exe" -Force
 
       # ── 9b. 自己更新用の latest.json を生成（署名が有効な時だけ）。
       #        Tauri updater プラグインはこのファイルを releases/latest/download/
@@ -168,7 +168,7 @@ jobs:
             platforms = [ordered]@{
               "windows-x86_64" = [ordered]@{
                 signature = $signature
-                url       = "https://github.com/KarakuriKissa/sticky-todo/releases/download/build-${{ github.run_number }}/PetaCheck-Windows-Setup.exe"
+                url       = "https://github.com/KarakuriKissa/sticky-todo/releases/download/build-${{ github.run_number }}/PetaMemo-Windows-Setup.exe"
               }
             }
           }
@@ -228,14 +228,14 @@ jobs:
         run: |
           mkdir -p release-files
           dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -n1)
-          cp "$dmg" "release-files/PetaCheck-Mac.dmg"
+          cp "$dmg" "release-files/PetaMemo-Mac.dmg"
 
       - name: 📦 Mac 成果物をアップロード
         uses: actions/upload-artifact@v4
         with:
           name: release-macos
           retention-days: 90
-          path: release-files/PetaCheck-Mac.dmg
+          path: release-files/PetaMemo-Mac.dmg
 
   # ════════════════════════════════════════════════════════════════════════
   #  Release 公開（両ビルド完了後に 1 回だけ。並列実行による競合を防ぐ）
@@ -260,14 +260,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: PetaCheck v${{ needs.build-windows.outputs.version }} (build #${{ github.run_number }})
+          name: PetaMemo v${{ needs.build-windows.outputs.version }} (build #${{ github.run_number }})
           body: |
             自動生成されたビルドです。
 
             ## ダウンロード
-            - **Windows（推奨）**: `PetaCheck-Windows-Setup.exe`（インストーラー。2回目以降はアプリ内の「更新を確認」で自動更新されます）
-            - **Windows（その他）**: `PetaCheck-Windows.msi` / `PetaCheck-Windows-Portable.exe`（インストール不要・単体。自動更新の対象外）
-            - **Mac**: `PetaCheck-Mac.dmg`（Intel / Apple Silicon 両対応。自動更新の対象外・手動ダウンロード）
+            - **Windows（推奨）**: `PetaMemo-Windows-Setup.exe`（インストーラー。2回目以降はアプリ内の「更新を確認」で自動更新されます）
+            - **Windows（その他）**: `PetaMemo-Windows.msi` / `PetaMemo-Windows-Portable.exe`（インストール不要・単体。自動更新の対象外）
+            - **Mac**: `PetaMemo-Mac.dmg`（Intel / Apple Silicon 両対応。自動更新の対象外・手動ダウンロード）
 
             ## 補足
             - バージョン: v${{ needs.build-windows.outputs.version }}（ビルド番号 #${{ github.run_number }}）

@@ -1,7 +1,7 @@
 {
   "name": "sticky-todo-sync",
   "version": "1.0.0",
-  "description": "PetaCheck — note-scoped snapshot sync worker (Cloudflare Workers + KV)",
+  "description": "PetaMemo — note-scoped snapshot sync worker (Cloudflare Workers + KV)",
   "main": "src/index.js",
   "scripts": {
     "dev": "wrangler dev",

@@ -601,18 +601,23 @@ ul { list-style: none; }
   flex: 1;
   min-width: 0;
   text-overflow: ellipsis;
-  /* White background + black text while editing — makes the "this row is
-     being edited" state visible regardless of the note's background color
-     (pastel note colors, warn/overdue tints, selection highlight, etc). */
-  background: #fff;
-  border-radius: 3px;
-  box-shadow: 0 0 0 1px rgba(0,0,0,.08);
   border: none;
   outline: none;
-  color: #000;
   font-size: 13px;
   min-width: 0;
   cursor: text;
+}
+/* White background + black text while editing — makes the "this row is
+   being edited" state visible regardless of the note's background color
+   (pastel note colors, warn/overdue tints, selection highlight, etc).
+   Scoped to :not(.todo-text-view) so the read-only display element (which
+   also carries the .todo-text class) never inherits the edit-mode white
+   background — it must always show the note's own background color. */
+.todo-text:not(.todo-text-view) {
+  background: #fff;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08);
+  color: #000;
 }
 .todo-text.done { text-decoration: line-through; color: rgba(30,30,46,.4); }
 .todo-text.strike { text-decoration: line-through; }
@@ -1543,6 +1548,23 @@ kbd {
   gap: 8px;
   padding: 5px 0;
   cursor: pointer;
+}
+
+/* Settings tab — compact label + control row (long explanations live in the
+   row's title="" tooltip instead of a permanent paragraph, per TOM's request
+   to declutter the settings screen). */
+.settings-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  flex-wrap: wrap;
+}
+.settings-field-label {
+  flex: 0 0 auto;
+  min-width: 64px;
+  font-size: 12px;
+  color: var(--text);
 }
 
 /* Status list */

@@ -1,12 +1,12 @@
 # 更新履歴 (Changelog)
 
-このファイルは PetaCheck（旧 StickyTodo）の主な変更点をまとめたものです。
+このファイルは PetaMemo（旧 StickyTodo）の主な変更点をまとめたものです。
 新しいビルドは GitHub の Releases ページから配布されます。
 
 ## β版（開発中）
 
 ### アプリ名
-- アプリ名を StickyTodo → PetaCheck に変更（機能・データはそのまま）
+- アプリ名を StickyTodo → PetaMemo に変更（機能・データはそのまま）
 
 ### リンク・コメント
 - タスク文字やコメント内の **URL・フォルダパス・独自スキーム** をクリックで開けるように
