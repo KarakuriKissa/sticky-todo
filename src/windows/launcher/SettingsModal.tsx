@@ -7,7 +7,10 @@ import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { useAppStore } from '../../store/appStore';
 import type { AppSettings, AssigneeGroup, AssigneePerson, Status } from '../../types';
-import { AdvancedTab } from './AdvancedTab';
+import { DisplayTab } from './DisplayTab';
+import { BehaviorTab } from './BehaviorTab';
+import { StartupTab } from './StartupTab';
+import { DataTab } from './DataTab';
 import { SyncTab } from './SyncTab';
 import {
   DEV_APP_VERSION,
@@ -340,7 +343,7 @@ export function HelpSection() {
 }
 
 // ── Settings Modal ────────────────────────────────────────────────────────────
-type SettingsTab = 'statuses' | 'assignees' | 'advanced' | 'sync' | 'help';
+type SettingsTab = 'statuses' | 'assignees' | 'display' | 'behavior' | 'startup' | 'data' | 'sync' | 'help';
 
 export function SettingsModal({
   settings,
@@ -415,7 +418,10 @@ export function SettingsModal({
   const TABS: { id: SettingsTab; key: string }[] = [
     { id: 'statuses',  key: 'tab.statuses' },
     { id: 'assignees', key: 'tab.assignees' },
-    { id: 'advanced',  key: 'tab.advanced' },
+    { id: 'display',   key: 'adv.sectionDisplay' },
+    { id: 'behavior',  key: 'adv.sectionBehavior' },
+    { id: 'startup',   key: 'adv.sectionStartup' },
+    { id: 'data',      key: 'adv.sectionData' },
     ...(SHOW_SYNC_TAB ? [{ id: 'sync' as SettingsTab, key: 'tab.sync' }] : []),
     { id: 'help',      key: 'tab.help' },
   ];
@@ -589,8 +595,11 @@ export function SettingsModal({
             </section>
           )}
 
-          {/* ── Advanced tab (deadline + language + db) ── */}
-          {tab === 'advanced' && <AdvancedTab draft={draft} setDraft={setDraft} />}
+          {/* ── Display / Behavior / Startup / Data tabs ── */}
+          {tab === 'display' && <DisplayTab />}
+          {tab === 'behavior' && <BehaviorTab draft={draft} setDraft={setDraft} />}
+          {tab === 'startup' && <StartupTab draft={draft} setDraft={setDraft} />}
+          {tab === 'data' && <DataTab draft={draft} setDraft={setDraft} />}
 
           {/* ── Sync tab ── */}
           {tab === 'sync' && <SyncTab />}

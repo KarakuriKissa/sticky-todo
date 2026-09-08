@@ -1524,23 +1524,24 @@ kbd {
   background: #dc2626;
 }
 
-/* Settings tabs */
+/* Settings tabs — pill style */
 .settings-tabs {
   display: flex;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-bottom: 16px;
-  border-bottom: 2px solid var(--border);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
 }
 .settings-tab {
-  padding: 6px 16px;
-  font-size: 13px;
+  padding: 5px 12px;
+  font-size: 12px;
   color: var(--muted);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  transition: color .15s, border-color .15s;
+  border-radius: 999px;
+  transition: color .15s, background-color .15s;
 }
-.settings-tab:hover { color: var(--text); }
-.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.settings-tab:hover { color: var(--text); background: var(--surface); }
+.settings-tab.active { color: var(--accent); background: rgba(99,102,241,.18); font-weight: 600; }
 
 .toggle-row {
   display: flex;
