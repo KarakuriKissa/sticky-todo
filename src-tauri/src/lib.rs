@@ -15,6 +15,16 @@ pub fn run() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     tauri::Builder::default()
+        // 単一インスタンス化: 2個目の起動を検知したら既存ウィンドウを前面に出して
+        // 自分(2個目)は即終了させる。公式ドキュメント通り他プラグインより先に
+        // register すること
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(win) = app.get_webview_window("launcher") {
+                win.show().ok();
+                win.unminimize().ok();
+                win.set_focus().ok();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
