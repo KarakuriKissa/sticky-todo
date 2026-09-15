@@ -20,6 +20,8 @@ pub fn run() {
         // register すること
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(win) = app.get_webview_window("launcher") {
+                #[cfg(windows)]
+                win_system_menu::ensure_window_reachable(&win);
                 win.show().ok();
                 win.unminimize().ok();
                 win.set_focus().ok();
@@ -122,11 +124,25 @@ pub fn run() {
             commands::open_path,
             commands::show_launcher,
             commands::center_launcher,
+            commands::restore_launcher_position,
             commands::backup_database,
             commands::list_backups,
             commands::search_all_items,
             commands::preflight_update_check,
         ])
+        .on_window_event(|window, event| {
+            #[cfg(windows)]
+            if matches!(
+                event,
+                tauri::WindowEvent::Moved(_)
+                    | tauri::WindowEvent::Resized(_)
+                    | tauri::WindowEvent::ScaleFactorChanged { .. }
+            ) {
+                win_system_menu::ensure_tauri_window_reachable(window);
+            }
+            #[cfg(not(windows))]
+            let _ = (window, event);
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

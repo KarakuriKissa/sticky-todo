@@ -17,16 +17,17 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use tauri::WebviewWindow;
+use tauri::{WebviewWindow, Window};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, EnumDisplayMonitors, HDC, HMONITOR, MONITORINFO,
-    MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
+    MonitorFromRect, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CallWindowProcW, DefWindowProcW, GetCursorPos, GetSystemMenu, GetWindowLongPtrW,
     GetWindowRect, SetWindowLongPtrW, SetWindowPos, GWLP_WNDPROC, MF_SEPARATOR, MF_STRING,
-    SWP_NOACTIVATE, SWP_NOZORDER, WM_NCDESTROY, WM_SYSCOMMAND, WNDPROC,
+    SWP_NOACTIVATE, SWP_NOZORDER, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_EXITSIZEMOVE,
+    WM_NCDESTROY, WM_SETTINGCHANGE, WM_SYSCOMMAND, WNDPROC,
 };
 use windows::core::{BOOL, PCWSTR};
 
@@ -67,6 +68,21 @@ pub fn install(window: &WebviewWindow) {
     }
 }
 
+/// Check the real native window rectangle after Windows/Tauri has applied DPI
+/// conversion. Saved positions are logical pixels, while Win32 monitor work
+/// areas are physical pixels, so comparing the saved values directly is wrong
+/// on mixed-DPI multi-monitor setups.
+pub fn ensure_window_reachable(window: &WebviewWindow) {
+    let Ok(hwnd) = window.hwnd() else { return };
+    unsafe { ensure_hwnd_reachable(hwnd); }
+}
+
+/// Same native check for Tauri's global window-event callback.
+pub fn ensure_tauri_window_reachable(window: &Window) {
+    let Ok(hwnd) = window.hwnd() else { return };
+    unsafe { ensure_hwnd_reachable(hwnd); }
+}
+
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     // The low 4 bits of wParam are used internally by Windows for WM_SYSCOMMAND
     // (per MSDN); mask them off before comparing against our custom ID.
@@ -88,13 +104,22 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
         }
     }
 
-    match orig_ptr {
+    let result = match orig_ptr {
         Some(ptr) if ptr != 0 => {
             let orig: WNDPROC = std::mem::transmute(ptr);
             CallWindowProcW(orig, hwnd, msg, wparam, lparam)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    };
+
+    // Monitor removal, taskbar/work-area changes, DPI changes, and the end of
+    // a user move can all leave only a few pixels visible. Run after the
+    // original procedure so WM_DPICHANGED has already applied its suggested
+    // rectangle. SetWindowPos does not generate WM_EXITSIZEMOVE recursively.
+    if matches!(msg, WM_DISPLAYCHANGE | WM_SETTINGCHANGE | WM_DPICHANGED | WM_EXITSIZEMOVE) {
+        ensure_hwnd_reachable(hwnd);
     }
+    result
 }
 
 /// Moves `hwnd` to the center of the work area of whichever monitor the
@@ -139,8 +164,61 @@ unsafe fn monitor_work_area(hmon: HMONITOR) -> Option<RECT> {
     }
 }
 
-fn rects_intersect(a: &RECT, b: &RECT) -> bool {
-    a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+fn intersection_size(a: &RECT, b: &RECT) -> (i32, i32) {
+    ((a.right.min(b.right) - a.left.max(b.left)).max(0),
+     (a.bottom.min(b.bottom) - a.top.max(b.top)).max(0))
+}
+
+/// A frameless note is draggable from its top toolbar. Merely intersecting a
+/// monitor by one pixel is therefore insufficient: enough of that top strip
+/// must be visible to grab and move the window.
+fn has_reachable_grab_area(window: &RECT, work: &RECT) -> bool {
+    let width = (window.right - window.left).max(1);
+    let height = (window.bottom - window.top).max(1);
+    let grab = RECT {
+        left: window.left,
+        top: window.top,
+        right: window.right,
+        bottom: window.top + height.min(48),
+    };
+    let (visible_w, visible_h) = intersection_size(&grab, work);
+    visible_w >= width.min(96) && visible_h >= height.min(24)
+}
+
+fn clamp_rect_to_work_area(window: &RECT, work: &RECT) -> RECT {
+    let work_w = (work.right - work.left).max(1);
+    let work_h = (work.bottom - work.top).max(1);
+    let width = (window.right - window.left).max(1).min(work_w);
+    let height = (window.bottom - window.top).max(1).min(work_h);
+    let left = window.left.clamp(work.left, work.right - width);
+    let top = window.top.clamp(work.top, work.bottom - height);
+    RECT { left, top, right: left + width, bottom: top + height }
+}
+
+unsafe fn ensure_hwnd_reachable(hwnd: HWND) {
+    let mut window = RECT::default();
+    if GetWindowRect(hwnd, &mut window).is_err() {
+        return;
+    }
+
+    let mut ctx = EnumCtx { target: window, found: false };
+    let _ = EnumDisplayMonitors(None, None, Some(enum_monitor_proc), LPARAM(&mut ctx as *mut EnumCtx as isize));
+    if ctx.found {
+        return;
+    }
+
+    let monitor = MonitorFromRect(&window, MONITOR_DEFAULTTONEAREST);
+    let Some(work) = monitor_work_area(monitor) else { return };
+    let corrected = clamp_rect_to_work_area(&window, &work);
+    let _ = SetWindowPos(
+        hwnd,
+        None,
+        corrected.left,
+        corrected.top,
+        corrected.right - corrected.left,
+        corrected.bottom - corrected.top,
+        SWP_NOZORDER | SWP_NOACTIVATE,
+    );
 }
 
 struct EnumCtx {
@@ -156,7 +234,7 @@ unsafe extern "system" fn enum_monitor_proc(
 ) -> BOOL {
     let ctx = &mut *(lparam.0 as *mut EnumCtx);
     if let Some(work) = monitor_work_area(hmon) {
-        if rects_intersect(&ctx.target, &work) {
+        if has_reachable_grab_area(&ctx.target, &work) {
             ctx.found = true;
             return BOOL(0); // stop enumeration, we have our answer
         }
@@ -164,40 +242,75 @@ unsafe extern "system" fn enum_monitor_proc(
     BOOL(1) // keep going
 }
 
-/// Startup rescue: if the saved window rect (x, y, width, height) doesn't
-/// intersect any connected monitor's work area (e.g. a monitor was
-/// unplugged since last run), returns a corrected position centered on the
-/// primary monitor instead. Otherwise returns the position unchanged.
-/// Size is never touched here — only the launch position.
-pub fn rescue_position_if_offscreen(x: f64, y: f64, width: f64, height: f64) -> (f64, f64) {
-    let target = RECT {
-        left: x as i32,
-        top: y as i32,
-        right: (x + width) as i32,
-        bottom: (y + height) as i32,
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::core::w;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, WINDOW_EX_STYLE, WS_POPUP,
     };
-    let mut ctx = EnumCtx { target, found: false };
-    unsafe {
-        let _ = EnumDisplayMonitors(
-            None,
-            None,
-            Some(enum_monitor_proc),
-            LPARAM(&mut ctx as *mut EnumCtx as isize),
-        );
-        if ctx.found {
-            return (x, y);
-        }
-        // (0, 0) is always inside the primary monitor by Windows convention,
-        // so MONITOR_DEFAULTTOPRIMARY reliably resolves it without needing
-        // to enumerate monitors again.
-        let primary = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
-        if let Some(work) = monitor_work_area(primary) {
-            let work_w = work.right - work.left;
-            let work_h = work.bottom - work.top;
-            let cx = work.left + (work_w - width as i32).max(0) / 2;
-            let cy = work.top + (work_h - height as i32).max(0) / 2;
-            return (cx as f64, cy as f64);
+
+    fn rect(left: i32, top: i32, width: i32, height: i32) -> RECT {
+        RECT { left, top, right: left + width, bottom: top + height }
+    }
+
+    #[test]
+    fn one_visible_corner_is_not_considered_reachable() {
+        let work = rect(0, 0, 1920, 1040);
+        assert!(!has_reachable_grab_area(&rect(1900, 1020, 420, 520), &work));
+    }
+
+    #[test]
+    fn visible_top_grab_strip_is_reachable() {
+        let work = rect(0, 0, 1920, 1040);
+        assert!(has_reachable_grab_area(&rect(1820, 300, 420, 520), &work));
+    }
+
+    #[test]
+    fn title_above_monitor_is_not_reachable_even_if_body_intersects() {
+        let work = rect(0, 0, 1920, 1040);
+        assert!(!has_reachable_grab_area(&rect(300, -40, 420, 520), &work));
+    }
+
+    #[test]
+    fn clamp_keeps_complete_window_in_negative_coordinate_monitor() {
+        let work = rect(-1920, 0, 1920, 1040);
+        let fixed = clamp_rect_to_work_area(&rect(-2400, -200, 420, 520), &work);
+        assert_eq!((fixed.left, fixed.top, fixed.right, fixed.bottom), (-1920, 0, -1500, 520));
+    }
+
+    #[test]
+    fn clamp_shrinks_oversized_window_to_work_area() {
+        let work = rect(0, 0, 1280, 680);
+        let fixed = clamp_rect_to_work_area(&rect(-50, -50, 2000, 1000), &work);
+        assert_eq!((fixed.left, fixed.top, fixed.right, fixed.bottom), (0, 0, 1280, 680));
+    }
+
+    #[test]
+    fn native_window_is_repaired_from_an_unreachable_position() {
+        unsafe {
+            let hwnd = CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                w!("STATIC"),
+                w!("PetaMemo off-screen QA"),
+                WS_POPUP,
+                30_000,
+                30_000,
+                420,
+                520,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("native QA window should be created");
+
+            ensure_hwnd_reachable(hwnd);
+            let mut repaired = RECT::default();
+            GetWindowRect(hwnd, &mut repaired).expect("native QA window rect should be readable");
+            assert!(repaired.left < 30_000 && repaired.top < 30_000);
+            assert!(MonitorFromRect(&repaired, MONITOR_DEFAULTTONEAREST).is_invalid() == false);
+            DestroyWindow(hwnd).expect("native QA window should be destroyed");
         }
     }
-    (x, y)
 }

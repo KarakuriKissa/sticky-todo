@@ -306,15 +306,13 @@ pub async fn open_note_window(
 ) -> Result<(), String> {
     let label = format!("note-{}", note_id);
     if let Some(win) = app.get_webview_window(&label) {
+        #[cfg(windows)]
+        crate::win_system_menu::ensure_window_reachable(&win);
+        win.show().map_err(|e| e.to_string())?;
+        win.unminimize().ok();
         win.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
     }
-
-    // Startup rescue: a saved position that no longer lands on any connected
-    // monitor (e.g. a second monitor was unplugged) would otherwise open the
-    // window somewhere unreachable. Recenter it on the primary monitor instead.
-    #[cfg(windows)]
-    let (x, y) = crate::win_system_menu::rescue_position_if_offscreen(x, y, width, height);
 
     let win = WebviewWindowBuilder::new(
         &app,
@@ -328,13 +326,19 @@ pub async fn open_note_window(
     .transparent(true)
     .resizable(true)
     .min_inner_size(200.0, 150.0)
+    .visible(false)
     .build()
     .map_err(|e| e.to_string())?;
 
     #[cfg(windows)]
-    crate::win_system_menu::install(&win);
+    {
+        crate::win_system_menu::install(&win);
+        crate::win_system_menu::ensure_window_reachable(&win);
+    }
     #[cfg(not(windows))]
-    let _ = win;
+    let _ = &win;
+
+    win.show().map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -531,8 +535,22 @@ pub async fn center_launcher(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn restore_launcher_position(app: AppHandle, x: f64, y: f64) -> Result<(), String> {
+    use tauri::LogicalPosition;
+    let win = app
+        .get_webview_window("launcher")
+        .ok_or_else(|| "launcher window not found".to_string())?;
+    win.set_position(LogicalPosition::new(x, y)).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    crate::win_system_menu::ensure_window_reachable(&win);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn show_launcher(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("launcher") {
+        #[cfg(windows)]
+        crate::win_system_menu::ensure_window_reachable(&win);
         win.show().map_err(|e| e.to_string())?;
         win.unminimize().ok();
         win.set_focus().map_err(|e| e.to_string())?;
@@ -549,7 +567,10 @@ pub async fn show_launcher(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     #[cfg(windows)]
-    crate::win_system_menu::install(&win);
+    {
+        crate::win_system_menu::install(&win);
+        crate::win_system_menu::ensure_window_reachable(&win);
+    }
     #[cfg(not(windows))]
     let _ = win;
 

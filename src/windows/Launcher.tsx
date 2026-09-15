@@ -52,7 +52,7 @@ export function Launcher() {
     let unlisten: (() => void) | undefined;
     let moveTimer: ReturnType<typeof setTimeout> | null = null;
     (async () => {
-      const { getCurrentWindow, LogicalPosition } = await import('@tauri-apps/api/window');
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       const win = getCurrentWindow();
       // Restore saved position.
       try {
@@ -60,7 +60,7 @@ export function Launcher() {
         if (raw) {
           const { x, y } = JSON.parse(raw);
           if (typeof x === 'number' && typeof y === 'number') {
-            await win.setPosition(new LogicalPosition(x, y));
+            await invoke('restore_launcher_position', { x, y });
           }
         }
       } catch { /* ignore */ }
