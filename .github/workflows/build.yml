@@ -76,6 +76,11 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Bun セットアップ
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       # ── 3. Rust セットアップ ───────────────────────────────────────────
       - name: Rust セットアップ
         uses: dtolnay/rust-toolchain@stable
@@ -111,13 +116,9 @@ jobs:
 
       # ── 6. 依存パッケージをインストール ───────────────────────────────
       - name: 依存パッケージをインストール
-        run: npm install --force
+        run: bun install --frozen-lockfile
 
       # ── 6b. ユニットテスト (bun test) ─────────────────────────────────
-      - name: Bun セットアップ
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
       - name: テストを実行
         run: bun test tests/
 
@@ -214,7 +215,7 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: 依存パッケージをインストール
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Tauri アイコンを生成（コミット済みソースから）
         run: bunx tauri icon src-tauri/icons/icon-source.png
