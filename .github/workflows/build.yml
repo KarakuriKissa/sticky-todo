@@ -260,7 +260,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: PetaMemo v${{ needs.build-windows.outputs.version }} (build #${{ github.run_number }})
+          name: "PetaMemo v${{ needs.build-windows.outputs.version }} (build #${{ github.run_number }})"
           body: |
             自動生成されたビルドです。
 
