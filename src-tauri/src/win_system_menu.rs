@@ -26,8 +26,8 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CallWindowProcW, DefWindowProcW, GetCursorPos, GetSystemMenu, GetWindowLongPtrW,
     GetWindowRect, SetWindowLongPtrW, SetWindowPos, GWLP_WNDPROC, MF_SEPARATOR, MF_STRING,
-    SWP_NOACTIVATE, SWP_NOZORDER, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_EXITSIZEMOVE,
-    WM_NCDESTROY, WM_SETTINGCHANGE, WM_SYSCOMMAND, WNDPROC,
+    SC_RESTORE, SWP_NOACTIVATE, SWP_NOZORDER, WM_DISPLAYCHANGE, WM_DPICHANGED,
+    WM_EXITSIZEMOVE, WM_NCDESTROY, WM_SETTINGCHANGE, WM_SYSCOMMAND, WNDPROC,
 };
 use windows::core::{BOOL, PCWSTR};
 
@@ -116,7 +116,9 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
     // a user move can all leave only a few pixels visible. Run after the
     // original procedure so WM_DPICHANGED has already applied its suggested
     // rectangle. SetWindowPos does not generate WM_EXITSIZEMOVE recursively.
-    if matches!(msg, WM_DISPLAYCHANGE | WM_SETTINGCHANGE | WM_DPICHANGED | WM_EXITSIZEMOVE) {
+    if matches!(msg, WM_DISPLAYCHANGE | WM_SETTINGCHANGE | WM_DPICHANGED | WM_EXITSIZEMOVE)
+        || (msg == WM_SYSCOMMAND && (wparam.0 & 0xFFF0) == SC_RESTORE as usize)
+    {
         ensure_hwnd_reachable(hwnd);
     }
     result
